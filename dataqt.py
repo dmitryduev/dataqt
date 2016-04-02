@@ -235,11 +235,24 @@ if __name__ == '__main__':
                 for sou_dir in os.listdir(os.path.join(path, pot)):
                     path_sou = os.path.join(path, pot, sou_dir)
                     tmp = sou_dir.split('_')
-                    prog_num = int(tmp[0])
-                    sou_name = '_'.join(tmp[1:-5])
+                    try:
+                        # prog num set?
+                        prog_num = int(tmp[0])
+                        # stack name back together:
+                        sou_name = '_'.join(tmp[1:-5])
+                    except ValueError:
+                        prog_num = 9999
+                        # was it a pointing observation?
+                        if 'pointing' in tmp:
+                            sou_name = 'pointing'
+                        else:
+                            sou_name = '_'.join(tmp[0:-5])
+                    # filter used:
                     filt = tmp[-4:-3][0]
+                    # date and time of obs:
                     time = datetime.datetime.strptime(tmp[-2] + tmp[-1].split('.')[0],
                                                       '%Y%m%d%H%M%S')
+
                     source = {'prog_num': prog_num, 'sou_name': sou_name,
                               'filter': filt, 'time': datetime.datetime.strftime(time, '%Y%m%d_%H%M%S')}
                     print(source)
