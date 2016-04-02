@@ -3,7 +3,13 @@ import json
 import ConfigParser
 import inspect
 from flask import Flask, render_template, send_from_directory
+from flask.ext.basicauth import BasicAuth
 app = Flask(__name__)
+
+# basic HTTP authentification
+app.config['BASIC_AUTH_USERNAME'] = 'admin'
+app.config['BASIC_AUTH_PASSWORD'] = 'robo@0'
+basic_auth = BasicAuth(app)
 
 # load config data
 abs_path = os.path.dirname(inspect.getfile(inspect.currentframe()))
@@ -44,6 +50,7 @@ def send_data(path):
 
 # serve root
 @app.route('/')
+@basic_auth.required
 def hw():
     dates = sorted([lf for lf in os.listdir(path_to_website_data)
                     if os.path.isdir(os.path.join(path_to_website_data, lf))])
@@ -52,6 +59,7 @@ def hw():
 
 # serve particular date
 @app.route('/<int:date>')
+@basic_auth.required
 def show_date(date):
     f_json_sci = os.path.join(path_to_website_data, '{:d}'.format(date), '{:d}.json'.format(date))
     f_json_seeing = os.path.join(path_to_website_data, '{:d}'.format(date), '{:d}.seeing.json'.format(date))
