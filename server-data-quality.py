@@ -1,14 +1,14 @@
 import os
 import json
-# import ConfigParser
+import ConfigParser
 import inspect
 from flask import Flask, render_template, send_from_directory
 app = Flask(__name__)
 
 # load config data
 abs_path = os.path.dirname(inspect.getfile(inspect.currentframe()))
-# config = ConfigParser.RawConfigParser()
-# config.read(os.path.join(abs_path, 'config.ini'))
+config = ConfigParser.RawConfigParser()
+config.read(os.path.join(abs_path, 'config.ini'))
 
 # seeing data dwelling place:
 # path_to_seeing_data = config.get('Path', 'path_to_seeing_data')
@@ -77,4 +77,4 @@ def show_date(date):
 
 
 if __name__ == '__main__':
-    app.run(host='localhost', port=8082)
+    app.run(host=config.get('Server', 'host'), port=config.get('Server', 'port'))
