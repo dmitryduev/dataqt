@@ -4,7 +4,7 @@ Robo-AO data monitoring service
 - Clone the repository:
 
 ```
-	git clone https://github.com/dmitryduev/data.git
+	git clone https://github.com/dmitryduev/dataqt.git
 ```
 
 - Generate data to be shown on the website:
