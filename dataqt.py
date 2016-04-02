@@ -257,12 +257,16 @@ if __name__ == '__main__':
                     source = {'prog_num': prog_num, 'sou_name': sou_name,
                               'filter': filt, 'time': datetime.datetime.strftime(time, '%Y%m%d_%H%M%S')}
                     print(source)
-                    # put into the basket
-                    source_data[pot].append(source)
 
                     if pot not in ('zero_flux', 'failed'):
-                        make_img(_sou_name=sou_name, _time=time, _filter=filt, _prog_num=prog_num,
-                                 _path_sou=path_sou, _path_data=path_data, pipe_out_type=pot)
+                        try:
+                            make_img(_sou_name=sou_name, _time=time, _filter=filt, _prog_num=prog_num,
+                                     _path_sou=path_sou, _path_data=path_data, pipe_out_type=pot)
+                        except IOError:
+                            continue
+
+                    # put into the basket
+                    source_data[pot].append(source)
 
         # dump sci json
         with open(os.path.join(path_data,
