@@ -50,9 +50,10 @@ class AnchoredSizeBar(AnchoredOffsetbox):
             'center'       : 10
         """
         self.size_bar = AuxTransformBox(transform)
-        self.size_bar.add_artist(Rectangle((0, 0), size, 0, fc='none', color='white'))
+        self.size_bar.add_artist(Rectangle((0, 0), size, 0, fc='none', color='white', lw=3))
 
-        self.txt_label = TextArea(label, dict(color='white'), minimumdescent=False)
+        self.txt_label = TextArea(label, dict(color='white', size='x-large', weight='normal'),
+                                  minimumdescent=False)
 
         self._box = VPacker(children=[self.size_bar, self.txt_label],
                             align="center",
@@ -172,7 +173,7 @@ def make_img(_sou_name, _time, _filter, _prog_num, _path_sou, _path_data, pipe_o
     asb = AnchoredSizeBar(ax.transData,
                           bar_len,
                           bar_len_str[0] + r"$^{\prime\prime}\!\!\!.$" + bar_len_str[-1],
-                          loc=4, pad=0.1, borderpad=0.5, sep=5, frameon=False)
+                          loc=4, pad=0.3, borderpad=0.5, sep=10, frameon=False)
     ax.add_artist(asb)
 
     # save cropped figure
@@ -311,8 +312,12 @@ if __name__ == '__main__':
         # ax = plt.Axes(fig, [0.1, 0.2, 0.8, 0.8])
         # fig.add_axes(ax)
         # ax.set_title('2.1m vs 4m, WIYN, and 0.9m data from the nightly reports')
-        ax.plot(seeing_plot[:, 0], seeing_plot[:, 1], '-',
-                c=plt.cm.Blues(0.82), linewidth=1.2, label='2.1m')
+        # ax.plot(seeing_plot[:, 0], seeing_plot[:, 1], '-',
+        #         c=plt.cm.Blues(0.82), linewidth=1.2, label='2.1m')
+        ax.plot(seeing_plot[:, 0], seeing_plot[:, 1], '--',
+                c=plt.cm.Blues(0.82), linewidth=0.9, label='2.1m')
+        ax.plot(seeing_plot[:, 0], seeing_plot[:, 1], '.',
+                c=plt.cm.Oranges(0.82), markersize=10)
         # ax.set_ylim([0, 3])
         ax.grid(linewidth=0.5)
 
