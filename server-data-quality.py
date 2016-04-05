@@ -1,5 +1,6 @@
 import os
 import json
+import datetime
 import ConfigParser
 import inspect
 from flask import Flask, render_template, send_from_directory
@@ -64,8 +65,13 @@ def show_date(date):
     f_json_sci = os.path.join(path_to_website_data, '{:d}'.format(date), '{:d}.json'.format(date))
     f_json_seeing = os.path.join(path_to_website_data, '{:d}'.format(date), '{:d}.seeing.json'.format(date))
 
+    date_m1 = datetime.datetime.strftime(datetime.datetime.strptime(str(date), '%Y%m%d') -
+                                         datetime.timedelta(days=1), '%Y%m%d')
+    date_p1 = datetime.datetime.strftime(datetime.datetime.strptime(str(date), '%Y%m%d') +
+                                         datetime.timedelta(days=1), '%Y%m%d')
+
     if not os.path.exists(f_json_sci) and not os.path.exists(f_json_seeing):
-        return render_template('template-no-data.html')
+        return render_template('template-no-data.html', date_m1=date_m1, date_p1=date_p1)
     else:
         # sci data
         if os.path.exists(f_json_sci):
@@ -81,8 +87,9 @@ def show_date(date):
                 seeing = dict(seeing)
         else:
             seeing = False
-        return render_template('template.html', date=str(date), data=data, seeing=seeing)
+        return render_template('template.html', date=str(date), data=data, seeing=seeing,
+                               date_m1=date_m1, date_p1=date_p1)
 
 
 if __name__ == '__main__':
-    app.run(host=config.get('Server', 'host'), port=config.get('Server', 'port'))
+    app.run(host=config.get('Server', 'host'), port=config.get('Server', 'port'), threaded=True)

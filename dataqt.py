@@ -7,6 +7,7 @@ import os
 import shutil
 import datetime
 import numpy as np
+from collections import OrderedDict
 # from bokeh.io import gridplot, output_file, show
 # from bokeh.plotting import figure
 import sewpy
@@ -233,7 +234,7 @@ if __name__ == '__main__':
                 if not os.path.exists(os.path.join(path_data, pot)) \
                         and pot not in ('zero_flux', 'failed'):
                     os.mkdir(os.path.join(path_data, pot))
-                for sou_dir in os.listdir(os.path.join(path, pot)):
+                for sou_dir in sorted(os.listdir(os.path.join(path, pot))):
                     path_sou = os.path.join(path, pot, sou_dir)
                     tmp = sou_dir.split('_')
                     try:
