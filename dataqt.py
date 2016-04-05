@@ -7,7 +7,6 @@ import os
 import shutil
 import datetime
 import numpy as np
-from collections import OrderedDict
 # from bokeh.io import gridplot, output_file, show
 # from bokeh.plotting import figure
 import sewpy
@@ -27,6 +26,28 @@ sns.set_context('talk')
 # python -W ignore dataqt.py /Users/dmitryduev/_caltech/roboao/_auto_reductions/
 #                            /Users/dmitryduev/_caltech/roboao/seeing/
 #                            --date 20160314
+
+
+# some metrics to score SExtractor solutions.
+# there are 2 of them, so them sum up to a max of 1
+def log_gauss_score(_x, _mu=1.27, _sigma=0.17):
+    """
+        _x: pixel for pixel in [1,2048] - source FWHM.
+            has a max of 1 around 35 pix, drops fast to the left, drops slower to the right
+    """
+    return np.exp(-(np.log(np.log(_x)) - _mu)**2 / (2*_sigma**2)) / 2
+
+
+def gauss_score(_r, _mu=0, _sigma=512):
+    """
+        _r - distance from centre to source in pix
+    """
+    return np.exp(-(_r - _mu)**2 / (2*_sigma**2)) / 2
+
+
+def rho(x, y, x_0=1024, y_0=1024):
+    return np.sqrt((x-x_0)**2 + (y-y_0)**2)
+
 
 # Scale bars
 class AnchoredSizeBar(AnchoredOffsetbox):
@@ -105,6 +126,14 @@ def make_img(_sou_name, _time, _filter, _prog_num, _path_sou, _path_data, pipe_o
 
     # print(out['table'])  # This is an astropy table.
 
+    # get first 5 and score them:
+    scores = []
+    for sou in out['table'][0:5]:
+        score = log_gauss_score(sou['FWHM_IMAGE']) + gauss_score(rho(sou['X_IMAGE'], sou['Y_IMAGE']))
+        scores.append(score)
+
+    # print(scores)
+
     # create a plot
 
     # bokeh
@@ -150,11 +179,12 @@ def make_img(_sou_name, _time, _filter, _prog_num, _path_sou, _path_data, pipe_o
     # do not crop large planets and crowded fields
     if N_sou != 0 and N_sou < 30:
         # sou_xy = [out['table']['X_IMAGE'][0], out['table']['Y_IMAGE'][0]]
-        sou_size = np.max((int(out['table']['FWHM_IMAGE'][0] * 3), 90))
-        scidata_corrected_cropped = scidata_corrected[out['table']['YPEAK_IMAGE'][0] - sou_size/2:
-                                                      out['table']['YPEAK_IMAGE'][0] + sou_size/2,
-                                                      out['table']['XPEAK_IMAGE'][0] - sou_size/2:
-                                                      out['table']['XPEAK_IMAGE'][0] + sou_size/2]
+        best_score = np.argmax(scores) if len(scores) > 0 else 0
+        sou_size = np.max((int(out['table']['FWHM_IMAGE'][best_score] * 3), 90))
+        scidata_corrected_cropped = scidata_corrected[out['table']['YPEAK_IMAGE'][best_score] - sou_size/2:
+                                                      out['table']['YPEAK_IMAGE'][best_score] + sou_size/2,
+                                                      out['table']['XPEAK_IMAGE'][best_score] - sou_size/2:
+                                                      out['table']['XPEAK_IMAGE'][best_score] + sou_size/2]
     else:
         scidata_corrected_cropped = scidata_corrected
     # save cropped image
