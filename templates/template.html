@@ -12,13 +12,13 @@
     <title>Robo-AO data quality: {{ date }}</title>
 
     <!-- Bootstrap core CSS -->
-    <link rel="stylesheet" href="/css/bootstrap.min.css">
-    <link rel="stylesheet" href="/css/blueimp-gallery.min.css">
-    <link rel="stylesheet" href="/css/bootstrap-image-gallery.min.css">
-    <link rel="stylesheet" href="/css/bootstrap-magnify.min.css">
+    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/static/css/blueimp-gallery.min.css">
+    <link rel="stylesheet" href="/static/css/bootstrap-image-gallery.min.css">
+    <link rel="stylesheet" href="/static/css/bootstrap-magnify.min.css">
 
     <!-- IE10 viewport hack for Surface/desktop Windows 8 bug -->
-    <link href="/css/ie10-viewport-bug-workaround.css" rel="stylesheet">
+    <link href="/static/css/ie10-viewport-bug-workaround.css" rel="stylesheet">
 
     <!-- Custom styles for this template
     <link href="grid.css" rel="stylesheet">-->
@@ -41,7 +41,7 @@
     };
     </script>
     -->
-    <script src="/js/bootstrap-magnify.min.js"></script>
+    <script src="/static/js/bootstrap-magnify.min.js"></script>
     <script>
 //        function parseDate(string){
 //            var dateString    = string.match(/\d{4}\d{2}\d{2}\s\b\d{2}\d{2}\d{2}/);
@@ -186,7 +186,7 @@
         <div id="navbar" class="navbar-collapse collapse">
             <ul class="nav navbar-nav">
                 <!--<li class="active"><a href="#">Calendar</a></li>-->
-                <li><a href="/">Calendar</a></li>
+                <li><a href=".">Calendar</a></li>
                 <li><a href="{{date_m1}}"><span class="glyphicon glyphicon-chevron-left"></span>Previous night</a></li>
                 <li><a href="{{date_p1}}">Next night<span class="glyphicon glyphicon-chevron-right"></span></a></li>
             </ul>
@@ -246,7 +246,7 @@
         Median: {{ seeing['median'] }}<br><br>
 
         <div class="row">
-            <img src="/data/{{date}}/seeing/seeing.{{date}}.png" alt="seeing plot" style="height:200px;">
+            <img src="/static/data/{{date}}/seeing/seeing.{{date}}.png" alt="seeing plot" style="height:200px;">
 
             <!-- data-ride="carousel"   class="slide"-->
             <div id="seeingCarousel" class="carousel  carousel-fade col-lg-8 col-offset-2"
@@ -258,7 +258,7 @@
                         {% set datestr = fi0[:fi0.index('.')].split('_') %}
                         {% set dat  = datestr[0][0:4]+'/'+datestr[0][4:6]+'/'+datestr[0][6:] %}
                         {% set time = datestr[1][0:2]+':'+datestr[1][2:4]+':'+datestr[1][4:] %}
-                        <img src="/data/{{date}}/seeing/{{fi0}}" alt="" class="img-responsive">
+                        <img src="/static/data/{{date}}/seeing/{{fi0}}" alt="" class="img-responsive">
                         <div class="carousel-caption" style="padding-bottom:0px !important;">
                             {{dat}}&nbsp;{{time}}</div>
                     </div>
@@ -267,7 +267,7 @@
                             {% set datestr = fi[:fi.index('.')].split('_') %}
                             {% set dat  = datestr[0][0:4]+'/'+datestr[0][4:6]+'/'+datestr[0][6:] %}
                             {% set time = datestr[1][0:2]+':'+datestr[1][2:4]+':'+datestr[1][4:] %}
-                            <img src="/data/{{date}}/seeing/{{fi}}" alt="" class="img-responsive">
+                            <img src="/static/data/{{date}}/seeing/{{fi}}" alt="" class="img-responsive">
                             <div class="carousel-caption" style="padding-bottom:0px !important;">
                                 {{dat}}&nbsp;{{time}}</div>
                         </div>
@@ -304,9 +304,9 @@
                 <h3> {{ key | replace('_', ' ') | title()}}</h3>
                 <div id="{{key}}">
                     {% for source in data[key] %}
-                        <a href="/data/{{date}}/{{key}}/{{ source.prog_num }}_{{ source.sou_name }}_{{ source.filter }}_{{ source.time }}_full.png"
+                        <a href="/static/data/{{date}}/{{key}}/{{ source.prog_num }}_{{ source.sou_name }}_{{ source.filter }}_{{ source.time }}_full.png"
                            title="{{ source.prog_num }}_{{ source.sou_name }}_{{ source.filter }}_{{ source.time }}" data-gallery="#gallery-{{key}}">
-                            <img src="/data/{{date}}/{{key}}/{{ source.prog_num }}_{{ source.sou_name }}_{{ source.filter }}_{{ source.time }}_cropped.png"
+                            <img src="/static/data/{{date}}/{{key}}/{{ source.prog_num }}_{{ source.sou_name }}_{{ source.filter }}_{{ source.time }}_cropped.png"
                                  alt="{{ source.prog_num }}_{{ source.sou_name }}_{{ source.filter }}_{{ source.time }}" style="height:120px;">
                         </a>
                     {% endfor %}
@@ -338,11 +338,11 @@
 ================================================== -->
 <!-- Placed at the end of the document so the pages load faster -->
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
-<script src="/js/jquery.blueimp-gallery.min.js"></script>
-<script src="/js/bootstrap-image-gallery.min.js"></script>
-<script src="/js/bootstrap.min.js"></script>
+<script src="/static/js/jquery.blueimp-gallery.min.js"></script>
+<script src="/static/js/bootstrap-image-gallery.min.js"></script>
+<script src="/static/js/bootstrap.min.js"></script>
 <!-- IE10 viewport hack for Surface/desktop Windows 8 bug -->
-<script src="/js/ie10-viewport-bug-workaround.js"></script>
+<script src="/static/js/ie10-viewport-bug-workaround.js"></script>
 
 </body>
 </html>

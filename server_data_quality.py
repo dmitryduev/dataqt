@@ -20,33 +20,10 @@ config.read(os.path.join(abs_path, 'config.ini'))
 # seeing data dwelling place:
 # path_to_seeing_data = config.get('Path', 'path_to_seeing_data')
 # path_to_website_data = config.get('Path', 'path_to_seeing_data')
-path_to_website_data = os.path.join(abs_path, 'data')
-
-
-# serve static files
-@app.route('/js/<path:path>')
-def send_js(path):
-    return send_from_directory(os.path.join(abs_path, 'js'), path)
-
-
-@app.route('/css/<path:path>')
-def send_css(path):
-    return send_from_directory(os.path.join(abs_path, 'css'), path)
-
-
-@app.route('/img/<path:path>')
-def send_img(path):
-    return send_from_directory(os.path.join(abs_path, 'img'), path)
-
-
-@app.route('/fonts/<path:path>')
-def send_fonts(path):
-    return send_from_directory(os.path.join(abs_path, 'fonts'), path)
-
-
-@app.route('/data/<path:path>')
-def send_data(path):
-    return send_from_directory(os.path.join(abs_path, 'data'), path)
+path_to_website_data = os.path.join(abs_path, 'static', 'data')
+# create if absent:
+if not os.path.exists(path_to_website_data):
+    os.mkdir(path_to_website_data)
 
 
 # serve root

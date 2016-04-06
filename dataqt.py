@@ -232,7 +232,7 @@ if __name__ == '__main__':
     abs_path = os.path.dirname(inspect.getfile(inspect.currentframe()))
 
     # website data dwelling place:
-    path_to_website_data = os.path.join(abs_path, 'data')
+    path_to_website_data = os.path.join(abs_path, 'static', 'data')
 
     if not args.date:
         now = datetime.datetime.now()
