@@ -16,5 +16,5 @@ Robo-AO data monitoring service
 - Run the server with the pm2 process manager:
 
 ```
-	pm2 start server-data-quality.py --interpreter=/path/to/python
+	pm2 start server_data_quality.py --interpreter=/path/to/python
 ```
