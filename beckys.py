@@ -15,6 +15,10 @@ import operator
 import sewpy
 import argparse
 
+from skimage import exposure
+from copy import deepcopy
+from matplotlib.patches import Rectangle
+from matplotlib.offsetbox import AnchoredOffsetbox, AuxTransformBox, VPacker, TextArea
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
@@ -44,7 +48,51 @@ def rho(x, y, x_0=1024, y_0=1024):
     return np.sqrt((x-x_0)**2 + (y-y_0)**2)
 
 
+# Scale bars
+class AnchoredSizeBar(AnchoredOffsetbox):
+    def __init__(self, transform, size, label, loc,
+                 pad=0.1, borderpad=0.1, sep=2, prop=None, frameon=True):
+        """
+        Draw a horizontal bar with the size in data coordinate of the give axes.
+        A label will be drawn underneath (center-aligned).
+
+        pad, borderpad in fraction of the legend font size (or prop)
+        sep in points.
+        loc:
+            'upper right'  : 1,
+            'upper left'   : 2,
+            'lower left'   : 3,
+            'lower right'  : 4,
+            'right'        : 5,
+            'center left'  : 6,
+            'center right' : 7,
+            'lower center' : 8,
+            'upper center' : 9,
+            'center'       : 10
+        """
+        self.size_bar = AuxTransformBox(transform)
+        self.size_bar.add_artist(Rectangle((0, 0), size, 0, fc='none', color='white', lw=3))
+
+        self.txt_label = TextArea(label, dict(color='white', size='x-large', weight='normal'),
+                                  minimumdescent=False)
+
+        self._box = VPacker(children=[self.size_bar, self.txt_label],
+                            align="center",
+                            pad=0, sep=sep)
+
+        AnchoredOffsetbox.__init__(self, loc, pad=pad, borderpad=borderpad,
+                                   child=self._box,
+                                   prop=prop,
+                                   frameon=frameon)
+
+
 def make_img(_path, _win):
+    """
+
+    :param _path: path to 100p.fits
+    :param _win: window width
+    :return: cropped image
+    """
     scidata = fits.open(os.path.join(_path, '100p.fits'))[0].data
 
     # extract sources
@@ -81,7 +129,208 @@ def make_img(_path, _win):
     return scidata_cropped
 
 
+def pca_helper(_args):
+    """
+    Helper function to run PCA in parallel for multiple sources
 
+    :param _args:
+    :return:
+    """
+    # unpack args
+    _trimmed_frame, _win, _sou_name, _sou_dir, _library_path, _out_path, plsc, sigma, _nrefs, _klip = _args
+    # run pca
+    pca(_trimmed_frame=_trimmed_frame, _win=_win, _sou_name=_sou_name,
+        _sou_dir=_sou_dir, _library_path=_library_path, _out_path=_out_path,
+        plsc=plsc, sigma=sigma, _nrefs=_nrefs, _klip=_klip)
+
+
+def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _library_path, _out_path,
+        plsc=0.0168876, sigma=5, _nrefs=5, _klip=1):
+    """
+
+    :param _trimmed_frame:
+    :param _win:
+    :param _sou_name:
+    :param _sou_dir:
+    :param _library_path:
+    :param _out_path:
+    :param plsc: contrast curve parameter - plate scale (check if input img is upsampled)
+    :param sigma: contrast curve parameter - sigma level
+    :param _nrefs:
+    :param _klip:
+    :return:
+    """
+    # Filter the trimmed frame with IUWT filter, 2 coeffs
+    filtered_frame = (vip.var.cube_filter_iuwt(
+        np.reshape(_trimmed_frame, (1, np.shape(_trimmed_frame)[0], np.shape(_trimmed_frame)[1])),
+        coeff=5, rel_coeff=1))
+
+    # Choose the resolution element size -- to replace with fitting two gaussians
+    mean_y, mean_x, fwhm_y, fwhm_x, amplitude, theta = (
+        vip.var.fit_2dgaussian(filtered_frame[0], crop=True,
+                               cropsize=15, debug=False, full_output=True))
+    fwhm = float(np.mean([fwhm_y, fwhm_x]))
+    print('Using resolution element size = ', fwhm)
+
+    # Center the filtered frame
+    centered_cube, shy, shx = (vip.calib.cube_recenter_gauss2d_fit(array=filtered_frame, pos_y=_win,
+                                                                   pos_x=_win, fwhm=fwhm,
+                                                                   subi_size=6, nproc=1,
+                                                                   full_output=True))
+    centered_frame = centered_cube[0]
+    if shy > 5 or shx > 5:
+        raise TypeError('Centering failed: pixel shifts too big')
+
+    # Do aperture photometry on the central star
+    center_aperture = photutils.CircularAperture(
+        (int(len(centered_frame) / 2), int(len(centered_frame) / 2)), fwhm / 2.0)
+    center_flux = photutils.aperture_photometry(centered_frame, center_aperture)['aperture_sum'][0]
+
+    # Make PSF template for calculating PCA throughput
+    psf_template = (
+        centered_frame[len(centered_frame) / 2 - 3 * fwhm:len(centered_frame) / 2 + 3 * fwhm,
+        len(centered_frame) / 2 - 3 * fwhm:len(centered_frame) / 2 + 3 * fwhm])
+
+    # Import PSF reference library
+    frame_filter = filt
+    if frame_filter == 'Sz':
+        library = fits.open(os.path.join(_library_path,
+                                         'centered_iuwtfiltered_2Coeffs_zfilt_library.fits'))[0].data
+        # library_names = np.genfromtxt(os.path.join(_library_path,
+        #                                            'zfilt_library_2Coeffs_names.txt'), dtype="|S")
+        library_names_short = np.genfromtxt(os.path.join(_library_path,
+                                                         'zfilt_library_2Coeffs_names_short.txt'),
+                                            dtype="|S")
+    elif frame_filter == 'Si':
+        library = fits.open(os.path.join(_library_path,
+                                         'centered_iuwtfiltered_2Coeffs_ifilt_library.fits'))[0].data
+        # library_names = np.genfromtxt(os.path.join(_library_path,
+        #                                            'ifilt_library_2Coeffs_names.txt'), dtype="|S")
+        library_names_short = np.genfromtxt(os.path.join(_library_path,
+                                                         'ifilt_library_2Coeffs_names_short.txt'),
+                                            dtype="|S")
+    else:
+        print("Becky hasn't made a library for this filter yet, so we aren't doing PCA")
+        noise_samp, rad_samp = vip.phot.noise_per_annulus(centered_frame, 1, fwhm, False)
+        noise_samp_sm = savgol_filter(noise_samp, polyorder=1, mode='nearest',
+                                      window_length=int(noise_samp.shape[0] * 0.1))
+        n_res_els = np.floor(rad_samp / fwhm * 2 * np.pi)
+        ss_corr = np.sqrt(1 + 1.0 / (n_res_els - 1))
+        sigma_student = stats.t.ppf(stats.norm.cdf(sigma), n_res_els) / ss_corr
+        cont = (sigma_student * noise_samp_sm) / center_flux
+
+        fig = plt.figure('Contrast curve for {:s}'.format(_sou_name), figsize=(8, 3.5), dpi=200)
+        ax = fig.add_subplot(111)
+        ax.set_title(_sou_dir + '\n Without PCA')  # , fontsize=14)
+        ax.plot(rad_samp * plsc, -2.5 * np.log10(cont), 'k-', linewidth=2.5)
+        ax.set_xlim([0.2, 1.45])
+        ax.set_xlabel('Separation [arcseconds]')  # , fontsize=18)
+        ax.set_ylabel('Contrast [$\Delta$mag]')  # , fontsize=18)
+        ax.set_ylim([0, 8])
+        ax.set_ylim(ax.get_ylim()[::-1])  # reverse y
+        ax.grid(linewidth=0.5)
+        plt.tight_layout()
+        fig.savefig(os.path.join(_out_path, _sou_dir + '_NOPCA_contrast_curve.png'), dpi=200)
+
+        # save txt for nightly median calc/plot
+        with open(os.path.join(_out_path, _sou_dir + '_NOPCA_contrast_curve.txt'), 'w') as f:
+            for s, dm in zip(rad_samp * plsc, -2.5 * np.log10(cont)):
+                f.write('{:.3f} {:.3f}\n'.format(s, dm))
+
+        return
+
+    # Choose reference frames via cross correlation
+    library_notmystar = library[~np.in1d(library_names_short, _sou_name)]
+    cross_corr = np.zeros(len(library_notmystar))
+    flattened_frame = np.ndarray.flatten(centered_frame)
+
+    for c in range(len(library_notmystar)):
+        cross_corr[c] = stats.pearsonr(flattened_frame, np.ndarray.flatten(library_notmystar[c, :, :]))[0]
+
+    cross_corr_sorted, index_sorted = (np.array(zip(*sorted(zip(cross_corr, np.arange(len(cross_corr))),
+                                                            key=operator.itemgetter(0), reverse=True))))
+    index_sorted = np.int_(index_sorted)
+    library = library_notmystar[index_sorted[0:_nrefs], :, :]
+    print('Library correlations = ', cross_corr_sorted[0:_nrefs])
+
+    # Do PCA
+    reshaped_frame = np.reshape(centered_frame,
+                                (1, np.shape(centered_frame)[0], np.shape(centered_frame)[1]))
+    pca_frame = vip.pca.pca(reshaped_frame, np.zeros(1), library, ncomp=_klip)
+
+    pca_file_name = os.path.join(_out_path, _sou_dir + '_pca.fits')
+
+    # remove fits if already exists
+    if os.path.isfile(pca_file_name):
+        os.remove(pca_file_name)
+
+    # save fits after PCA
+    hdu = fits.PrimaryHDU(pca_frame)
+    hdulist = fits.HDUList([hdu])
+    hdulist.writeto(pca_file_name)
+
+    # save png after PCA
+    # scale for beautification:
+    scidata = deepcopy(pca_frame)
+    norm = np.max(np.max(scidata))
+    mask = scidata <= 0
+    scidata[mask] = 0
+    scidata = np.uint16(scidata / norm * 65535)
+    # logarithmic_corrected = exposure.adjust_log(img_as_float(scidata/norm) + 1, 1)
+    # print(np.min(np.min(scidata)), np.max(np.max(scidata)))
+
+    # scidata_corrected = exposure.equalize_adapthist(scidata, clip_limit=0.03)
+    p_1, p_2 = np.percentile(scidata, (5, 100))
+    scidata_corrected = exposure.rescale_intensity(scidata, in_range=(p_1, p_2))
+
+    fig = plt.figure(_sou_name)
+    fig.set_size_inches(3, 3, forward=False)
+    # ax = fig.add_subplot(111)
+    ax = plt.Axes(fig, [0., 0., 1., 1.])
+    ax.set_axis_off()
+    fig.add_axes(ax)
+    ax.imshow(scidata_corrected, cmap='gray', origin='lower', interpolation='nearest')
+    # add scale bar:
+    # draw a horizontal bar with length of 0.1*x_size
+    # (ax.transData) with a label underneath.
+    bar_len = pca_frame.shape[0] * 0.1
+    bar_len_str = '{:.1f}'.format(bar_len * 34.5858 / 1024 / 2)
+    asb = AnchoredSizeBar(ax.transData,
+                          bar_len,
+                          bar_len_str[0] + r"$^{\prime\prime}\!\!\!.$" + bar_len_str[-1],
+                          loc=4, pad=0.3, borderpad=0.5, sep=10, frameon=False)
+    ax.add_artist(asb)
+
+    # save figure
+    fig.savefig(os.path.join(_out_path, _sou_dir + '_pca.png'), dpi=300)
+
+    # Make contrast curve
+    [con, cont, sep] = (vip.phot.contrcurve.contrast_curve(cube=reshaped_frame, angle_list=np.zeros(1),
+                                                           psf_template=psf_template,
+                                                           cube_ref=library, fwhm=fwhm, pxscale=plsc,
+                                                           starphot=center_flux, sigma=sigma,
+                                                           ncomp=_klip, algo='pca-rdi-fullfr',
+                                                           debug='false',
+                                                           plot='false', nbranch=3, scaling=None,
+                                                           mask_center_px=fwhm, fc_rad_sep=6))
+
+    fig = plt.figure('Contrast curve for {:s}'.format(_sou_name), figsize=(8, 3.5), dpi=200)
+    ax = fig.add_subplot(111)
+    ax.set_title(_sou_dir)  # , fontsize=14)
+    ax.plot(sep, -2.5 * np.log10(cont), 'k-', linewidth=2.5)
+    ax.set_xlim([0.2, 1.45])
+    ax.set_xlabel('Separation [arcseconds]')  # , fontsize=18)
+    ax.set_ylabel('Contrast [$\Delta$mag]')  # , fontsize=18)
+    ax.set_ylim([0, 8])
+    ax.set_ylim(ax.get_ylim()[::-1])
+    ax.grid(linewidth=0.5)
+    plt.tight_layout()
+    fig.savefig(os.path.join(_out_path, _sou_dir + '_contrast_curve.png'), dpi=200)
+
+    # save txt for nightly median calc/plot
+    with open(os.path.join(_out_path, _sou_dir + '_contrast_curve.txt'), 'w') as f:
+        for s, dm in zip(sep, -2.5 * np.log10(cont)):
+            f.write('{:.3f} {:.3f}\n'.format(s, dm))
 
 
 if __name__ == '__main__':
@@ -156,134 +405,8 @@ if __name__ == '__main__':
                     ''' go off with processing: '''
                     # trimmed image:
                     trimmed_frame = (make_img(_path=path_sou, _win=win))
-
-                    # Filter the trimmed frame with IUWT filter, 2 coeffs
-                    filtered_frame = (vip.var.cube_filter_iuwt(
-                        np.reshape(trimmed_frame, (1, np.shape(trimmed_frame)[0], np.shape(trimmed_frame)[1])),
-                        coeff=5, rel_coeff=1))
-
-                    # Choose the resolution element size -- to replace with fitting two gaussians
-                    mean_y, mean_x, fwhm_y, fwhm_x, amplitude, theta = (
-                                    vip.var.fit_2dgaussian(filtered_frame[0], crop=True,
-                                                           cropsize=15, debug=False, full_output=True))
-                    fwhm = np.mean([fwhm_y, fwhm_x])
-                    print('Using resolution element size = ', fwhm)
-
-                    # Center the filtered frame
-                    centered_cube, shy, shx = (vip.calib.cube_recenter_gauss2d_fit(array=filtered_frame, pos_y=win,
-                                                                                   pos_x=win, fwhm=fwhm,
-                                                                                   subi_size=6, nproc=1,
-                                                                                   full_output=True))
-                    centered_frame = centered_cube[0]
-                    if shy > 5 or shx > 5:
-                        raise TypeError('Centering failed: pixel shifts too big')
-
-                    # Do aperture photometry on the central star
-                    center_aperture = photutils.CircularAperture(
-                        (int(len(centered_frame) / 2), int(len(centered_frame) / 2)), fwhm / 2.0)
-                    center_flux = photutils.aperture_photometry(centered_frame, center_aperture)['aperture_sum'][0]
-
-                    # Make PSF template for calculating PCA throughput
-                    psf_template = (
-                    centered_frame[len(centered_frame) / 2 - 3 * fwhm:len(centered_frame) / 2 + 3 * fwhm,
-                    len(centered_frame) / 2 - 3 * fwhm:len(centered_frame) / 2 + 3 * fwhm])
-
-                    # Define contrast curve parameters
-                    plsc = 0.0168876
-                    my_sigma = 5.0
-
-                    # Import PSF reference library
-                    frame_filter = filt
-                    if frame_filter == 'Sz':
-                        library = fits.open(os.path.join(library_path,
-                                                         'centered_iuwtfiltered_2Coeffs_zfilt_library.fits'))[0].data
-                        library_names = np.genfromtxt(os.path.join(library_path,
-                                                                   'zfilt_library_2Coeffs_names.txt'), dtype="|S")
-                        library_names_short = np.genfromtxt(os.path.join(library_path,
-                                                                         'zfilt_library_2Coeffs_names_short.txt'),
-                                                            dtype="|S")
-                    elif frame_filter == 'Si':
-                        library = fits.open(os.path.join(library_path,
-                                                         'centered_iuwtfiltered_2Coeffs_ifilt_library.fits'))[0].data
-                        library_names = np.genfromtxt(os.path.join(library_path,
-                                                                   'ifilt_library_2Coeffs_names.txt'), dtype="|S")
-                        library_names_short = np.genfromtxt(os.path.join(library_path,
-                                                                         'ifilt_library_2Coeffs_names_short.txt'),
-                                                            dtype="|S")
-                    else:
-                        print("Becky hasn't made a library for this filter yet, so we aren't doing PCA")
-                        noise_samp, rad_samp = vip.phot.noise_per_annulus(centered_frame, 1, fwhm, False)
-                        noise_samp_sm = savgol_filter(noise_samp, polyorder=1, mode='nearest',
-                                                      window_length=noise_samp.shape[0] * 0.1)
-                        n_res_els = np.floor(rad_samp / fwhm * 2 * np.pi)
-                        ss_corr = np.sqrt(1 + 1 / (n_res_els - 1))
-                        sigma_student = stats.t.ppf(stats.norm.cdf(my_sigma), n_res_els) / ss_corr
-                        cont = (sigma_student * noise_samp_sm) / center_flux
-
-                        fig = plt.figure()
-                        ax = fig.add_subplot(111)
-                        ax.set_title(sou_dir + '\n Without PCA', fontsize=14)
-                        ax.plot(rad_samp * plsc, -2.5 * np.log10(cont), 'k-', linewidth=3)
-                        ax.set_xlim([0.2, 1.45])
-                        ax.set_xlabel('Separation [arcseconds]', fontsize=18)
-                        ax.set_ylabel('Contrast [$\Delta$mag]', fontsize=18)
-                        # plt.gca().invert_yaxis()
-                        ax.set_ylim(ax.get_ylim()[::-1])
-                        fig.savefig(os.path.join(path_data, pot, sou_dir + '_NOPCA_contrast_curve.jpg'))
-                        # raise Exception('No library for this filter yet :(')
-                        continue
-
-                    # Choose reference frames via cross correlation
-                    nrefs = 5
-                    library_notmystar = library[~np.in1d(library_names_short, sou_name)]
-                    cross_corr = np.zeros(len(library_notmystar))
-                    flattened_frame = np.ndarray.flatten(centered_frame)
-
-                    for c in xrange(len(library_notmystar)):
-                        cross_corr[c] = stats.pearsonr(flattened_frame, np.ndarray.flatten(library_notmystar[c, :, :]))[
-                            0]
-
-                    cross_corr_sorted, index_sorted = (np.array(zip(*sorted(zip(cross_corr, np.arange(len(cross_corr))),
-                                                                            key=operator.itemgetter(0), reverse=True))))
-                    index_sorted = np.int_(index_sorted)
-                    my_library = library_notmystar[index_sorted[0:nrefs], :, :]
-                    print('Library correlations = ', cross_corr_sorted[0:nrefs])
-
-                    # Do PCA
-                    reshaped_frame = np.reshape(centered_frame,
-                                                (1, np.shape(centered_frame)[0], np.shape(centered_frame)[1]))
-                    klip = 1
-                    pca_frame = vip.pca.pca(reshaped_frame, np.zeros(1), my_library, ncomp=klip)
-
-                    pca_file_name = os.path.join(path_data, pot, sou_dir + '_pca.fits')
-
-                    # remove fits if already exists
-                    if os.path.isfile(pca_file_name):
-                        os.remove(pca_file_name)
-
-                    hdu = fits.PrimaryHDU(pca_frame)
-                    hdulist = fits.HDUList([hdu])
-                    hdulist.writeto(pca_file_name)
-
-                    # Make contrast curve
-                    [con, cont, sep] = (vip.phot.contrcurve.contrast_curve(cube=reshaped_frame, angle_list=np.zeros(1),
-                                                                           psf_template=psf_template,
-                                                                           cube_ref=my_library, fwhm=fwhm, pxscale=plsc,
-                                                                           starphot=center_flux, sigma=my_sigma,
-                                                                           ncomp=klip, algo='pca-rdi-fullfr',
-                                                                           debug='false',
-                                                                           plot='false', nbranch=3, scaling=None,
-                                                                           mask_center_px=fwhm, fc_rad_sep=6))
-
-                    fig = plt.figure('Contrast curve')
-                    ax = fig.add_subplot(111)
-                    ax.set_title(sou_dir, fontsize=14)
-                    ax.plot(sep, -2.5 * np.log10(cont), 'k-', linewidth=3)
-                    ax.set_xlim([0.2, 1.45])
-                    ax.set_xlabel('Separation [arcseconds]', fontsize=18)
-                    ax.set_ylabel('Contrast [$\Delta$mag]', fontsize=18)
-                    # plt.gca().invert_yaxis()
-                    ax.set_ylim(ax.get_ylim()[::-1])
-                    fig.savefig(os.path.join(path_data, pot, sou_dir + '_contrast_curve.jpg'))
-
-
+                    
+                    # run PCA
+                    pca(_trimmed_frame=trimmed_frame, _win=win, _sou_name=sou_name,
+                        _sou_dir=sou_dir, _library_path=library_path, _out_path=os.path.join(path_data, pot),
+                        plsc=0.0168876, sigma=5.0, _nrefs=5, _klip=1)

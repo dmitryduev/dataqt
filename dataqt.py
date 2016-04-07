@@ -10,7 +10,7 @@ import numpy as np
 # from bokeh.io import gridplot, output_file, show
 # from bokeh.plotting import figure
 import sewpy
-from skimage import exposure, img_as_float
+from skimage import exposure#, img_as_float
 from skimage.transform import rescale
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
