@@ -14,6 +14,7 @@ from scipy import stats
 import operator
 import sewpy
 import argparse
+import multiprocessing
 
 from skimage import exposure
 from copy import deepcopy
@@ -137,14 +138,15 @@ def pca_helper(_args):
     :return:
     """
     # unpack args
-    _trimmed_frame, _win, _sou_name, _sou_dir, _library_path, _out_path, plsc, sigma, _nrefs, _klip = _args
+    _trimmed_frame, _win, _sou_name, _sou_dir, _library_path, _out_path, _filt, \
+    plsc, sigma, _nrefs, _klip = _args
     # run pca
     pca(_trimmed_frame=_trimmed_frame, _win=_win, _sou_name=_sou_name,
-        _sou_dir=_sou_dir, _library_path=_library_path, _out_path=_out_path,
+        _sou_dir=_sou_dir, _library_path=_library_path, _out_path=_out_path, _filt=_filt,
         plsc=plsc, sigma=sigma, _nrefs=_nrefs, _klip=_klip)
 
 
-def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _library_path, _out_path,
+def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _library_path, _out_path, _filt,
         plsc=0.0168876, sigma=5, _nrefs=5, _klip=1):
     """
 
@@ -154,6 +156,7 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _library_path, _out_path,
     :param _sou_dir:
     :param _library_path:
     :param _out_path:
+    :param _filt: filter
     :param plsc: contrast curve parameter - plate scale (check if input img is upsampled)
     :param sigma: contrast curve parameter - sigma level
     :param _nrefs:
@@ -192,7 +195,7 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _library_path, _out_path,
         len(centered_frame) / 2 - 3 * fwhm:len(centered_frame) / 2 + 3 * fwhm])
 
     # Import PSF reference library
-    frame_filter = filt
+    frame_filter = _filt
     if frame_filter == 'Sz':
         library = fits.open(os.path.join(_library_path,
                                          'centered_iuwtfiltered_2Coeffs_zfilt_library.fits'))[0].data
@@ -348,6 +351,8 @@ if __name__ == '__main__':
                         help='obs date', type=str)
     parser.add_argument('--win', metavar='win', action='store', dest='win',
                         help='window size', type=int, default=100)
+    parser.add_argument('-p', '--parallel', action='store_true',
+                        help='run computation in parallel mode')
 
     args = parser.parse_args()
 
@@ -368,6 +373,8 @@ if __name__ == '__main__':
 
     # path to pipelined data exists?
     if os.path.exists(path):
+        # keep args to run pca for all sources in a safe cold place:
+        args_pca = []
         # path to output for date
         path_data = os.path.join(output_path, datetime.datetime.strftime(date, '%Y%m%d'))
         if not os.path.exists(output_path):
@@ -407,6 +414,31 @@ if __name__ == '__main__':
                     trimmed_frame = (make_img(_path=path_sou, _win=win))
                     
                     # run PCA
-                    pca(_trimmed_frame=trimmed_frame, _win=win, _sou_name=sou_name,
-                        _sou_dir=sou_dir, _library_path=library_path, _out_path=os.path.join(path_data, pot),
-                        plsc=0.0168876, sigma=5.0, _nrefs=5, _klip=1)
+                    # pca(_trimmed_frame=trimmed_frame, _win=win, _sou_name=sou_name,
+                    #     _sou_dir=sou_dir, _library_path=library_path, _out_path=os.path.join(path_data, pot),
+                    #     _filt=filt, plsc=0.0168876, sigma=5.0, _nrefs=5, _klip=1)
+                    args_pca.append([trimmed_frame, win,
+                                     sou_name, sou_dir, library_path, os.path.join(path_data, pot),
+                                     filt, 0.0168876, 5.0, 5, 1])
+
+        # run computation:
+        if len(args_pca) > 0:
+            # parallel?
+            if args.parallel:
+                raise NotImplemented('VIP forks stuff, so it is not straightforward to parallelize it.')
+                # otherwise it would have been as simple as the following:
+                # # number of threads available on the system
+                # n_cpu = multiprocessing.cpu_count()
+                # # create pool (do not create more than necessary)
+                # pool = multiprocessing.Pool(min(n_cpu, len(args_pca)))
+                # # asynchronously apply pca_helper
+                # result = pool.map_async(pca_helper, args_pca)
+                # # close bassejn
+                # pool.close()  # we are not adding any more processes
+                # pool.join()  # wait until all threads are done before going on
+                # # get the ordered results
+                # # output = result.get()
+            # serial?
+            else:
+                for arg_pca in args_pca:
+                    pca_helper(arg_pca)

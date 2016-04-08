@@ -239,7 +239,17 @@
     -->
     <h1>Robo-AO data quality summary: {{ date }}</h1><br>
 
-    {% if seeing %}
+</div>
+
+{% if data['contrast_curve'] %}
+    <div class="container">
+        <h3>Contrast Curve</h3>
+        <img src="/static/data/{{date}}/contrast_curve.{{date}}.png" alt="contrast curve" style="height:250px;">
+    </div>
+{% endif %}
+
+{% if seeing %}
+<div class="container">
     <h3>Seeing</h3>
     <!-- Seeing data -->
         Mean: {{ seeing['mean'] }}<br>
@@ -292,9 +302,9 @@
             </div>
 
         </div>
-    {% endif %}
-
 </div><!-- /.container -->
+{% endif %}
+
 
 <div class="container">
     {% if data %}

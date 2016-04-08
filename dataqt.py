@@ -223,6 +223,8 @@ if __name__ == '__main__':
                         action='store', help='path to pipelined data.', type=str)
     parser.add_argument('path_seeing', metavar='path_seeing',
                         action='store', help='path to seeing data.', type=str)
+    parser.add_argument('path_pca', metavar='path_pca',
+                        action='store', help='path to seeing data.', type=str)
     parser.add_argument('--date', metavar='date', action='store', dest='date',
                         help='obs date', type=str)
 
@@ -240,8 +242,9 @@ if __name__ == '__main__':
     else:
         date = datetime.datetime.strptime(args.date, '%Y%m%d')
 
-    ''' Scientific images '''
+    ''' Scientific images, PCA and contrast curves '''
     path = os.path.join(args.path_pipe, datetime.datetime.strftime(date, '%Y%m%d'))
+    path_pca = os.path.join(args.path_pca, datetime.datetime.strftime(date, '%Y%m%d'))
     # print(path)
 
     # bokeh static output html file
@@ -258,12 +261,21 @@ if __name__ == '__main__':
         if not os.path.exists(path_data):
             os.mkdir(path_data)
 
+        # contrast curves in txt format
+        ccs = []
+
         for pot in source_data.keys():
             if os.path.exists(os.path.join(path, pot)):
                 print(pot.replace('_', ' ').title())
                 if not os.path.exists(os.path.join(path_data, pot)) \
                         and pot not in ('zero_flux', 'failed'):
                     os.mkdir(os.path.join(path_data, pot))
+                # path to pca data exists?
+                if os.path.exists(os.path.join(path_pca, pot)):
+                    pca_ls = sorted(os.listdir(os.path.join(path_pca, pot)))
+                    ccs += [os.path.join(path_pca, pot, pf) for pf in pca_ls if '_contrast_curve.txt' in pf]
+                else:
+                    pca_ls = []
                 for sou_dir in sorted(os.listdir(os.path.join(path, pot))):
                     path_sou = os.path.join(path, pot, sou_dir)
                     tmp = sou_dir.split('_')
@@ -285,8 +297,22 @@ if __name__ == '__main__':
                     time = datetime.datetime.strptime(tmp[-2] + tmp[-1].split('.')[0],
                                                       '%Y%m%d%H%M%S')
 
+                    # contrast curve:
+                    if (sou_dir + '_pca.png' in pca_ls) and (sou_dir + '_contrast_curve.png' in pca_ls) and \
+                            (sou_dir + '_contrast_curve.txt' in pca_ls):
+                        cc = 'pca'
+                        # TODO: copy data over to /static/data
+                    elif (sou_dir + '_NOPCA_contrast_curve.png' in pca_ls) and \
+                            (sou_dir + '_NOPCA_contrast_curve.txt' in pca_ls):
+                        cc = 'nopca'
+                        # TODO: copy data over to /static/data
+                    else:
+                        cc = 'none'
+
+                    # store in a dict
                     source = {'prog_num': prog_num, 'sou_name': sou_name,
-                              'filter': filt, 'time': datetime.datetime.strftime(time, '%Y%m%d_%H%M%S')}
+                              'filter': filt, 'time': datetime.datetime.strftime(time, '%Y%m%d_%H%M%S'),
+                              'contrast_curve': cc}
                     print(source)
 
                     if pot not in ('zero_flux', 'failed'):
@@ -298,6 +324,42 @@ if __name__ == '__main__':
 
                     # put into the basket
                     source_data[pot].append(source)
+
+        # make nightly joint contrast curve plot
+        if len(ccs) > 0:
+            contrast_curves = []
+            fig = plt.figure('Contrast curve', figsize=(8, 3.5), dpi=200)
+            ax = fig.add_subplot(111)
+            for f_cc in ccs:
+                with open(f_cc, 'r') as f:
+                    f_lines = f.readlines()
+                contrast_curves.append(np.array([map(float, l.split()) for l in f_lines]))
+            contrast_curves = np.array(contrast_curves)
+
+            # add to plot:
+            sep_mean = np.linspace(0.2, 1.45, num=100)
+            cc_mean = []
+            for contrast_curve in contrast_curves:
+                ax.plot(contrast_curve[:, 0], contrast_curve[:, 1], '-', c=plt.cm.Greys(0.3), linewidth=1.2)
+                cc_mean.append(np.interp(sep_mean, contrast_curve[:, 0], contrast_curve[:, 1]))
+            # add mean to plot:
+            ax.plot(sep_mean, np.mean(np.array(cc_mean).T, axis=1), '-', c=plt.cm.Oranges(0.7), linewidth=2.5)
+            # beautify and save:
+            ax.set_xlim([0.2, 1.45])
+            ax.set_xlabel('Separation [arcseconds]')  # , fontsize=18)
+            ax.set_ylabel('Contrast [$\Delta$mag]')  # , fontsize=18)
+            ax.set_ylim([0, 8])
+            ax.set_ylim(ax.get_ylim()[::-1])
+            ax.grid(linewidth=0.5)
+            plt.tight_layout()
+            fig.savefig(os.path.join(path_to_website_data, datetime.datetime.strftime(date, '%Y%m%d'),
+                                     'contrast_curve.{:s}.png'.format(datetime.datetime.strftime(date,
+                                                                                                 '%Y%m%d'))),
+                        dpi=200)
+            # save in json
+            source_data['contrast_curve'] = True
+        else:
+            source_data['contrast_curve'] = False
 
         # dump sci json
         with open(os.path.join(path_data,
