@@ -32,7 +32,6 @@ if not os.path.exists(path_to_website_data):
 def hw():
     dates = sorted([lf for lf in os.listdir(path_to_website_data)
                     if os.path.isdir(os.path.join(path_to_website_data, lf))])
-    print dates
     return render_template('template-main.html', dates=dates)
 
 
