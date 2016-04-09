@@ -126,7 +126,11 @@ def make_img(_path, _win):
                                   out['table']['YPEAK_IMAGE'][best_score] + _win + 1,
                                   out['table']['XPEAK_IMAGE'][best_score] - _win:
                                   out['table']['XPEAK_IMAGE'][best_score] + _win + 1]
-
+    else:
+        # use a simple max instead:
+        x, y = np.unravel_index(scidata.argmax(), scidata.shape)
+        scidata_cropped = scidata[x - _win: x + _win + 1,
+                                  y - _win: y + _win + 1]
     return scidata_cropped
 
 
