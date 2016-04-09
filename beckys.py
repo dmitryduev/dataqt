@@ -145,9 +145,12 @@ def pca_helper(_args):
     _trimmed_frame, _win, _sou_name, _sou_dir, _library_path, _out_path, _filt, \
     plsc, sigma, _nrefs, _klip = _args
     # run pca
-    pca(_trimmed_frame=_trimmed_frame, _win=_win, _sou_name=_sou_name,
-        _sou_dir=_sou_dir, _library_path=_library_path, _out_path=_out_path, _filt=_filt,
-        plsc=plsc, sigma=sigma, _nrefs=_nrefs, _klip=_klip)
+    try:
+        pca(_trimmed_frame=_trimmed_frame, _win=_win, _sou_name=_sou_name,
+            _sou_dir=_sou_dir, _library_path=_library_path, _out_path=_out_path, _filt=_filt,
+            plsc=plsc, sigma=sigma, _nrefs=_nrefs, _klip=_klip)
+    finally:
+        return
 
 
 def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _library_path, _out_path, _filt,
