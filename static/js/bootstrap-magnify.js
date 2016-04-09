@@ -113,10 +113,11 @@
     /* MAGNIFY DATA-API
      * ================ */
 
-    $(window).on('load', function () {
+    $('#sourceModal').on('shown.bs.modal', function (e) {
         $('[data-toggle="magnify"]').each(function () {
             var $mag = $(this);
-            $mag.magnify()
+            $mag.magnify();
+            // $('.magnify-large').css("background-size", '200% 200%');
         })
     })
 

@@ -87,13 +87,17 @@ class AnchoredSizeBar(AnchoredOffsetbox):
                                    frameon=frameon)
 
 
-def make_img(_sou_name, _time, _filter, _prog_num, _path_sou, _path_data, pipe_out_type):
+def make_img(_sou_name, _time, _filter, _prog_num, _postfix, _camera, _marker,
+             _path_sou, _path_data, pipe_out_type):
     """
 
     :param _sou_name:
     :param _time:
     :param _filter:
     :param _prog_num:
+    :param _postfix:
+    :param _camera:
+    :param _marker:
     :param _path_sou:
     :param _path_data:
     :param pipe_out_type: 'high_flux' or 'faint'
@@ -170,8 +174,8 @@ def make_img(_sou_name, _time, _filter, _prog_num, _path_sou, _path_data, pipe_o
     plt.grid('off')
 
     # save full figure
-    fname_full = '{:d}_{:s}_{:s}_{:s}_full.png'.format(_prog_num, _sou_name, _filter,
-                                                  datetime.datetime.strftime(_time, '%Y%m%d_%H%M%S'))
+    fname_full = '{:d}_{:s}_{:s}_{:s}_{:s}_{:s}.{:s}_full.png'.format(_prog_num, _sou_name, _camera, _filter, _marker,
+                                                  datetime.datetime.strftime(_time, '%Y%m%d_%H%M%S'), _postfix)
     plt.savefig(os.path.join(_path_data, pipe_out_type, fname_full), dpi=300)
 
     ''' crop the brightest detected source: '''
@@ -208,9 +212,9 @@ def make_img(_sou_name, _time, _filter, _prog_num, _path_sou, _path_data, pipe_o
     ax.add_artist(asb)
 
     # save cropped figure
-    fname_cropped = '{:d}_{:s}_{:s}_{:s}_cropped.png'.format(_prog_num, _sou_name, _filter,
-                                                        datetime.datetime.strftime(_time,
-                                                                                   '%Y%m%d_%H%M%S'))
+    fname_cropped = '{:d}_{:s}_{:s}_{:s}_{:s}_{:s}.{:s}_cropped.png'.format(_prog_num, _sou_name, _camera, _filter,
+                                                                            _marker, datetime.datetime.strftime(_time,
+                                                                                             '%Y%m%d_%H%M%S'), _postfix)
     fig.savefig(os.path.join(_path_data, pipe_out_type, fname_cropped), dpi=300)
 
 
@@ -296,28 +300,40 @@ if __name__ == '__main__':
                     # date and time of obs:
                     time = datetime.datetime.strptime(tmp[-2] + tmp[-1].split('.')[0],
                                                       '%Y%m%d%H%M%S')
+                    # postfix:
+                    postfix = tmp[-1].split('.')[1]
+                    # camera:
+                    camera = tmp[-5:-4][0]
+                    # marker:
+                    marker = tmp[-3:-2][0]
 
                     # contrast curve:
                     if (sou_dir + '_pca.png' in pca_ls) and (sou_dir + '_contrast_curve.png' in pca_ls) and \
                             (sou_dir + '_contrast_curve.txt' in pca_ls):
                         cc = 'pca'
-                        # TODO: copy data over to /static/data
+                        f_contrast_curve = os.path.join(path_pca, pot, sou_dir + '_contrast_curve.png')
+                        shutil.copy(f_contrast_curve, os.path.join(path_data, pot))
+                        f_pca = os.path.join(path_pca, pot, sou_dir + '_pca.png')
+                        shutil.copy(f_pca, os.path.join(path_data, pot))
                     elif (sou_dir + '_NOPCA_contrast_curve.png' in pca_ls) and \
                             (sou_dir + '_NOPCA_contrast_curve.txt' in pca_ls):
                         cc = 'nopca'
-                        # TODO: copy data over to /static/data
+                        f_contrast_curve = os.path.join(path_pca, pot, sou_dir + '_NOPCA_contrast_curve.png')
+                        shutil.copy(f_contrast_curve, os.path.join(path_data, pot))
                     else:
                         cc = 'none'
 
                     # store in a dict
                     source = {'prog_num': prog_num, 'sou_name': sou_name,
                               'filter': filt, 'time': datetime.datetime.strftime(time, '%Y%m%d_%H%M%S'),
-                              'contrast_curve': cc}
+                              'postfix': postfix, 'camera': camera, 'marker': marker, 'contrast_curve': cc}
                     print(source)
 
                     if pot not in ('zero_flux', 'failed'):
                         try:
-                            make_img(_sou_name=sou_name, _time=time, _filter=filt, _prog_num=prog_num,
+                            make_img(_sou_name=sou_name, _time=time, _filter=filt,
+                                     _prog_num=prog_num, _postfix=postfix,
+                                     _camera=camera, _marker=marker,
                                      _path_sou=path_sou, _path_data=path_data, pipe_out_type=pot)
                         except IOError:
                             continue

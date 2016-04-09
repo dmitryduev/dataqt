@@ -5984,9 +5984,9 @@ button.close {
     width: 300px;
   }
 }
-@media (min-width: 992px) {
+@media (min-width: 770px) {
   .modal-lg {
-    width: 900px;
+    width: 95%;
   }
 }
 .tooltip {
