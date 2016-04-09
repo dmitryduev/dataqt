@@ -339,7 +339,7 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _library_path, _out_path, _fi
 if __name__ == '__main__':
     # Create parser
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
-                                     description='data quality monitoring')
+                                     description='Becky\'s PCA pipeline')
 
     parser.add_argument('path_pipe', metavar='path_pipe',
                         action='store', help='path to pipelined data.', type=str)

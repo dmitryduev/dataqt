@@ -7,13 +7,19 @@ Robo-AO data monitoring service
 	git clone https://github.com/dmitryduev/dataqt.git
 ```
 
+- Run Becky's PCA pipeline:
+
+```
+	python beckys.py path_to_pipelined_data path_to_psf_library path_to_pca_output_data --date YYYYMMDD --win W
+```
+
 - Generate data to be shown on the website:
 
 ```
-	python dataqt.py path_to_pipelined_data path_to_seeing_data --date YYYYMMDD
+	python dataqt.py path_to_pipelined_data path_to_seeing_data path_to_pca_output_data --date YYYYMMDD
 ```
 
-- Run the server with the pm2 process manager:
+- Run the server using the pm2 process manager:
 
 ```
 	pm2 start server_data_quality.py --interpreter=/path/to/python
