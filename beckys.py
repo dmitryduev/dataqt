@@ -157,17 +157,17 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _library_path, _out_path, _fi
         plsc=0.0168876, sigma=5, _nrefs=5, _klip=1):
     """
 
-    :param _trimmed_frame:
-    :param _win:
-    :param _sou_name:
-    :param _sou_dir:
-    :param _library_path:
-    :param _out_path:
+    :param _trimmed_frame: image cropped around the source
+    :param _win: window half-size in pixels
+    :param _sou_name: source name
+    :param _sou_dir: full Robo-AO source name
+    :param _library_path: path to PSF library
+    :param _out_path: output path
     :param _filt: filter
     :param plsc: contrast curve parameter - plate scale (check if input img is upsampled)
     :param sigma: contrast curve parameter - sigma level
-    :param _nrefs:
-    :param _klip:
+    :param _nrefs: number of reference sources to use
+    :param _klip: number of components to keep
     :return:
     """
     # Filter the trimmed frame with IUWT filter, 2 coeffs
