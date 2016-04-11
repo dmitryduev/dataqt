@@ -133,7 +133,10 @@ def make_img(_sou_name, _time, _filter, _prog_num, _postfix, _camera, _marker,
     # get first 5 and score them:
     scores = []
     for sou in out['table'][0:5]:
-        score = log_gauss_score(sou['FWHM_IMAGE']) + gauss_score(rho(sou['X_IMAGE'], sou['Y_IMAGE']))
+        if sou['FWHM_IMAGE'] > 0.01:
+            score = log_gauss_score(sou['FWHM_IMAGE']) + gauss_score(rho(sou['X_IMAGE'], sou['Y_IMAGE']))
+        else:
+            score = 0  # it could so happen that reported FWHM is 0
         scores.append(score)
 
     # print(scores)
