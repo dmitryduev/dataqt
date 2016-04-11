@@ -120,6 +120,8 @@ def make_img(_path, _win, _x=None, _y=None):
             score = log_gauss_score(sou['FWHM_IMAGE']) + gauss_score(rho(sou['X_IMAGE'], sou['Y_IMAGE']))
             scores.append(score)
 
+        print('scores: ', scores)
+
         N_sou = len(out['table'])
         # do not crop large planets and crowded fields
         if N_sou != 0 and N_sou < 30:
