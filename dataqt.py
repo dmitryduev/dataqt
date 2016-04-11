@@ -330,6 +330,7 @@ if __name__ == '__main__':
                     print(source)
 
                     if pot not in ('zero_flux', 'failed'):
+                        # TODO: make it run in parallel
                         try:
                             make_img(_sou_name=sou_name, _time=time, _filter=filt,
                                      _prog_num=prog_num, _postfix=postfix,

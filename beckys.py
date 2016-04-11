@@ -87,50 +87,59 @@ class AnchoredSizeBar(AnchoredOffsetbox):
                                    frameon=frameon)
 
 
-def make_img(_path, _win):
+def make_img(_path, _win, _x=None, _y=None):
     """
 
     :param _path: path to 100p.fits
     :param _win: window width
+    :param _x: source x position -- if known in advance
+    :param _y: source y position -- if known in advance
+
     :return: cropped image
     """
     scidata = fits.open(os.path.join(_path, '100p.fits'))[0].data
 
-    # extract sources
-    sew = sewpy.SEW(params=["X_IMAGE", "Y_IMAGE", "XPEAK_IMAGE", "YPEAK_IMAGE",
-                            "A_IMAGE", "B_IMAGE", "FWHM_IMAGE", "FLAGS"],
-                            config={"DETECT_MINAREA": 10, "PHOT_APERTURES": "10", 'DETECT_THRESH': '5.0'},
-                            sexpath="sex")
+    if _x is None and _y is None:
+        # extract sources
+        sew = sewpy.SEW(params=["X_IMAGE", "Y_IMAGE", "XPEAK_IMAGE", "YPEAK_IMAGE",
+                                "A_IMAGE", "B_IMAGE", "FWHM_IMAGE", "FLAGS"],
+                                config={"DETECT_MINAREA": 10, "PHOT_APERTURES": "10", 'DETECT_THRESH': '5.0'},
+                                sexpath="sex")
 
-    out = sew(os.path.join(_path, '100p.fits'))
-    # sort by FWHM
-    out['table'].sort('FWHM_IMAGE')
-    # descending order
-    out['table'].reverse()
+        out = sew(os.path.join(_path, '100p.fits'))
+        # sort by FWHM
+        out['table'].sort('FWHM_IMAGE')
+        # descending order
+        out['table'].reverse()
 
-    print(out['table'])  # This is an astropy table.
+        print(out['table'])  # This is an astropy table.
 
-    # get first 5 and score them:
-    scores = []
-    for sou in out['table'][0:5]:
-        score = log_gauss_score(sou['FWHM_IMAGE']) + gauss_score(rho(sou['X_IMAGE'], sou['Y_IMAGE']))
-        scores.append(score)
+        # get first 5 and score them:
+        scores = []
+        for sou in out['table'][0:5]:
+            score = log_gauss_score(sou['FWHM_IMAGE']) + gauss_score(rho(sou['X_IMAGE'], sou['Y_IMAGE']))
+            scores.append(score)
 
-    N_sou = len(out['table'])
-    # do not crop large planets and crowded fields
-    if N_sou != 0 and N_sou < 30:
-        # sou_xy = [out['table']['X_IMAGE'][0], out['table']['Y_IMAGE'][0]]
-        best_score = np.argmax(scores) if len(scores) > 0 else 0
-        # sou_size = np.max((int(out['table']['FWHM_IMAGE'][best_score] * 3), 90))
-        scidata_cropped = scidata[out['table']['YPEAK_IMAGE'][best_score] - _win:
-                                  out['table']['YPEAK_IMAGE'][best_score] + _win + 1,
-                                  out['table']['XPEAK_IMAGE'][best_score] - _win:
-                                  out['table']['XPEAK_IMAGE'][best_score] + _win + 1]
+        N_sou = len(out['table'])
+        # do not crop large planets and crowded fields
+        if N_sou != 0 and N_sou < 30:
+            # sou_xy = [out['table']['X_IMAGE'][0], out['table']['Y_IMAGE'][0]]
+            best_score = np.argmax(scores) if len(scores) > 0 else 0
+            # sou_size = np.max((int(out['table']['FWHM_IMAGE'][best_score] * 3), 90))
+            scidata_cropped = scidata[out['table']['YPEAK_IMAGE'][best_score] - _win:
+                                      out['table']['YPEAK_IMAGE'][best_score] + _win + 1,
+                                      out['table']['XPEAK_IMAGE'][best_score] - _win:
+                                      out['table']['XPEAK_IMAGE'][best_score] + _win + 1]
+        else:
+            # use a simple max instead:
+            x, y = np.unravel_index(scidata.argmax(), scidata.shape)
+            scidata_cropped = scidata[x - _win: x + _win + 1,
+                                      y - _win: y + _win + 1]
     else:
-        # use a simple max instead:
-        x, y = np.unravel_index(scidata.argmax(), scidata.shape)
+        x, y = _x, _y
         scidata_cropped = scidata[x - _win: x + _win + 1,
                                   y - _win: y + _win + 1]
+
     return scidata_cropped
 
 
