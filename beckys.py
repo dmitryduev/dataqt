@@ -116,7 +116,7 @@ def make_img(_path, _win, _x=None, _y=None):
 
         # get first 5 and score them:
         scores = []
-        for sou in out['table'][0:5]:
+        for sou in out['table'][0:10]:
             if sou['FWHM_IMAGE'] > 0.01:
                 score = log_gauss_score(sou['FWHM_IMAGE']) + gauss_score(rho(sou['X_IMAGE'], sou['Y_IMAGE']))
             else:
