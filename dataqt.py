@@ -128,7 +128,7 @@ def make_img(_sou_name, _time, _filter, _prog_num, _postfix, _camera, _marker,
     # descending order
     out['table'].reverse()
 
-    print(out['table'])  # This is an astropy table.
+    # print(out['table'])  # This is an astropy table.
 
     # get first 5 and score them:
     scores = []
@@ -139,7 +139,7 @@ def make_img(_sou_name, _time, _filter, _prog_num, _postfix, _camera, _marker,
             score = 0  # it could so happen that reported FWHM is 0
         scores.append(score)
 
-    print(scores)
+    # print(scores)
 
     # create a plot
 

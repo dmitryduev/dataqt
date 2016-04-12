@@ -243,6 +243,7 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _library_path, _out_path, _fi
         sigma_student = stats.t.ppf(stats.norm.cdf(sigma), n_res_els) / ss_corr
         cont = (sigma_student * noise_samp_sm) / center_flux
 
+        plt.close('all')
         fig = plt.figure('Contrast curve for {:s}'.format(_sou_dir), figsize=(8, 3.5), dpi=200)
         ax = fig.add_subplot(111)
         ax.set_title(_sou_dir + '\n Without PCA')  # , fontsize=14)
@@ -307,6 +308,7 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _library_path, _out_path, _fi
     p_1, p_2 = np.percentile(scidata, (5, 100))
     scidata_corrected = exposure.rescale_intensity(scidata, in_range=(p_1, p_2))
 
+    plt.close('all')
     fig = plt.figure(_sou_dir)
     fig.set_size_inches(3, 3, forward=False)
     # ax = fig.add_subplot(111)
@@ -338,6 +340,7 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _library_path, _out_path, _fi
                                                            plot='false', nbranch=3, scaling=None,
                                                            mask_center_px=fwhm, fc_rad_sep=6))
 
+    plt.close('all')
     fig = plt.figure('Contrast curve for {:s}'.format(_sou_dir), figsize=(8, 3.5), dpi=200)
     ax = fig.add_subplot(111)
     ax.set_title(_sou_dir)  # , fontsize=14)
