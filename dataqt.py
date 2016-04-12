@@ -201,8 +201,7 @@ def make_img(_sou_name, _time, _filter, _prog_num, _postfix, _camera, _marker,
     ax = plt.Axes(fig, [0., 0., 1., 1.])
     ax.set_axis_off()
     fig.add_axes(ax)
-    ax.imshow(scidata_corrected_cropped, cmap='gray', origin='lower',
-              interpolation='nearest')
+    ax.imshow(scidata_corrected_cropped, cmap='gray', origin='lower', interpolation='nearest')
     # add scale bar:
     # draw a horizontal bar with length of 0.1*x_size
     # (ax.transData) with a label underneath.
