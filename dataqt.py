@@ -87,7 +87,7 @@ class AnchoredSizeBar(AnchoredOffsetbox):
                                    frameon=frameon)
 
 
-def make_img(_sou_name, _time, _filter, _prog_num, _postfix, _camera, _marker,
+def make_img(_sou_name, _time, _filter, _prog_num, _camera, _marker,
              _path_sou, _path_data, pipe_out_type):
     """
 
@@ -95,7 +95,6 @@ def make_img(_sou_name, _time, _filter, _prog_num, _postfix, _camera, _marker,
     :param _time:
     :param _filter:
     :param _prog_num:
-    :param _postfix:
     :param _camera:
     :param _marker:
     :param _path_sou:
@@ -177,8 +176,8 @@ def make_img(_sou_name, _time, _filter, _prog_num, _postfix, _camera, _marker,
     plt.grid('off')
 
     # save full figure
-    fname_full = '{:d}_{:s}_{:s}_{:s}_{:s}_{:s}.{:s}_full.png'.format(_prog_num, _sou_name, _camera, _filter, _marker,
-                                                  datetime.datetime.strftime(_time, '%Y%m%d_%H%M%S'), _postfix)
+    fname_full = '{:d}_{:s}_{:s}_{:s}_{:s}_{:s}_full.png'.format(_prog_num, _sou_name, _camera, _filter, _marker,
+                                                  datetime.datetime.strftime(_time, '%Y%m%d_%H%M%S.%f'))
     plt.savefig(os.path.join(_path_data, pipe_out_type, fname_full), dpi=300)
 
     ''' crop the brightest detected source: '''
@@ -216,7 +215,7 @@ def make_img(_sou_name, _time, _filter, _prog_num, _postfix, _camera, _marker,
     # save cropped figure
     fname_cropped = '{:d}_{:s}_{:s}_{:s}_{:s}_{:s}.{:s}_cropped.png'.format(_prog_num, _sou_name, _camera, _filter,
                                                                             _marker, datetime.datetime.strftime(_time,
-                                                                                             '%Y%m%d_%H%M%S'), _postfix)
+                                                                                             '%Y%m%d_%H%M%S.%f'))
     fig.savefig(os.path.join(_path_data, pipe_out_type, fname_cropped), dpi=300)
 
 
@@ -300,10 +299,7 @@ if __name__ == '__main__':
                     # filter used:
                     filt = tmp[-4:-3][0]
                     # date and time of obs:
-                    time = datetime.datetime.strptime(tmp[-2] + tmp[-1].split('.')[0],
-                                                      '%Y%m%d%H%M%S')
-                    # postfix:
-                    postfix = tmp[-1].split('.')[1]
+                    time = datetime.datetime.strptime(tmp[-2] + tmp[-1], '%Y%m%d%H%M%S.%f')
                     # camera:
                     camera = tmp[-5:-4][0]
                     # marker:
@@ -327,14 +323,13 @@ if __name__ == '__main__':
 
                     # store in a dict
                     source = {'prog_num': prog_num, 'sou_name': sou_name,
-                              'filter': filt, 'time': datetime.datetime.strftime(time, '%Y%m%d_%H%M%S'),
-                              'postfix': postfix, 'camera': camera, 'marker': marker, 'contrast_curve': cc}
+                              'filter': filt, 'time': datetime.datetime.strftime(time, '%Y%m%d_%H%M%S.%f'),
+                              'camera': camera, 'marker': marker, 'contrast_curve': cc}
                     print(source)
 
                     if pot not in ('zero_flux', 'failed'):
                         try:
-                            make_img(_sou_name=sou_name, _time=time, _filter=filt,
-                                     _prog_num=prog_num, _postfix=postfix,
+                            make_img(_sou_name=sou_name, _time=time, _filter=filt, _prog_num=prog_num,
                                      _camera=camera, _marker=marker,
                                      _path_sou=path_sou, _path_data=path_data, pipe_out_type=pot)
                         except IOError:

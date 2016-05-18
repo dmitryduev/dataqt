@@ -279,8 +279,8 @@
                 <h3> {{ key | replace('_', ' ') | title()}}</h3>
                 <div id="{{key}}_images">
                     {% for source in data[key] %}
-                        {% set basename = '{:d}_{:s}_{:s}_{:s}_{:s}_{:s}.{:s}'.format(source.prog_num, source.sou_name,
-                                            source.camera, source.filter, source.marker, source.time, source.postfix) %}
+                        {% set basename = '{:d}_{:s}_{:s}_{:s}_{:s}_{:s}'.format(source.prog_num, source.sou_name,
+                                            source.camera, source.filter, source.marker, source.time) %}
                         <div class="img-wrapper">
                             <img src="/static/data/{{date}}/{{key}}/{{basename}}_cropped.png"
                                  alt="{{ basename }}"
@@ -302,8 +302,8 @@
                 <h3> {{ key2 | replace('_', ' ') | title()}}</h3>
                 <div id="{{key2}}_images">
                     {% for source in data[key2] | sort() %}
-                        {% set basename = '{:d}_{:s}_{:s}_{:s}_{:s}_{:s}.{:s}'.format(source.prog_num, source.sou_name,
-                                            source.camera, source.filter, source.marker, source.time, source.postfix) %}
+                        {% set basename = '{:d}_{:s}_{:s}_{:s}_{:s}_{:s}'.format(source.prog_num, source.sou_name,
+                                            source.camera, source.filter, source.marker, source.time) %}
                         {{ basename }}<br>
                     {% endfor %}
                 </div>
