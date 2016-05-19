@@ -32,17 +32,23 @@ if not os.path.exists(path_to_website_data):
 @app.route('/')
 @basic_auth.required
 def hw():
+    # get all available dates to display in the calendar
     dates = sorted([lf for lf in os.listdir(path_to_website_data)
                     if os.path.isdir(os.path.join(path_to_website_data, lf))])
     return render_template('template-main.html', dates=dates)
 
 
-#
 @app.route('/_get_fits_header')
 def get_fits_header():
+    """
+        Get FITS header for a _source_ observed on a _date_
+    :return: jsonified dictionary with the header / empty dict if failed
+    """
+    # get parameters from the AJAX GET request
     date = request.args.get('date', 0, type=str)
     source = request.args.get('source', 0, type=str)
 
+    # load JSON file with the date's data
     f_json_sci = os.path.join(path_to_website_data, '{:s}'.format(date), '{:s}.json'.format(date))
 
     if os.path.exists(f_json_sci):
@@ -53,7 +59,9 @@ def get_fits_header():
         # if failed:
         return jsonify(result={})
 
+    # we're displaying images only of the sources for which the pipeline did not fail
     for pot in ('high_flux', 'faint'):
+        # check the full name, as the same source could be observed multiple times in a night
         header = [s['header'] for s in data[pot] if source in s['header']['FILENAME'][0]]
         if len(header) > 0:
             return jsonify(result=OrderedDict(header[0]))
@@ -66,9 +74,12 @@ def get_fits_header():
 @app.route('/<int:date>')
 @basic_auth.required
 def show_date(date):
+    # load JSON file summarizing the date's data
     f_json_sci = os.path.join(path_to_website_data, '{:d}'.format(date), '{:d}.json'.format(date))
+    # load JSON file summarizing the date's seeing data
     f_json_seeing = os.path.join(path_to_website_data, '{:d}'.format(date), '{:d}.seeing.json'.format(date))
 
+    # previous and next dates for website navigation bar:
     date_m1 = datetime.datetime.strftime(datetime.datetime.strptime(str(date), '%Y%m%d') -
                                          datetime.timedelta(days=1), '%Y%m%d')
     date_p1 = datetime.datetime.strftime(datetime.datetime.strptime(str(date), '%Y%m%d') +
@@ -80,6 +91,7 @@ def show_date(date):
         # sci data
         if os.path.exists(f_json_sci):
             with open(f_json_sci) as fjson_sci:
+                # preserve sorting order from the JSON file
                 data = json.load(fjson_sci, object_pairs_hook=OrderedDict)
                 data = OrderedDict(data)
         else:

@@ -361,7 +361,7 @@
 <script src="/static/js/bootstrap.min.js"></script>
 <script src="/static/js/bootstrap-magnify.js"></script>
 <script>
-    // for AJAX requests:
+    // for AJAX requests [absolute website's uri]:
     $SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
 </script>
 <script>
@@ -399,21 +399,13 @@
 //                $('.carousel').carousel('pause');
 //            });
 //        });
+
+    // clear table with FITS header (in case it's not empty) before displaying current table
     function clearTable() {
         $('#headerTable').html('');
     }
-    function tableGenerate(header) {
-        for (var key in header) {
-            if (key != 'COMMENT') {
-                var $formrow = '<tr><td>'+key+'</td>'+
-                        '<td>'+header[key][0]+'</td>'+
-                        '<td>'+header[key][1]+'</td>'+'</tr>';
-                $('#headerTable').append($formrow);
-            }
-        }
-    }
-</script>
-<script>
+
+    // send AJAX GET request to server to get source FITS header
     function getHeader(date, source) {
         $.getJSON($SCRIPT_ROOT + '/_get_fits_header', {
             date: date,
@@ -433,19 +425,21 @@
     }
 </script>
 <script>
-    // Build source modal on-the-fly
+    // Build modal with source data on-the-fly
     $('#sourceModal').on('show.bs.modal', function (event) {
-        // show images tab:
+        // show images tab by default:
         $('#sourceTabs a[href="#imagesTab"]').tab('show'); // Select tab by name
 
-        var trigger = $(event.relatedTarget); // Who triggered the modal?
-        var date = trigger.data('date'); // Extract info from data-* attributes
-        var key = trigger.data('key'); // Extract info from data-* attributes
-        var source = trigger.data('source'); // Extract info from data-* attributes
-        // var sou_name = trigger.data('sou_name'); // Extract info from data-* attributes
-        var cc = trigger.data('cc'); // Extract info from data-* attributes
+        var trigger = $(event.relatedTarget); // Who triggered the modal? [to extract source info]
+        // Extract info from data-* attributes
+        var date = trigger.data('date'); // date of observation
+        var key = trigger.data('key'); // high-flux or faint
+        var source = trigger.data('source'); // full source name (including prog_num, filt etc)
+        // var sou_name = trigger.data('sou_name'); // source actual name only
+        var cc = trigger.data('cc'); // type of contrast curve
         // If necessary, you could initiate an AJAX request here (and then do the updating in a callback).
-        // Update the modal's content. We'll use jQuery here, but you could use a data binding library or other methods instead.
+        // Update the modal's content. We'll use jQuery here,
+        // but one could use a data binding library or other methods instead.
         var modal = $(this);
         modal.find('.modal-title').text(source);
         modal.find('#sou_full').attr('src', '/static/data/'+date+'/'+key+'/'+source+'_full.png');
@@ -483,22 +477,6 @@
         $(this).tab('show')
     });
 
-    // store source FITS header data in a dictionary
-    var sourceFITSheaders = {};
-    {% if data %}
-        {% for key in ('high_flux', 'faint', 'zero_flux')%}
-            {% if key in data.keys() and data[key]|length > 0 %}
-                {% for source in data[key] %}
-                    var source_header = {};
-                    {% for hkey in source.header.keys() %}
-                        source_header['{{ hkey }}'] = ['{{ source.header[hkey][0] }}',
-                                                       '{{ source.header[hkey][1] }}'];
-                    {% endfor %}
-                    sourceFITSheaders['{{ source.sou_name }}'] = source_header;
-                {% endfor %}
-            {% endif %}
-        {% endfor %}
-    {% endif %}
 </script>
 </body>
 </html>
