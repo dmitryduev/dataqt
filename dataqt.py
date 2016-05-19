@@ -6,6 +6,7 @@ import argparse
 import os
 import shutil
 import datetime
+from collections import OrderedDict
 import numpy as np
 # from bokeh.io import gridplot, output_file, show
 # from bokeh.plotting import figure
@@ -105,6 +106,11 @@ def make_img(_sou_name, _time, _filter, _prog_num, _camera, _marker,
     # read, process and display fits:
     hdulist = fits.open(os.path.join(_path_sou, '100p.fits'))
     scidata = hdulist[0].data
+    # header:
+    header = OrderedDict()
+    for entry in hdulist[0].header.cards:
+        header[entry[0]] = entry[1:]
+    # print(header)
 
     # extract sources:
     sew = sewpy.SEW(
@@ -213,10 +219,12 @@ def make_img(_sou_name, _time, _filter, _prog_num, _camera, _marker,
     ax.add_artist(asb)
 
     # save cropped figure
-    fname_cropped = '{:d}_{:s}_{:s}_{:s}_{:s}_{:s}.{:s}_cropped.png'.format(_prog_num, _sou_name, _camera, _filter,
+    fname_cropped = '{:d}_{:s}_{:s}_{:s}_{:s}_{:s}_cropped.png'.format(_prog_num, _sou_name, _camera, _filter,
                                                                             _marker, datetime.datetime.strftime(_time,
                                                                                              '%Y%m%d_%H%M%S.%f'))
     fig.savefig(os.path.join(_path_data, pipe_out_type, fname_cropped), dpi=300)
+
+    return header
 
 
 if __name__ == '__main__':
@@ -229,7 +237,7 @@ if __name__ == '__main__':
     parser.add_argument('path_seeing', metavar='path_seeing',
                         action='store', help='path to seeing data.', type=str)
     parser.add_argument('path_pca', metavar='path_pca',
-                        action='store', help='path to seeing data.', type=str)
+                        action='store', help='path to becky-pipelined data.', type=str)
     parser.add_argument('--date', metavar='date', action='store', dest='date',
                         help='obs date', type=str)
 
@@ -258,7 +266,9 @@ if __name__ == '__main__':
     # path to pipelined data exists?
     if os.path.exists(path):
         # puttin' all my eeeeeggs in onnne...baasket!
-        source_data = {'high_flux': [], 'faint': [], 'zero_flux': [], 'failed': []}
+        # source_data = {'high_flux': [], 'faint': [], 'zero_flux': [], 'failed': []}
+        source_data = OrderedDict((('high_flux', []), ('faint', []),
+                                   ('zero_flux', []), ('failed', [])))
         # path to output
         path_data = os.path.join(path_to_website_data, datetime.datetime.strftime(date, '%Y%m%d'))
         if not os.path.exists(path_to_website_data):
@@ -322,16 +332,22 @@ if __name__ == '__main__':
                         cc = 'none'
 
                     # store in a dict
-                    source = {'prog_num': prog_num, 'sou_name': sou_name,
-                              'filter': filt, 'time': datetime.datetime.strftime(time, '%Y%m%d_%H%M%S.%f'),
-                              'camera': camera, 'marker': marker, 'contrast_curve': cc}
-                    print(source)
+                    # source = {'prog_num': prog_num, 'sou_name': sou_name,
+                    #           'filter': filt, 'time': datetime.datetime.strftime(time, '%Y%m%d_%H%M%S.%f'),
+                    #           'camera': camera, 'marker': marker, 'contrast_curve': cc}
+                    source = OrderedDict((('prog_num', prog_num), ('sou_name', sou_name),
+                                          ('filter', filt),
+                                          ('time', datetime.datetime.strftime(time, '%Y%m%d_%H%M%S.%f')),
+                                          ('camera', camera), ('marker', marker), ('contrast_curve', cc)))
+                    print(dict(source))
 
                     if pot not in ('zero_flux', 'failed'):
                         try:
-                            make_img(_sou_name=sou_name, _time=time, _filter=filt, _prog_num=prog_num,
-                                     _camera=camera, _marker=marker,
-                                     _path_sou=path_sou, _path_data=path_data, pipe_out_type=pot)
+                            header = make_img(_sou_name=sou_name, _time=time, _filter=filt, _prog_num=prog_num,
+                                              _camera=camera, _marker=marker,
+                                              _path_sou=path_sou, _path_data=path_data, pipe_out_type=pot)
+                            # dump header
+                            source['header'] = header
                         except IOError:
                             continue
 
@@ -379,7 +395,8 @@ if __name__ == '__main__':
         # dump sci json
         with open(os.path.join(path_data,
                                '{:s}.json'.format(datetime.datetime.strftime(date, '%Y%m%d'))), 'w') as fp:
-            json.dump(source_data, fp, sort_keys=True, indent=4)
+            # json.dump(source_data, fp, sort_keys=True, indent=4)
+            json.dump(source_data, fp, indent=4)
 
     # plt.show()
 

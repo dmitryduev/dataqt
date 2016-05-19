@@ -3,6 +3,7 @@ import json
 import datetime
 import ConfigParser
 import inspect
+from collections import OrderedDict
 from flask import Flask, render_template, send_from_directory
 from flask.ext.basicauth import BasicAuth
 app = Flask(__name__)
@@ -54,14 +55,14 @@ def show_date(date):
         if os.path.exists(f_json_sci):
             with open(f_json_sci) as fjson_sci:
                 data = json.load(fjson_sci)
-                data = dict(data)
+                data = OrderedDict(data)
         else:
             data = False
         # seeing
         if os.path.exists(f_json_seeing):
             with open(f_json_seeing) as fjson_seeing:
                 seeing = json.load(fjson_seeing)
-                seeing = dict(seeing)
+                seeing = OrderedDict(seeing)
         else:
             seeing = False
         return render_template('template.html', date=str(date), data=data, seeing=seeing,

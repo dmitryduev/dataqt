@@ -52,6 +52,19 @@
 //                $('.carousel').carousel('pause');
 //            });
 //        });
+    function clearTable() {
+        $('#headerTable').html('');
+    }
+    function tableGenerate(header) {
+        for (var key in header) {
+            if (key != 'COMMENT') {
+                var $formrow = '<tr><td>'+key+'</td>'+
+                        '<td>'+header[key][0]+'</td>'+
+                        '<td>'+header[key][1]+'</td>'+'</tr>';
+                $('#headerTable').append($formrow);
+            }
+        }
+    }
     </script>
 
     <style>
@@ -289,7 +302,7 @@
                                  data-date="{{date}}" data-key="{{key}}" data-source="{{ basename }}"
                                  data-cc="{{ source.contrast_curve }}" style="cursor: pointer;">
                                  Program {{source.prog_num}}<br>{{source.sou_name}}<br>
-                                 Camera: {{source.camera}}<br>Filter: {{source.filter}}<br>{{source.time}}
+                                 Camera: {{source.camera}}<br>Filter: {{source.filter}}<br>{{source.time[:-7]}}
                             </div>
                         </div>
                     {% endfor %}
@@ -303,7 +316,7 @@
                 <div id="{{key2}}_images">
                     {% for source in data[key2] | sort() %}
                         {% set basename = '{:d}_{:s}_{:s}_{:s}_{:s}_{:s}'.format(source.prog_num, source.sou_name,
-                                            source.camera, source.filter, source.marker, source.time) %}
+                                            source.camera, source.filter, source.marker, source.time[:-7]) %}
                         {{ basename }}<br>
                     {% endfor %}
                 </div>
@@ -325,28 +338,60 @@
     <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
             <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <button type="button" class="close" data-dismiss="modal"
+                        aria-label="Close"><span aria-hidden="true">&times;</span></button>
                 <h4 class="modal-title" id="ModalLabel">Object name</h4>
             </div>
             <div class="modal-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <h5>Full-size</h5>
-                        <img id="sou_full" src="" style="width: 100%;" data-toggle="magnify">
-                        <br><br>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="col-xs-6">
-                            <h5 id="sou_cropped_label">Cropped</h5>
-                            <img id="sou_cropped" src="" style="width:100%;" data-toggle="magnify">
+                <div id="sourceTabs">
+                    <!-- Nav tabs -->
+                    <ul class="nav nav-tabs" role="tablist">
+                        <li role="presentation" class="active">
+                            <a href="#imagesTab" aria-controls="imagesTab" role="tab" data-toggle="tab">Images</a>
+                        </li>
+                        <li role="presentation">
+                            <a href="#headerTab" aria-controls="headerTab" role="tab" data-toggle="tab">Header</a>
+                        </li>
+                    </ul>
+
+                    <!-- Tab panes -->
+                    <div class="tab-content">
+                        <!--Image data-->
+                        <div role="tabpanel" class="tab-pane active" id="imagesTab">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h5>Full-size</h5>
+                                    <img id="sou_full" src="" style="width: 100%;" data-toggle="magnify">
+                                    <br><br>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="col-xs-6">
+                                        <h5 id="sou_cropped_label">Cropped</h5>
+                                        <img id="sou_cropped" src="" style="width:100%;" data-toggle="magnify">
+                                    </div>
+                                    <div class="col-xs-6">
+                                        <h5 id="sou_pca_label" style="display:none;">PSF subtracted</h5>
+                                        <img id="sou_pca" src="" style="display:none; width:100%;" data-toggle="magnify">
+                                    </div>
+                                    <img id="sou_cc" src="" style="display:none; width:100%;">
+                                </div>
+                            </div>
                         </div>
-                        <div class="col-xs-6">
-                            <h5 id="sou_pca_label" style="display:none;">PSF subtracted</h5>
-                            <img id="sou_pca" src="" style="display:none; width:100%;" data-toggle="magnify">
+                        <!--FITS header-->
+                        <div role="tabpanel" class="tab-pane" id="headerTab">
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <h5>FITS header</h5>
+                                    <table class="table table-striped" id="headerTable">
+                                    </table>
+                                </div>
+                            </div>
                         </div>
-                        <img id="sou_cc" src="" style="display:none; width:100%;">
                     </div>
+
                 </div>
+
+
 
             </div>
             <div class="modal-footer">
@@ -366,6 +411,9 @@
 <script>
     // Build source modal on-the-fly
     $('#sourceModal').on('show.bs.modal', function (event) {
+        // show images tab:
+        $('#sourceTabs a[href="#imagesTab"]').tab('show'); // Select tab by name
+
         var trigger = $(event.relatedTarget); // Who triggered the modal?
         var date = trigger.data('date'); // Extract info from data-* attributes
         var key = trigger.data('key'); // Extract info from data-* attributes
@@ -398,7 +446,33 @@
             modal.find('#sou_cc').attr('src', '');
             $('#sou_cc').hide();
         }
-    })
+
+        // generate table with header data
+        clearTable();
+        tableGenerate(sourceFITSheaders['1583_Antilochus']);
+    });
+    // tabs in the modal
+    $('#sourceTabs a').click(function (e) {
+        e.preventDefault();
+        $(this).tab('show')
+    });
+
+    // store source FITS header data in a dictionary
+    var sourceFITSheaders = {};
+    {% if data %}
+        {% for key in ('high_flux', 'faint', 'zero_flux')%}
+            {% if key in data.keys() and data[key]|length > 0 %}
+                {% for source in data[key] %}
+                    var source_header = {};
+                    {% for hkey in source.header.keys() %}
+                        source_header['{{ hkey }}'] = ['{{ source.header[hkey][0] }}',
+                                                       '{{ source.header[hkey][1] }}'];
+                    {% endfor %}
+                    sourceFITSheaders['{{ source.sou_name }}'] = source_header;
+                {% endfor %}
+            {% endif %}
+        {% endfor %}
+    {% endif %}
 </script>
 </body>
 </html>
