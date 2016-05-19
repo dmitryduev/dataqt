@@ -17,56 +17,6 @@
     <!--<link rel="stylesheet" href="/static/css/bootstrap.css">-->
     <link rel="stylesheet" href="/static/css/animate.min.css">
 
-    <script>
-//        function parseDate(string){
-//            var dateString    = string.match(/\d{4}\d{2}\d{2}\s\b\d{2}\d{2}\d{2}/);
-//            var dt            = new Date(dateString);
-//            return dt;
-//        }
-        function playCarousel() {
-            $('.carousel').carousel('cycle');
-            $('#carousel-play').hide();
-        }
-        function pauseCarousel() {
-            $('.carousel').carousel('pause');
-            $('#carousel-pause').hide();
-            $('#carousel-play').show();
-        }
-        function pauseCarouselShow() {
-            if ($('#carousel-play').css('display') == 'none') {
-                $('#carousel-pause').show();
-            }
-        }
-        function pauseCarouselHide() {
-            $('#carousel-pause').hide();
-        }
-//        $( document ).ready(function () {
-//            $('.carousel').carousel({
-//                interval: 100,
-//                pause: "false"
-//            });
-//            $('#playButton').click(function () {
-//                $('.carousel').carousel('cycle');
-//            });
-//            $('#pauseButton').click(function () {
-//                $('.carousel').carousel('pause');
-//            });
-//        });
-    function clearTable() {
-        $('#headerTable').html('');
-    }
-    function tableGenerate(header) {
-        for (var key in header) {
-            if (key != 'COMMENT') {
-                var $formrow = '<tr><td>'+key+'</td>'+
-                        '<td>'+header[key][0]+'</td>'+
-                        '<td>'+header[key][1]+'</td>'+'</tr>';
-                $('#headerTable').append($formrow);
-            }
-        }
-    }
-    </script>
-
     <style>
         body {
             padding-top: 70px;
@@ -300,6 +250,7 @@
                                  style="height:120px; cursor: pointer;">
                             <div class="overlay" data-toggle="modal" data-target="#sourceModal"
                                  data-date="{{date}}" data-key="{{key}}" data-source="{{ basename }}"
+                                 data-sou_name="{{ source.sou_name }}"
                                  data-cc="{{ source.contrast_curve }}" style="cursor: pointer;">
                                  Program {{source.prog_num}}<br>{{source.sou_name}}<br>
                                  Camera: {{source.camera}}<br>Filter: {{source.filter}}<br>{{source.time[:-7]}}
@@ -382,7 +333,8 @@
                             <div class="row">
                                 <div class="col-md-12">
                                     <h5>FITS header</h5>
-                                    <table class="table table-striped" id="headerTable">
+                                    <table class="table table-striped table-hover table-condensed"
+                                           id="headerTable">
                                     </table>
                                 </div>
                             </div>
@@ -409,6 +361,78 @@
 <script src="/static/js/bootstrap.min.js"></script>
 <script src="/static/js/bootstrap-magnify.js"></script>
 <script>
+    // for AJAX requests:
+    $SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
+</script>
+<script>
+//        function parseDate(string){
+//            var dateString    = string.match(/\d{4}\d{2}\d{2}\s\b\d{2}\d{2}\d{2}/);
+//            var dt            = new Date(dateString);
+//            return dt;
+//        }
+    function playCarousel() {
+        $('.carousel').carousel('cycle');
+        $('#carousel-play').hide();
+    }
+    function pauseCarousel() {
+        $('.carousel').carousel('pause');
+        $('#carousel-pause').hide();
+        $('#carousel-play').show();
+    }
+    function pauseCarouselShow() {
+        if ($('#carousel-play').css('display') == 'none') {
+            $('#carousel-pause').show();
+        }
+    }
+    function pauseCarouselHide() {
+        $('#carousel-pause').hide();
+    }
+//        $( document ).ready(function () {
+//            $('.carousel').carousel({
+//                interval: 100,
+//                pause: "false"
+//            });
+//            $('#playButton').click(function () {
+//                $('.carousel').carousel('cycle');
+//            });
+//            $('#pauseButton').click(function () {
+//                $('.carousel').carousel('pause');
+//            });
+//        });
+    function clearTable() {
+        $('#headerTable').html('');
+    }
+    function tableGenerate(header) {
+        for (var key in header) {
+            if (key != 'COMMENT') {
+                var $formrow = '<tr><td>'+key+'</td>'+
+                        '<td>'+header[key][0]+'</td>'+
+                        '<td>'+header[key][1]+'</td>'+'</tr>';
+                $('#headerTable').append($formrow);
+            }
+        }
+    }
+</script>
+<script>
+    function getHeader(date, source) {
+        $.getJSON($SCRIPT_ROOT + '/_get_fits_header', {
+            date: date,
+            source: source
+        }, function(data) {
+            var header = data.result;
+            for (var key in header) {
+                if (key != 'COMMENT') {
+                    var $formrow = '<tr><td>'+key+'</td>'+
+                            '<td>'+header[key][0]+'</td>'+
+                            '<td>'+header[key][1]+'</td>'+'</tr>';
+                    $('#headerTable').append($formrow);
+                }
+            }
+        });
+        return false;
+    }
+</script>
+<script>
     // Build source modal on-the-fly
     $('#sourceModal').on('show.bs.modal', function (event) {
         // show images tab:
@@ -418,6 +442,7 @@
         var date = trigger.data('date'); // Extract info from data-* attributes
         var key = trigger.data('key'); // Extract info from data-* attributes
         var source = trigger.data('source'); // Extract info from data-* attributes
+        // var sou_name = trigger.data('sou_name'); // Extract info from data-* attributes
         var cc = trigger.data('cc'); // Extract info from data-* attributes
         // If necessary, you could initiate an AJAX request here (and then do the updating in a callback).
         // Update the modal's content. We'll use jQuery here, but you could use a data binding library or other methods instead.
@@ -449,7 +474,8 @@
 
         // generate table with header data
         clearTable();
-        tableGenerate(sourceFITSheaders['1583_Antilochus']);
+        //tableGenerate(sourceFITSheaders['1583_Antilochus']);
+        getHeader(date, source);
     });
     // tabs in the modal
     $('#sourceTabs a').click(function (e) {
