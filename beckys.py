@@ -219,50 +219,56 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _library_path, _out_path, _fi
     frame_filter = _filt
     if frame_filter == 'Sz':
         library = fits.open(os.path.join(_library_path,
-                                         'centered_iuwtfiltered_2Coeffs_zfilt_library.fits'))[0].data
+                                         'zlibrary.fits'))[0].data
         # library_names = np.genfromtxt(os.path.join(_library_path,
         #                                            'zfilt_library_2Coeffs_names.txt'), dtype="|S")
         library_names_short = np.genfromtxt(os.path.join(_library_path,
-                                                         'zfilt_library_2Coeffs_names_short.txt'),
+                                                         'zlibrary_names_short.txt'),
                                             dtype="|S")
     elif frame_filter == 'Si':
         library = fits.open(os.path.join(_library_path,
-                                         'centered_iuwtfiltered_2Coeffs_ifilt_library.fits'))[0].data
+                                         'ilibrary.fits'))[0].data
         # library_names = np.genfromtxt(os.path.join(_library_path,
         #                                            'ifilt_library_2Coeffs_names.txt'), dtype="|S")
         library_names_short = np.genfromtxt(os.path.join(_library_path,
-                                                         'ifilt_library_2Coeffs_names_short.txt'),
+                                                         'ilibrary_names_short.txt'),
                                             dtype="|S")
-    else:
-        print("Becky hasn't made a library for this filter yet, so we aren't doing PCA")
-        noise_samp, rad_samp = vip.phot.noise_per_annulus(centered_frame, 1, fwhm, False)
-        noise_samp_sm = savgol_filter(noise_samp, polyorder=1, mode='nearest',
-                                      window_length=int(noise_samp.shape[0] * 0.1))
-        n_res_els = np.floor(rad_samp / fwhm * 2 * np.pi)
-        ss_corr = np.sqrt(1 + 1.0 / (n_res_els - 1))
-        sigma_student = stats.t.ppf(stats.norm.cdf(sigma), n_res_els) / ss_corr
-        cont = (sigma_student * noise_samp_sm) / center_flux
+    elif frame_filter == 'Sr':
+        library = fits.open(os.path.join(_library_path,
+                                         'rlibrary.fits'))[0].data
+        library_names_short = np.genfromtxt(os.path.join(_library_path,
+                                                         'rlibrary_names_short.txt'),
+                                            dtype="|S")
+    # else:
+    #     print("Becky hasn't made a library for this filter yet, so we aren't doing PCA")
+    #     noise_samp, rad_samp = vip.phot.noise_per_annulus(centered_frame, 1, fwhm, False)
+    #     noise_samp_sm = savgol_filter(noise_samp, polyorder=1, mode='nearest',
+    #                                   window_length=int(noise_samp.shape[0] * 0.1))
+    #     n_res_els = np.floor(rad_samp / fwhm * 2 * np.pi)
+    #     ss_corr = np.sqrt(1 + 1.0 / (n_res_els - 1))
+    #     sigma_student = stats.t.ppf(stats.norm.cdf(sigma), n_res_els) / ss_corr
+    #     cont = (sigma_student * noise_samp_sm) / center_flux
 
-        plt.close('all')
-        fig = plt.figure('Contrast curve for {:s}'.format(_sou_dir), figsize=(8, 3.5), dpi=200)
-        ax = fig.add_subplot(111)
-        ax.set_title(_sou_dir + '\n Without PCA')  # , fontsize=14)
-        ax.plot(rad_samp * plsc, -2.5 * np.log10(cont), 'k-', linewidth=2.5)
-        ax.set_xlim([0.2, 1.45])
-        ax.set_xlabel('Separation [arcseconds]')  # , fontsize=18)
-        ax.set_ylabel('Contrast [$\Delta$mag]')  # , fontsize=18)
-        ax.set_ylim([0, 8])
-        ax.set_ylim(ax.get_ylim()[::-1])  # reverse y
-        ax.grid(linewidth=0.5)
-        plt.tight_layout()
-        fig.savefig(os.path.join(_out_path, _sou_dir + '_NOPCA_contrast_curve.png'), dpi=200)
+    #     plt.close('all')
+    #     fig = plt.figure('Contrast curve for {:s}'.format(_sou_dir), figsize=(8, 3.5), dpi=200)
+    #     ax = fig.add_subplot(111)
+    #     ax.set_title(_sou_dir + '\n Without PCA')  # , fontsize=14)
+    #     ax.plot(rad_samp * plsc, -2.5 * np.log10(cont), 'k-', linewidth=2.5)
+    #     ax.set_xlim([0.2, 1.45])
+    #     ax.set_xlabel('Separation [arcseconds]')  # , fontsize=18)
+    #     ax.set_ylabel('Contrast [$\Delta$mag]')  # , fontsize=18)
+    #     ax.set_ylim([0, 8])
+    #     ax.set_ylim(ax.get_ylim()[::-1])  # reverse y
+    #     ax.grid(linewidth=0.5)
+    #     plt.tight_layout()
+    #     fig.savefig(os.path.join(_out_path, _sou_dir + '_NOPCA_contrast_curve.png'), dpi=200)
 
-        # save txt for nightly median calc/plot
-        with open(os.path.join(_out_path, _sou_dir + '_NOPCA_contrast_curve.txt'), 'w') as f:
-            for s, dm in zip(rad_samp * plsc, -2.5 * np.log10(cont)):
-                f.write('{:.3f} {:.3f}\n'.format(s, dm))
+    #     # save txt for nightly median calc/plot
+    #     with open(os.path.join(_out_path, _sou_dir + '_NOPCA_contrast_curve.txt'), 'w') as f:
+    #         for s, dm in zip(rad_samp * plsc, -2.5 * np.log10(cont)):
+    #             f.write('{:.3f} {:.3f}\n'.format(s, dm))
 
-        return
+    #     return
 
     # Choose reference frames via cross correlation
     library_notmystar = library[~np.in1d(library_names_short, _sou_name)]
