@@ -156,18 +156,18 @@ def pca_helper(_args):
     :return:
     """
     # unpack args
-    _trimmed_frame, _win, _sou_name, _sou_dir, _library_path, _out_path, _filt, \
+    _trimmed_frame, _win, _sou_name, _sou_dir, _path_library, _out_path, _filt, \
     plsc, sigma, _nrefs, _klip = _args
     # run pca
     try:
         pca(_trimmed_frame=_trimmed_frame, _win=_win, _sou_name=_sou_name,
-            _sou_dir=_sou_dir, _library_path=_library_path, _out_path=_out_path, _filt=_filt,
+            _sou_dir=_sou_dir, _path_library=_path_library, _out_path=_out_path, _filt=_filt,
             plsc=plsc, sigma=sigma, _nrefs=_nrefs, _klip=_klip)
     finally:
         return
 
 
-def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _library_path, _out_path, _filt,
+def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _path_library, _out_path, _filt,
         plsc=0.0168876, sigma=5, _nrefs=5, _klip=1):
     """
 
@@ -175,7 +175,7 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _library_path, _out_path, _fi
     :param _win: window half-size in pixels
     :param _sou_name: source name
     :param _sou_dir: full Robo-AO source name
-    :param _library_path: path to PSF library
+    :param _path_library: path to PSF library
     :param _out_path: output path
     :param _filt: filter
     :param plsc: contrast curve parameter - plate scale (check if input img is upsampled)
@@ -218,25 +218,25 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _library_path, _out_path, _fi
     # Import PSF reference library
     frame_filter = _filt
     if frame_filter == 'Sz':
-        library = fits.open(os.path.join(_library_path,
+        library = fits.open(os.path.join(_path_library,
                                          'zlibrary.fits'))[0].data
-        # library_names = np.genfromtxt(os.path.join(_library_path,
+        # library_names = np.genfromtxt(os.path.join(_path_library,
         #                                            'zfilt_library_2Coeffs_names.txt'), dtype="|S")
-        library_names_short = np.genfromtxt(os.path.join(_library_path,
+        library_names_short = np.genfromtxt(os.path.join(_path_library,
                                                          'zlibrary_names_short.txt'),
                                             dtype="|S")
     elif frame_filter == 'Si':
-        library = fits.open(os.path.join(_library_path,
+        library = fits.open(os.path.join(_path_library,
                                          'ilibrary.fits'))[0].data
-        # library_names = np.genfromtxt(os.path.join(_library_path,
+        # library_names = np.genfromtxt(os.path.join(_path_library,
         #                                            'ifilt_library_2Coeffs_names.txt'), dtype="|S")
-        library_names_short = np.genfromtxt(os.path.join(_library_path,
+        library_names_short = np.genfromtxt(os.path.join(_path_library,
                                                          'ilibrary_names_short.txt'),
                                             dtype="|S")
     elif frame_filter == 'Sr':
-        library = fits.open(os.path.join(_library_path,
+        library = fits.open(os.path.join(_path_library,
                                          'rlibrary.fits'))[0].data
-        library_names_short = np.genfromtxt(os.path.join(_library_path,
+        library_names_short = np.genfromtxt(os.path.join(_path_library,
                                                          'rlibrary_names_short.txt'),
                                             dtype="|S")
     else:
@@ -373,9 +373,9 @@ if __name__ == '__main__':
 
     parser.add_argument('path_pipe', metavar='path_pipe',
                         action='store', help='path to pipelined data.', type=str)
-    parser.add_argument('library_path', metavar='library_path',
+    parser.add_argument('path_library', metavar='path_library',
                         action='store', help='path to library.', type=str)
-    parser.add_argument('output_path', metavar='output_path',
+    parser.add_argument('path_output', metavar='path_output',
                         action='store', help='output path.', type=str)
     parser.add_argument('--date', metavar='date', action='store', dest='date',
                         help='obs date', type=str)
@@ -386,8 +386,8 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    output_path = args.output_path
-    library_path = args.library_path
+    path_output = args.path_output
+    path_library = args.path_library
 
     if not args.date:
         now = datetime.datetime.now()
@@ -406,9 +406,9 @@ if __name__ == '__main__':
         # keep args to run pca for all sources in a safe cold place:
         args_pca = []
         # path to output for date
-        path_data = os.path.join(output_path, datetime.datetime.strftime(date, '%Y%m%d'))
-        if not os.path.exists(output_path):
-            os.mkdir(output_path)
+        path_data = os.path.join(path_output, datetime.datetime.strftime(date, '%Y%m%d'))
+        if not os.path.exists(path_output):
+            os.mkdir(path_output)
         if not os.path.exists(path_data):
             os.mkdir(path_data)
 
@@ -445,10 +445,10 @@ if __name__ == '__main__':
                     
                     # run PCA
                     # pca(_trimmed_frame=trimmed_frame, _win=win, _sou_name=sou_name,
-                    #     _sou_dir=sou_dir, _library_path=library_path, _out_path=os.path.join(path_data, pot),
+                    #     _sou_dir=sou_dir, _path_library=path_library, _out_path=os.path.join(path_data, pot),
                     #     _filt=filt, plsc=0.0168876, sigma=5.0, _nrefs=5, _klip=1)
                     args_pca.append([trimmed_frame, win,
-                                     sou_name, sou_dir, library_path, os.path.join(path_data, pot),
+                                     sou_name, sou_dir, path_library, os.path.join(path_data, pot),
                                      filt, 0.0168876, 5.0, 5, 1])
 
         # run computation:

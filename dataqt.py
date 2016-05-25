@@ -389,8 +389,11 @@ if __name__ == '__main__':
                         dpi=200)
             # save in json
             source_data['contrast_curve'] = True
+            print('Created contrast curve for {:s}'.format(datetime.datetime.strftime(date, '%Y%m%d')))
         else:
             source_data['contrast_curve'] = False
+
+
 
         # dump sci json
         with open(os.path.join(path_data,
