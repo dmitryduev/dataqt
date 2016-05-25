@@ -62,47 +62,52 @@ def dead_times(_path_pipe, _path_output, _date):
 
     fig_names = []
     try:
-        fig = plt.figure('1h', figsize=(12, 8))
+        fig = plt.figure('1h', figsize=(7, 3.5))
         ax = fig.add_subplot(111)
         ax.hist((diffs[diffs < 3600])/60, 10, facecolor=plt.cm.Oranges(0.7))  # "#ff3300"
         ax.set_yscale('log')
-        ax.set_xlabel('Minutes between the end of one exposure and the start of the next', fontsize=18)
-        ax.set_ylabel('Number of Instances', fontsize=18)
+        ax.set_xlabel('Minutes between the end of one exposure and the start of the next')  # , fontsize=18)
+        ax.set_ylabel('Number of Instances')  # , fontsize=18)
         ax.set_title('Dead Time Distribution (<1hr)', fontsize=20)
         plt.tight_layout()
-        fig.savefig(os.path.join(_path_output, 'deadtime_1hr.{:s}.png'.format(_date)), dpi=200)
-        fig_names.append()
+        f_name = 'deadtime_1hr.{:s}.png'.format(_date)
+        fig.savefig(os.path.join(_path_output, f_name), dpi=200)
+        fig_names.append(f_name)
     except Exception as err:
         print(err)
 
     try:
-        fig = plt.figure('5m', figsize=(12, 8))
+        fig = plt.figure('5m', figsize=(7, 3.5))
         ax = fig.add_subplot(111)
         ax.hist((diffs[diffs < 60*5]), 10, facecolor=plt.cm.Oranges(0.7))  # "#ff3300"
         ax.set_yscale('log')
-        ax.set_xlabel('Minutes between the end of one exposure and the start of the next', fontsize=18)
-        ax.set_ylabel('Number of Instances', fontsize=18)
+        ax.set_xlabel('Seconds between the end of one exposure and the start of the next')  # , fontsize=18)
+        ax.set_ylabel('Number of Instances')  # , fontsize=18)
         ax.set_title('Dead Time Distribution (<5min)', fontsize=20)
         plt.tight_layout()
+        f_name = 'deadtime_5min.{:s}.png'.format(_date)
         fig.savefig(os.path.join(_path_output, 'deadtime_5min.{:s}.png'.format(_date)), dpi=200)
+        fig_names.append(f_name)
     except Exception as err:
         print(err)
 
     try:
-        fig = plt.figure('1min', figsize=(12, 8))
+        fig = plt.figure('1min', figsize=(7, 3.5))
         ax = fig.add_subplot(111)
         ax.hist((diffs[diffs < 60]), 10, facecolor=plt.cm.Oranges(0.7))  # "#ff3300"
         ax.set_yscale('log')
-        ax.set_xlabel('Minutes between the end of one exposure and the start of the next', fontsize=18)
-        ax.set_ylabel('Number of Instances', fontsize=18)
+        ax.set_xlabel('Seconds between the end of one exposure and the start of the next')  # , fontsize=18)
+        ax.set_ylabel('Number of Instances')  # , fontsize=18)
         ax.set_title('Dead Time Distribution (<1min)', fontsize=20)
         plt.tight_layout()
+        f_name = 'deadtime_1min.{:s}.png'.format(_date)
         fig.savefig(os.path.join(_path_output, 'deadtime_1min.{:s}.png'.format(_date)), dpi=200)
+        fig_names.append(f_name)
     except Exception as err:
         print(err)
 
     # return diffs for future reference
-    return diffs
+    return diffs, fig_names
 
 
 if __name__ == '__main__':

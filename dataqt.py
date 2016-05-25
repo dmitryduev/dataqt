@@ -1,4 +1,5 @@
 from __future__ import print_function
+from dead_times import dead_times
 import inspect
 from astropy.io import fits
 import json
@@ -11,7 +12,7 @@ import numpy as np
 # from bokeh.io import gridplot, output_file, show
 # from bokeh.plotting import figure
 import sewpy
-from skimage import exposure#, img_as_float
+from skimage import exposure  # , img_as_float
 from skimage.transform import rescale
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -26,7 +27,8 @@ sns.set_context('talk')
 
 # python -W ignore dataqt.py /Users/dmitryduev/_caltech/roboao/_auto_reductions/
 #                            /Users/dmitryduev/_caltech/roboao/seeing/
-#                            --date 20160314
+#                            /Users/dmitryduev/_caltech/roboao/pca_output/
+#                            --date 20160404
 
 
 # some metrics to score SExtractor solutions.
@@ -255,7 +257,7 @@ if __name__ == '__main__':
     else:
         date = datetime.datetime.strptime(args.date, '%Y%m%d')
 
-    ''' Scientific images, PCA and contrast curves '''
+    ''' Scientific images, PCA, contrast curves, Strehl, and aux data '''
     path = os.path.join(args.path_pipe, datetime.datetime.strftime(date, '%Y%m%d'))
     path_pca = os.path.join(args.path_pca, datetime.datetime.strftime(date, '%Y%m%d'))
     # print(path)
@@ -269,8 +271,10 @@ if __name__ == '__main__':
         # source_data = {'high_flux': [], 'faint': [], 'zero_flux': [], 'failed': []}
         source_data = OrderedDict((('high_flux', []), ('faint', []),
                                    ('zero_flux', []), ('failed', [])))
+        # date string
+        date_str = datetime.datetime.strftime(date, '%Y%m%d')
         # path to output
-        path_data = os.path.join(path_to_website_data, datetime.datetime.strftime(date, '%Y%m%d'))
+        path_data = os.path.join(path_to_website_data, date_str)
         if not os.path.exists(path_to_website_data):
             os.mkdir(path_to_website_data)
         if not os.path.exists(path_data):
@@ -356,6 +360,7 @@ if __name__ == '__main__':
 
         # make nightly joint contrast curve plot
         if len(ccs) > 0:
+            print('Generating contrast curve summary for {:s}'.format(date_str))
             contrast_curves = []
             fig = plt.figure('Contrast curve', figsize=(8, 3.5), dpi=200)
             ax = fig.add_subplot(111)
@@ -383,36 +388,43 @@ if __name__ == '__main__':
             ax.set_ylim(ax.get_ylim()[::-1])
             ax.grid(linewidth=0.5)
             plt.tight_layout()
-            fig.savefig(os.path.join(path_to_website_data, datetime.datetime.strftime(date, '%Y%m%d'),
-                                     'contrast_curve.{:s}.png'.format(datetime.datetime.strftime(date,
-                                                                                                 '%Y%m%d'))),
-                        dpi=200)
+            fig.savefig(os.path.join(path_to_website_data, date_str,
+                                     'contrast_curve.{:s}.png'.format(date_str)), dpi=200)
             # save in json
             source_data['contrast_curve'] = True
-            print('Created contrast curve for {:s}'.format(datetime.datetime.strftime(date, '%Y%m%d')))
         else:
             source_data['contrast_curve'] = False
 
-
+        # compute dead times
+        path_data_deadtimes = os.path.join(path_to_website_data, date_str, 'dead_times')
+        if not os.path.exists(path_data_deadtimes):
+            os.mkdir(path_data_deadtimes)
+        print('Generating dead time plots for {:s}'.format(date_str))
+        _, deadtimes_fig_names = dead_times(_path_pipe=args.path_pipe,
+                                            _path_output=path_data_deadtimes, _date=date_str)
+        if len(deadtimes_fig_names) > 0:
+            source_data['dead_times'] = deadtimes_fig_names
+        else:
+            source_data['dead_times'] = []
 
         # dump sci json
-        with open(os.path.join(path_data,
-                               '{:s}.json'.format(datetime.datetime.strftime(date, '%Y%m%d'))), 'w') as fp:
+        with open(os.path.join(path_data, '{:s}.json'.format(date_str)), 'w') as fp:
             # json.dump(source_data, fp, sort_keys=True, indent=4)
             json.dump(source_data, fp, indent=4)
 
     # plt.show()
 
     ''' Seeing '''
-    path_seeing = os.path.join(args.path_seeing, 'plots', datetime.datetime.strftime(date, '%Y%m%d'))
+    path_seeing = os.path.join(args.path_seeing, 'plots', date_str)
     # print(path_seeing)
 
     # path exists?
     if os.path.exists(path_seeing):
+        print('Generating seeing plots for {:s}'.format(date_str))
         # puttin' all my eeeeeggs in onnne...baasket!
         seeing_data = {'fimages': [], 'mean': 0, 'median': 0}
         # path to output
-        path_data = os.path.join(path_to_website_data, datetime.datetime.strftime(date, '%Y%m%d'))
+        path_data = os.path.join(path_to_website_data, date_str)
         if not os.path.exists(path_to_website_data):
             os.mkdir(path_to_website_data)
         if not os.path.exists(path_data):
@@ -420,7 +432,7 @@ if __name__ == '__main__':
 
         seeing_plot = []
         with open(os.path.join(path_seeing,
-                               'seeing.{:s}.txt'.format(datetime.datetime.strftime(date, '%Y%m%d')))) \
+                               'seeing.{:s}.txt'.format(date_str))) \
                 as f:
             f_lines = f.readlines()
             f_lines = [l.split() for l in f_lines]
@@ -460,21 +472,17 @@ if __name__ == '__main__':
         plt.tight_layout()
 
         # plt.show()
-        f_seeing_plot = os.path.join(path_seeing,
-                                     'seeing.{:s}.png'.format(datetime.datetime.strftime(date,
-                                                                                         '%Y%m%d')))
+        f_seeing_plot = os.path.join(path_seeing, 'seeing.{:s}.png'.format(date_str))
         fig.savefig(f_seeing_plot, dpi=300)
 
         ''' make a local copy to display on the website '''
-        path_data_seeing = os.path.join(path_to_website_data, datetime.datetime.strftime(date, '%Y%m%d'), 'seeing')
+        path_data_seeing = os.path.join(path_to_website_data, date_str, 'seeing')
         if not os.path.exists(path_data_seeing):
             os.mkdir(path_data_seeing)
 
         shutil.copy(f_seeing_plot, path_data_seeing)
 
-        f_seeing_txt = os.path.join(path_seeing,
-                                     'seeing.{:s}.txt'.format(datetime.datetime.strftime(date,
-                                                                                         '%Y%m%d')))
+        f_seeing_txt = os.path.join(path_seeing, 'seeing.{:s}.txt'.format(date_str))
         shutil.copy(f_seeing_txt, path_data_seeing)
 
         seeing_images = sorted([fi for fi in os.listdir(path_seeing)
@@ -489,6 +497,5 @@ if __name__ == '__main__':
                                          if ('seeing' not in fi) and ('.png' in fi)])
 
         # dump seeing json
-        with open(os.path.join(path_data,
-                               '{:s}.seeing.json'.format(datetime.datetime.strftime(date, '%Y%m%d'))), 'w') as fp:
+        with open(os.path.join(path_data, '{:s}.seeing.json'.format(date_str)), 'w') as fp:
             json.dump(seeing_data, fp, sort_keys=True, indent=4)

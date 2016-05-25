@@ -184,48 +184,52 @@
         Median: {{ seeing['median'] }}<br><br>
 
         <div class="row">
-            <img src="/static/data/{{date}}/seeing/seeing.{{date}}.png" alt="seeing plot" style="height:200px;">
+            <div class="col-md-6">
+                <img src="/static/data/{{date}}/seeing/seeing.{{date}}.png" alt="seeing plot" style="height:200px;">
+            </div>
 
-            <!-- data-ride="carousel"   class="slide"-->
-            <div id="seeingCarousel" class="carousel carousel-fade col-lg-8 col-offset-2"
-                 data-interval="300" data-pause="false" style="width:600px;"
-                 onmouseover="pauseCarouselShow();" onmouseleave="pauseCarouselHide();">
-                <div class="carousel-inner">
-                    <div class="item active">
-                        {% set fi0 = seeing['fimages'][0] %}
-                        {% set datestr = fi0[:fi0.index('.')].split('_') %}
-                        {% set dat  = datestr[0][0:4]+'/'+datestr[0][4:6]+'/'+datestr[0][6:] %}
-                        {% set time = datestr[1][0:2]+':'+datestr[1][2:4]+':'+datestr[1][4:] %}
-                        <img src="/static/data/{{date}}/seeing/{{fi0}}" alt="" class="img-responsive">
-                        <div class="carousel-caption" style="padding-bottom:0px !important;">
-                            {{dat}}&nbsp;{{time}}</div>
-                    </div>
-                    {% for fi in seeing['fimages'][1:] %}
-                        <div class="item">
-                            {% set datestr = fi[:fi.index('.')].split('_') %}
+            <div class="col-md-6">
+                <!-- data-ride="carousel"   class="slide"-->
+                <div id="seeingCarousel" class="carousel carousel-fade col-lg-8 col-offset-2"
+                     data-interval="300" data-pause="false" style="width:600px;"
+                     onmouseover="pauseCarouselShow();" onmouseleave="pauseCarouselHide();">
+                    <div class="carousel-inner">
+                        <div class="item active">
+                            {% set fi0 = seeing['fimages'][0] %}
+                            {% set datestr = fi0[:fi0.index('.')].split('_') %}
                             {% set dat  = datestr[0][0:4]+'/'+datestr[0][4:6]+'/'+datestr[0][6:] %}
                             {% set time = datestr[1][0:2]+':'+datestr[1][2:4]+':'+datestr[1][4:] %}
-                            <img src="/static/data/{{date}}/seeing/{{fi}}" alt="" class="img-responsive">
+                            <img src="/static/data/{{date}}/seeing/{{fi0}}" alt="" class="img-responsive">
                             <div class="carousel-caption" style="padding-bottom:0px !important;">
                                 {{dat}}&nbsp;{{time}}</div>
                         </div>
-                    {% endfor %}
-                </div>
+                        {% for fi in seeing['fimages'][1:] %}
+                            <div class="item">
+                                {% set datestr = fi[:fi.index('.')].split('_') %}
+                                {% set dat  = datestr[0][0:4]+'/'+datestr[0][4:6]+'/'+datestr[0][6:] %}
+                                {% set time = datestr[1][0:2]+':'+datestr[1][2:4]+':'+datestr[1][4:] %}
+                                <img src="/static/data/{{date}}/seeing/{{fi}}" alt="" class="img-responsive">
+                                <div class="carousel-caption" style="padding-bottom:0px !important;">
+                                    {{dat}}&nbsp;{{time}}</div>
+                            </div>
+                        {% endfor %}
+                    </div>
 
-                <a class="left carousel-control" href="#seeingCarousel" data-slide="prev">
-                    <span class="glyphicon glyphicon-chevron-left"></span>
-                </a>
-                <a class="right carousel-control" href="#seeingCarousel" data-slide="next">
-                    <span class="glyphicon glyphicon-chevron-right"></span>
-                </a>
+                    <a class="left carousel-control" href="#seeingCarousel" data-slide="prev">
+                        <span class="glyphicon glyphicon-chevron-left"></span>
+                    </a>
+                    <a class="right carousel-control" href="#seeingCarousel" data-slide="next">
+                        <span class="glyphicon glyphicon-chevron-right"></span>
+                    </a>
 
-                <div id="carouselButtons">
-                    <a id="carousel-play" class="carousel-control" onclick="playCarousel()">
-                        <span class="glyphicon glyphicon-play" style="font-size: 40px !important;"></span>
-                    </a>
-                    <a id="carousel-pause" class="carousel-control" onclick="pauseCarousel()">
-                        <span class="glyphicon glyphicon-pause" style="font-size: 40px !important;"></span>
-                    </a>
+                    <div id="carouselButtons">
+                        <a id="carousel-play" class="carousel-control" onclick="playCarousel()">
+                            <span class="glyphicon glyphicon-play" style="font-size: 40px !important;"></span>
+                        </a>
+                        <a id="carousel-pause" class="carousel-control" onclick="pauseCarousel()">
+                            <span class="glyphicon glyphicon-pause" style="font-size: 40px !important;"></span>
+                        </a>
+                    </div>
                 </div>
             </div>
 
@@ -233,6 +237,23 @@
 </div><!-- /.container -->
 {% endif %}
 
+
+{% if 'dead_times' in data.keys() and data['dead_times']|length > 0 %}
+<div class="container">
+    <h3>Dead times</h3>
+    <!-- Dead times -->
+
+        <div class="row">
+            {% for fdt in data['dead_times'] %}
+            <div class="col-md-4">
+                <img src="/static/data/{{date}}/dead_times/{{ fdt }}" alt="deadtime plot {{ fdt }}"
+                     style="height:200px;">
+            </div>
+            {% endfor %}
+
+        </div>
+</div><!-- /.container -->
+{% endif %}
 
 <div class="container">
     {% if data %}
