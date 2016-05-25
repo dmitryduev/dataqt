@@ -64,7 +64,7 @@ def dead_times(_path_pipe, _path_output, _date):
     try:
         fig = plt.figure('1h', figsize=(7, 3.5))
         ax = fig.add_subplot(111)
-        ax.hist((diffs[diffs < 3600])/60, 10, facecolor=plt.cm.Oranges(0.7))  # "#ff3300"
+        ax.hist((diffs[diffs < 3600e7])/60, 10, facecolor=plt.cm.Oranges(0.7))  # "#ff3300"
         ax.set_yscale('log')
         ax.set_xlabel('Minutes between the end of one exposure and the start of the next')  # , fontsize=18)
         ax.set_ylabel('Number of Instances')  # , fontsize=18)
@@ -79,7 +79,7 @@ def dead_times(_path_pipe, _path_output, _date):
     try:
         fig = plt.figure('5m', figsize=(7, 3.5))
         ax = fig.add_subplot(111)
-        ax.hist((diffs[diffs < 60*5]), 10, facecolor=plt.cm.Oranges(0.7))  # "#ff3300"
+        ax.hist((diffs[diffs < 60*5e7]), 10, facecolor=plt.cm.Oranges(0.7))  # "#ff3300"
         ax.set_yscale('log')
         ax.set_xlabel('Seconds between the end of one exposure and the start of the next')  # , fontsize=18)
         ax.set_ylabel('Number of Instances')  # , fontsize=18)
@@ -94,7 +94,7 @@ def dead_times(_path_pipe, _path_output, _date):
     try:
         fig = plt.figure('1min', figsize=(7, 3.5))
         ax = fig.add_subplot(111)
-        ax.hist((diffs[diffs < 60]), 10, facecolor=plt.cm.Oranges(0.7))  # "#ff3300"
+        ax.hist((diffs[diffs < 60e7]), 10, facecolor=plt.cm.Oranges(0.7))  # "#ff3300"
         ax.set_yscale('log')
         ax.set_xlabel('Seconds between the end of one exposure and the start of the next')  # , fontsize=18)
         ax.set_ylabel('Number of Instances')  # , fontsize=18)
