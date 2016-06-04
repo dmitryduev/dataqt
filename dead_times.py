@@ -8,8 +8,8 @@ from astropy.io import fits
 from astropy.time import Time
 from astropy.time import TimeDelta
 
-import matplotlib
-matplotlib.use('TkAgg')
+# import matplotlib
+# matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 sns.set_style('whitegrid')

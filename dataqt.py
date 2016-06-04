@@ -15,6 +15,8 @@ import numpy as np
 import sewpy
 from skimage import exposure  # , img_as_float
 from skimage.transform import rescale
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.patches import Rectangle
@@ -104,6 +106,7 @@ def make_img(_sou_name, _time, _filter, _prog_num, _camera, _marker,
     :param _path_sou:
     :param _path_data:
     :param pipe_out_type: 'high_flux' or 'faint'
+    :param _program_num_planets:
     :return:
     """
     # read, process and display fits:
