@@ -4,6 +4,7 @@ import inspect
 from astropy.io import fits
 import json
 import argparse
+import ConfigParser
 import os
 import shutil
 import datetime
@@ -91,7 +92,7 @@ class AnchoredSizeBar(AnchoredOffsetbox):
 
 
 def make_img(_sou_name, _time, _filter, _prog_num, _camera, _marker,
-             _path_sou, _path_data, pipe_out_type):
+             _path_sou, _path_data, pipe_out_type, _program_num_planets=24):
     """
 
     :param _sou_name:
@@ -191,7 +192,7 @@ def make_img(_sou_name, _time, _filter, _prog_num, _camera, _marker,
     ''' crop the brightest detected source: '''
     N_sou = len(out['table'])
     # do not crop large planets and crowded fields
-    if N_sou != 0 and N_sou < 30:
+    if (_prog_num != _program_num_planets) or (N_sou != 0 and N_sou < 30):
         # sou_xy = [out['table']['X_IMAGE'][0], out['table']['Y_IMAGE'][0]]
         best_score = np.argmax(scores) if len(scores) > 0 else 0
         sou_size = np.max((int(out['table']['FWHM_IMAGE'][best_score] * 3), 90))
@@ -247,6 +248,12 @@ if __name__ == '__main__':
 
     # script absolute location
     abs_path = os.path.dirname(inspect.getfile(inspect.currentframe()))
+
+    # load config data
+    config = ConfigParser.RawConfigParser()
+    config.read(os.path.join(abs_path, 'config.ini'))
+
+    program_num_planets = int(config.get('Programs', 'planets'))
 
     # website data dwelling place:
     path_to_website_data = os.path.join(abs_path, 'static', 'data')
@@ -349,7 +356,8 @@ if __name__ == '__main__':
                         try:
                             header = make_img(_sou_name=sou_name, _time=time, _filter=filt, _prog_num=prog_num,
                                               _camera=camera, _marker=marker,
-                                              _path_sou=path_sou, _path_data=path_data, pipe_out_type=pot)
+                                              _path_sou=path_sou, _path_data=path_data, pipe_out_type=pot,
+                                              _program_num_planets=program_num_planets)
                             # dump header
                             source['header'] = header
                         except IOError:
