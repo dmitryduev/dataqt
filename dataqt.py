@@ -195,7 +195,7 @@ def make_img(_sou_name, _time, _filter, _prog_num, _camera, _marker,
     ''' crop the brightest detected source: '''
     N_sou = len(out['table'])
     # do not crop large planets and crowded fields
-    if (_prog_num != _program_num_planets) or (N_sou != 0 and N_sou < 30):
+    if (_prog_num != _program_num_planets) and (N_sou != 0 and N_sou < 30):
         # sou_xy = [out['table']['X_IMAGE'][0], out['table']['Y_IMAGE'][0]]
         best_score = np.argmax(scores) if len(scores) > 0 else 0
         sou_size = np.max((int(out['table']['FWHM_IMAGE'][best_score] * 3), 90))
