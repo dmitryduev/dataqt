@@ -57,4 +57,6 @@ if __name__ == '__main__':
     # run PCA
     pca(_trimmed_frame=trimmed_frame, _win=win, _sou_name=sou_name,
         _sou_dir=sou_dir, _library_path=library_path, _out_path=output_path,
-        _filt=filt, plsc=0.0168876, sigma=5.0, _nrefs=5, _klip=1)
+        _filt=filt, psf_reference_library=args.psf_reference_library, 
+        psf_reference_library_short_names=args.psf_reference_library_short_names, 
+        fwhm = args.fwhm, plsc=0.0175797, sigma=5.0, _nrefs=5, _klip=1)
