@@ -28,6 +28,7 @@ sns.set_style('whitegrid')
 # sns.set_palette(sns.diverging_palette(10, 220, sep=80, n=7))
 plt.close('all')
 sns.set_context('talk')
+import bad_obs_detector as bad
 
 
 def log_gauss_score(_x, _mu=1.27, _sigma=0.17):
@@ -168,7 +169,7 @@ def pca_helper(_args):
 
 
 def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _path_library, _out_path, _filt,
-        plsc=0.0168876, sigma=5, _nrefs=5, _klip=1):
+        library, library_names_short, fwhm, plsc=0.0168876, sigma=5, _nrefs=5, _klip=1):
     """
 
     :param _trimmed_frame: image cropped around the source
@@ -187,13 +188,9 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _path_library, _out_path, _fi
     # Filter the trimmed frame with IUWT filter, 2 coeffs
     filtered_frame = (vip.var.cube_filter_iuwt(
         np.reshape(_trimmed_frame, (1, np.shape(_trimmed_frame)[0], np.shape(_trimmed_frame)[1])),
-        coeff=5, rel_coeff=1))
+        coeff=5, rel_coeff=2))
 
-    # Choose the resolution element size -- to replace with fitting two gaussians
-    mean_y, mean_x, fwhm_y, fwhm_x, amplitude, theta = (
-        vip.var.fit_2dgaussian(filtered_frame[0], crop=True,
-                               cropsize=15, debug=False, full_output=True))
-    fwhm = float(np.mean([fwhm_y, fwhm_x]))
+    # Print the resolution element size 
     print('Using resolution element size = ', fwhm)
 
     # Center the filtered frame
@@ -214,61 +211,6 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _path_library, _out_path, _fi
     psf_template = (
         centered_frame[len(centered_frame) / 2 - 3 * fwhm:len(centered_frame) / 2 + 3 * fwhm,
         len(centered_frame) / 2 - 3 * fwhm:len(centered_frame) / 2 + 3 * fwhm])
-
-    # Import PSF reference library
-    frame_filter = _filt
-    if frame_filter == 'Sz':
-        library = fits.open(os.path.join(_path_library,
-                                         'zlibrary.fits'))[0].data
-        # library_names = np.genfromtxt(os.path.join(_path_library,
-        #                                            'zfilt_library_2Coeffs_names.txt'), dtype="|S")
-        library_names_short = np.genfromtxt(os.path.join(_path_library,
-                                                         'zlibrary_names_short.txt'),
-                                            dtype="|S")
-    elif frame_filter == 'Si':
-        library = fits.open(os.path.join(_path_library,
-                                         'ilibrary.fits'))[0].data
-        # library_names = np.genfromtxt(os.path.join(_path_library,
-        #                                            'ifilt_library_2Coeffs_names.txt'), dtype="|S")
-        library_names_short = np.genfromtxt(os.path.join(_path_library,
-                                                         'ilibrary_names_short.txt'),
-                                            dtype="|S")
-    elif frame_filter == 'Sr':
-        library = fits.open(os.path.join(_path_library,
-                                         'rlibrary.fits'))[0].data
-        library_names_short = np.genfromtxt(os.path.join(_path_library,
-                                                         'rlibrary_names_short.txt'),
-                                            dtype="|S")
-    else:
-        print("Becky hasn't made a library for this filter yet, so we aren't doing PCA")
-        noise_samp, rad_samp = vip.phot.noise_per_annulus(centered_frame, 1, fwhm, False)
-        noise_samp_sm = savgol_filter(noise_samp, polyorder=1, mode='nearest',
-                                      window_length=int(noise_samp.shape[0] * 0.1))
-        n_res_els = np.floor(rad_samp / fwhm * 2 * np.pi)
-        ss_corr = np.sqrt(1 + 1.0 / (n_res_els - 1))
-        sigma_student = stats.t.ppf(stats.norm.cdf(sigma), n_res_els) / ss_corr
-        cont = (sigma_student * noise_samp_sm) / center_flux
-
-        plt.close('all')
-        fig = plt.figure('Contrast curve for {:s}'.format(_sou_dir), figsize=(8, 3.5), dpi=200)
-        ax = fig.add_subplot(111)
-        ax.set_title(_sou_dir + '\n Without PCA')  # , fontsize=14)
-        ax.plot(rad_samp * plsc, -2.5 * np.log10(cont), 'k-', linewidth=2.5)
-        ax.set_xlim([0.2, 1.45])
-        ax.set_xlabel('Separation [arcseconds]')  # , fontsize=18)
-        ax.set_ylabel('Contrast [$\Delta$mag]')  # , fontsize=18)
-        ax.set_ylim([0, 8])
-        ax.set_ylim(ax.get_ylim()[::-1])  # reverse y
-        ax.grid(linewidth=0.5)
-        plt.tight_layout()
-        fig.savefig(os.path.join(_out_path, _sou_dir + '_NOPCA_contrast_curve.png'), dpi=200)
-
-        # save txt for nightly median calc/plot
-        with open(os.path.join(_out_path, _sou_dir + '_NOPCA_contrast_curve.txt'), 'w') as f:
-            for s, dm in zip(rad_samp * plsc, -2.5 * np.log10(cont)):
-                f.write('{:.3f} {:.3f}\n'.format(s, dm))
-
-        return
 
     # Choose reference frames via cross correlation
     library_notmystar = library[~np.in1d(library_names_short, _sou_name)]
@@ -367,6 +309,9 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _path_library, _out_path, _fi
 
 
 if __name__ == '__main__':
+    psf_reference_library = fits.open('/home/roboao/Work/becky/library/all_filter_library.fits')[0].data
+    psf_reference_library_short_names = np.genfromtxt('/home/roboao/Work/becky/library/all_filter_library_short_names.txt', dtype='|S')
+
     # Create parser
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
                                      description='Becky\'s PCA pipeline')
@@ -442,14 +387,20 @@ if __name__ == '__main__':
                     ''' go off with processing: '''
                     # trimmed image:
                     trimmed_frame = (make_img(_path=path_sou, _win=win))
-                    
-                    # run PCA
-                    # pca(_trimmed_frame=trimmed_frame, _win=win, _sou_name=sou_name,
-                    #     _sou_dir=sou_dir, _path_library=path_library, _out_path=os.path.join(path_data, pot),
-                    #     _filt=filt, plsc=0.0168876, sigma=5.0, _nrefs=5, _klip=1)
-                    args_pca.append([trimmed_frame, win,
-                                     sou_name, sou_dir, path_library, os.path.join(path_data, pot),
-                                     filt, 0.0168876, 5.0, 5, 1])
+
+                    # Check of observation passes quality check:
+                    cy1, cx1 = np.unravel_index(trimmed_frame.argmax(), trimmed_frame.shape)
+                    core, halo = bad.bad_obs_check(trimmed_frame[cy1-30:cy1+30+1, cx1-30:cx1+30+1])
+                    if core > 0.14 and halo < 1.0:
+                        # run PCA
+                        # pca(_trimmed_frame=trimmed_frame, _win=win, _sou_name=sou_name,
+                        #     _sou_dir=sou_dir, _path_library=path_library, _out_path=os.path.join(path_data, pot),
+                        #     _filt=filt, plsc=0.0168876, sigma=5.0, _nrefs=5, _klip=1)
+                        args_pca.append([trimmed_frame, win,
+                                         sou_name, sou_dir, path_library, os.path.join(path_data, pot),
+                                         filt, psf_reference_library, psf_reference_library_short_names, core/0.0175797,  0.0175797, 5.0, 5, 1])
+                    else:
+                        print 'Bad Observation. Faint star pipeline coming soon . . . '
 
         # run computation:
         if len(args_pca) > 0:
