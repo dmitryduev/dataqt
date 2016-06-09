@@ -491,10 +491,13 @@ if __name__ == '__main__':
                     trimmed_frame = (make_img(_path=path_sou, _win=win))
 
                     # Check of observation passes quality check:
-                    cy1, cx1 = np.unravel_index(trimmed_frame.argmax(), trimmed_frame.shape)
+                    
                     try:
+                        cy1, cx1 = np.unravel_index(trimmed_frame.argmax(), trimmed_frame.shape)
                         core, halo = bad_obs_check(trimmed_frame[cy1-30:cy1+30+1, cx1-30:cx1+30+1])
                     except:
+                        core = 0.14
+                        halo = 1.0
                         continue
                     if core > 0.14 and halo < 1.0:
                         # run PCA
