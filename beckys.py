@@ -433,6 +433,8 @@ if __name__ == '__main__':
     nrefs = float(config.get('PCA', 'nrefs'))
     klip = float(config.get('PCA', 'klip'))
 
+    planets_prog_num = int(config.get('Programs', 'planets'))
+
     # try processing today if no date provided
     if not args.date:
         now = datetime.datetime.now()
@@ -480,13 +482,20 @@ if __name__ == '__main__':
                     # date and time of obs:
                     time = datetime.datetime.strptime(tmp[-2] + tmp[-1].split('.')[0], '%Y%m%d%H%M%S')
 
+                    # do not try to process planets:
+                    if prog_num == planets_prog_num and sou_name.title() not in ('Pluto'):
+                        continue 
+
                     ''' go off with processing: '''
                     # trimmed image:
                     trimmed_frame = (make_img(_path=path_sou, _win=win))
 
                     # Check of observation passes quality check:
                     cy1, cx1 = np.unravel_index(trimmed_frame.argmax(), trimmed_frame.shape)
-                    core, halo = bad_obs_check(trimmed_frame[cy1-30:cy1+30+1, cx1-30:cx1+30+1])
+                    try:
+                        core, halo = bad_obs_check(trimmed_frame[cy1-30:cy1+30+1, cx1-30:cx1+30+1])
+                    except:
+                        continue
                     if core > 0.14 and halo < 1.0:
                         # run PCA
                         args_pca.append([trimmed_frame, win, sou_name, sou_dir, os.path.join(path_data, pot),
