@@ -64,7 +64,7 @@ def residuals(p, x, y):
     return res
 
 
-def bad_obs_check(p):
+def bad_obs_check(p, return_halo = True):
     pix_rad = []
     pix_vals = []
     core_pix_rad = []
@@ -83,20 +83,26 @@ def bad_obs_check(p):
                 core_pix_vals.append(p[y][x])
 
     try:
-        p0 = [0.0, np.max(pix_vals), 20.0, 2.0]
-        p = fmin(residuals, p0, args=(pix_rad, pix_vals), maxiter=1000000, maxfun=1000000, ftol=1e-3,
-                 xtol=1e-3, disp=False)
+        if return_halo == True:
+            p0 = [0.0, np.max(pix_vals), 20.0, 2.0]
+            p = fmin(residuals, p0, args=(pix_rad, pix_vals), maxiter=1000000, maxfun=1000000, ftol=1e-3,
+                     xtol=1e-3, disp=False)
 
         p0 = [0.0, np.max(core_pix_vals), 5.0, 2.0]
         core_p = fmin(residuals, p0, args=(core_pix_rad, core_pix_vals), maxiter=1000000, maxfun=1000000,
                       ftol=1e-3, xtol=1e-3, disp=False)
     except OverflowError:
-        return 0, 0
+        _core = 0
+        _halo = 0
 
     # Palomar PS = 0.021, KP PS = 0.0175797
     _core = core_p[2] * 0.0175797
-    _halo = p[2] * 0.0175797
-    return _core, _halo
+    
+    if return_halo == True:
+        _halo = p[2] * 0.0175797
+        return _core, _halo
+    if return_halo == False:
+        return _core
 
 
 def log_gauss_score(_x, _mu=1.27, _sigma=0.17):
@@ -259,20 +265,20 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _out_path,
     :return:
     """
 
-    # Print the resolution element size 
-    print('Using resolution element size = ', _fwhm)
-
     # Filter the trimmed frame with IUWT filter, 2 coeffs
     filtered_frame = (vip.var.cube_filter_iuwt(
         np.reshape(_trimmed_frame, (1, np.shape(_trimmed_frame)[0], np.shape(_trimmed_frame)[1])),
         coeff=5, rel_coeff=1))
 
+    cy1, cx1 = np.unravel_index(filtered_frame[0].argmax(), filtered_frame[0].shape)
+    _fwhm = bad_obs_check(filtered_frame[0][cy1-30:cy1+30+1, cx1-30:cx1+30+1], return_halo=False)
+
+    # Print the resolution element size 
+    print('Using resolution element size = ', _fwhm)
+
     # Center the filtered frame
-    mean_y, mean_xx, fwhm_yy, fwhm_xx, amplitude, theta = (vip.var.fit_2dgaussian(filtered_frame[0], crop=True, 
-                                                            cropsize=15, debug=False, full_output=True))
-    fwhm_centering =  np.max(np.vstack([fwhm_xx,fwhm_yy]), axis=0)
     centered_cube, shy, shx = (vip.calib.cube_recenter_gauss2d_fit(array=filtered_frame, pos_y=_win,
-                                                                   pos_x=_win, fwhm=fwhm_centering,
+                                                                   pos_x=_win, fwhm=_fwhm,
                                                                    subi_size=6, nproc=1,
                                                                    full_output=True))
     centered_frame = centered_cube[0]
