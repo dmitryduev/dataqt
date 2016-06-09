@@ -1,3 +1,10 @@
+"""
+    Data quality monitoring for Robo-AO
+
+    Generates stuff to be displayed on the DQM web-site
+
+    DAD, RMJC @ Caltech, 2016
+"""
 from __future__ import print_function
 from dead_times import dead_times
 import inspect
@@ -10,11 +17,9 @@ import shutil
 import datetime
 from collections import OrderedDict
 import numpy as np
-# from bokeh.io import gridplot, output_file, show
-# from bokeh.plotting import figure
 import sewpy
 from skimage import exposure  # , img_as_float
-from skimage.transform import rescale
+# from skimage.transform import rescale
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -26,12 +31,6 @@ sns.set_style('whitegrid')
 # sns.set_palette(sns.diverging_palette(10, 220, sep=80, n=7))
 plt.close('all')
 sns.set_context('talk')
-
-
-# python -W ignore dataqt.py /Users/dmitryduev/_caltech/roboao/_auto_reductions/
-#                            /Users/dmitryduev/_caltech/roboao/seeing/
-#                            /Users/dmitryduev/_caltech/roboao/pca_output/
-#                            --date 20160404
 
 
 # some metrics to score SExtractor solutions.
@@ -236,14 +235,10 @@ def make_img(_sou_name, _time, _filter, _prog_num, _camera, _marker,
 if __name__ == '__main__':
     # Create parser
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
-                                     description='data quality monitoring')
+                                     description='Data quality monitoring for Robo-AO')
 
-    parser.add_argument('path_pipe', metavar='path_pipe',
-                        action='store', help='path to pipelined data.', type=str)
-    parser.add_argument('path_seeing', metavar='path_seeing',
-                        action='store', help='path to seeing data.', type=str)
-    parser.add_argument('path_pca', metavar='path_pca',
-                        action='store', help='path to becky-pipelined data.', type=str)
+    parser.add_argument('config_file', metavar='config_file',
+                        action='store', help='path to config file.', type=str)
     parser.add_argument('--date', metavar='date', action='store', dest='date',
                         help='obs date', type=str)
 
@@ -252,14 +247,37 @@ if __name__ == '__main__':
     # script absolute location
     abs_path = os.path.dirname(inspect.getfile(inspect.currentframe()))
 
+    ''' Get config data '''
     # load config data
     config = ConfigParser.RawConfigParser()
-    config.read(os.path.join(abs_path, 'config.ini'))
+    # config.read(os.path.join(abs_path, 'config.ini'))
+    if args.config_file[0] not in ('/', '~'):
+        if os.path.isfile(os.path.join(abs_path, args.config_file)):
+            config.read(os.path.join(abs_path, args.config_file))
+            if len(config.read(os.path.join(abs_path, args.config_file))) == 0:
+                raise Exception('Failed to load config file')
+        else:
+            raise IOError('Failed to find config file')
+    else:
+        if os.path.isfile(args.config_file):
+            config.read(args.config_file)
+            if len(config.read(args.config_file)) == 0:
+                raise Exception('Failed to load config file')
+        else:
+            raise IOError('Failed to find config file')
 
+    # planetary program number (do no crop planetary images!)
     program_num_planets = int(config.get('Programs', 'planets'))
+    # path to (standard) pipeline data:
+    path_pipe = config.get('Path', 'path_pipe')
+    # path to Becky-pipeline data:
+    path_pca = config.get('Path', 'path_pca')
+    # path to seeing plots:
+    path_seeing = config.get('Path', 'path_seeing')
 
     # website data dwelling place:
-    path_to_website_data = os.path.join(abs_path, 'static', 'data')
+    # path_to_website_data = os.path.join(abs_path, 'static', 'data')
+    path_to_website_data = config.get('Path', 'path_to_website_data')
 
     if not args.date:
         now = datetime.datetime.now()
@@ -268,21 +286,15 @@ if __name__ == '__main__':
         date = datetime.datetime.strptime(args.date, '%Y%m%d')
 
     ''' Scientific images, PCA, contrast curves, Strehl, and aux data '''
-    path = os.path.join(args.path_pipe, datetime.datetime.strftime(date, '%Y%m%d'))
-    path_pca = os.path.join(args.path_pca, datetime.datetime.strftime(date, '%Y%m%d'))
-    # print(path)
-
-    # bokeh static output html file
-    # output_file('index_bokeh.html')
+    # date string
+    date_str = datetime.datetime.strftime(date, '%Y%m%d')
 
     # path to pipelined data exists?
-    if os.path.exists(path):
+    if os.path.exists(os.path.join(path_pipe, date_str)):
         # puttin' all my eeeeeggs in onnne...baasket!
         # source_data = {'high_flux': [], 'faint': [], 'zero_flux': [], 'failed': []}
         source_data = OrderedDict((('high_flux', []), ('faint', []),
                                    ('zero_flux', []), ('failed', [])))
-        # date string
-        date_str = datetime.datetime.strftime(date, '%Y%m%d')
         # path to output
         path_data = os.path.join(path_to_website_data, date_str)
         if not os.path.exists(path_to_website_data):
@@ -294,19 +306,20 @@ if __name__ == '__main__':
         ccs = []
 
         for pot in source_data.keys():
-            if os.path.exists(os.path.join(path, pot)):
+            if os.path.exists(os.path.join(path_pipe, date_str, pot)):
                 print(pot.replace('_', ' ').title())
                 if not os.path.exists(os.path.join(path_data, pot)) \
                         and pot not in ('zero_flux', 'failed'):
                     os.mkdir(os.path.join(path_data, pot))
                 # path to pca data exists?
-                if os.path.exists(os.path.join(path_pca, pot)):
-                    pca_ls = sorted(os.listdir(os.path.join(path_pca, pot)))
-                    ccs += [os.path.join(path_pca, pot, pf) for pf in pca_ls if '_contrast_curve.txt' in pf]
+                if os.path.exists(os.path.join(path_pca, date_str, pot)):
+                    pca_ls = sorted(os.listdir(os.path.join(path_pca, date_str, pot)))
+                    ccs += [os.path.join(path_pca, date_str, pot, pf) for pf in pca_ls
+                            if '_contrast_curve.txt' in pf]
                 else:
                     pca_ls = []
-                for sou_dir in sorted(os.listdir(os.path.join(path, pot))):
-                    path_sou = os.path.join(path, pot, sou_dir)
+                for sou_dir in sorted(os.listdir(os.path.join(path_pipe, date_str, pot))):
+                    path_sou = os.path.join(path_pipe, date_str, pot, sou_dir)
                     tmp = sou_dir.split('_')
                     try:
                         # prog num set?
@@ -333,22 +346,21 @@ if __name__ == '__main__':
                     if (sou_dir + '_pca.png' in pca_ls) and (sou_dir + '_contrast_curve.png' in pca_ls) and \
                             (sou_dir + '_contrast_curve.txt' in pca_ls):
                         cc = 'pca'
-                        f_contrast_curve = os.path.join(path_pca, pot, sou_dir + '_contrast_curve.png')
+                        f_contrast_curve = os.path.join(path_pca, date_str, pot,
+                                                        sou_dir + '_contrast_curve.png')
                         shutil.copy(f_contrast_curve, os.path.join(path_data, pot))
-                        f_pca = os.path.join(path_pca, pot, sou_dir + '_pca.png')
+                        f_pca = os.path.join(path_pca, date_str, pot, sou_dir + '_pca.png')
                         shutil.copy(f_pca, os.path.join(path_data, pot))
                     elif (sou_dir + '_NOPCA_contrast_curve.png' in pca_ls) and \
                             (sou_dir + '_NOPCA_contrast_curve.txt' in pca_ls):
                         cc = 'nopca'
-                        f_contrast_curve = os.path.join(path_pca, pot, sou_dir + '_NOPCA_contrast_curve.png')
+                        f_contrast_curve = os.path.join(path_pca, date_str, pot,
+                                                        sou_dir + '_NOPCA_contrast_curve.png')
                         shutil.copy(f_contrast_curve, os.path.join(path_data, pot))
                     else:
                         cc = 'none'
 
-                    # store in a dict
-                    # source = {'prog_num': prog_num, 'sou_name': sou_name,
-                    #           'filter': filt, 'time': datetime.datetime.strftime(time, '%Y%m%d_%H%M%S.%f'),
-                    #           'camera': camera, 'marker': marker, 'contrast_curve': cc}
+                    # store
                     source = OrderedDict((('prog_num', prog_num), ('sou_name', sou_name),
                                           ('filter', filt),
                                           ('time', datetime.datetime.strftime(time, '%Y%m%d_%H%M%S.%f')),
@@ -411,7 +423,7 @@ if __name__ == '__main__':
         if not os.path.exists(path_data_deadtimes):
             os.mkdir(path_data_deadtimes)
         print('Generating dead time plots for {:s}'.format(date_str))
-        _, deadtimes_fig_names = dead_times(_path_pipe=args.path_pipe,
+        _, deadtimes_fig_names = dead_times(_path_pipe=path_pipe,
                                             _path_output=path_data_deadtimes, _date=date_str)
         if len(deadtimes_fig_names) > 0:
             source_data['dead_times'] = deadtimes_fig_names
@@ -426,7 +438,7 @@ if __name__ == '__main__':
     # plt.show()
 
     ''' Seeing '''
-    path_seeing = os.path.join(args.path_seeing, 'plots', date_str)
+    path_seeing = os.path.join(path_seeing, 'plots', date_str)
     # print(path_seeing)
 
     # path exists?
@@ -442,16 +454,13 @@ if __name__ == '__main__':
             os.mkdir(path_data)
 
         seeing_plot = []
-        with open(os.path.join(path_seeing,
-                               'seeing.{:s}.txt'.format(date_str))) \
-                as f:
+        with open(os.path.join(path_seeing, 'seeing.{:s}.txt'.format(date_str))) as f:
             f_lines = f.readlines()
             f_lines = [l.split() for l in f_lines]
             for line in f_lines:
                 estimate = float(line[3])
                 if estimate > 0.4:
-                    tstamp = datetime.datetime.strptime(' '.join(line[0:2]),
-                                                        '%Y-%m-%d %H:%M:%S')
+                    tstamp = datetime.datetime.strptime(' '.join(line[0:2]), '%Y-%m-%d %H:%M:%S')
                     seeing_plot.append((tstamp, estimate))
 
         # print(seeing_plot)

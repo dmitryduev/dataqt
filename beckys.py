@@ -9,13 +9,15 @@ import numpy as np
 from astropy.io import fits
 import vip
 import photutils
-from scipy.signal import savgol_filter
 from scipy import stats
 import operator
 import sewpy
 import argparse
-import multiprocessing
+import ConfigParser
+import inspect
 
+from scipy.optimize import fmin
+from math import sqrt, pow, exp
 from skimage import exposure
 from copy import deepcopy
 from matplotlib.patches import Rectangle
@@ -28,7 +30,73 @@ sns.set_style('whitegrid')
 # sns.set_palette(sns.diverging_palette(10, 220, sep=80, n=7))
 plt.close('all')
 sns.set_context('talk')
-import bad_obs_detector as bad
+
+
+'''
+# detect observatiosn which are bad because of being too faint
+# 1. make a radial profile, snip out the central 3 pixels
+#    (removing the ones which are affected by photon noise)
+# 2. measure the width of the remaining flux
+# 3. check for too small a width (=> no flux) or too large a width (=> crappy performance)
+'''
+def gaussian(p, x):
+    return p[0] + p[1] * (exp(-x * x / (2.0 * p[2] * p[2])))
+
+
+def moffat(p, x):
+    base = 0.0
+    scale = p[1]
+    fwhm = p[2]
+    beta = p[3]
+
+    if pow(2.0, (1.0 / beta)) > 1.0:
+        alpha = fwhm / (2.0 * sqrt(pow(2.0, (1.0 / beta)) - 1.0))
+        return base + scale * pow(1.0 + ((x / alpha) ** 2), -beta)
+    else:
+        return 1.0
+
+
+def residuals(p, x, y):
+    res = 0.0
+    for a, b in zip(x, y):
+        res += np.fabs(b - moffat(p, a))
+
+    return res
+
+
+def bad_obs_check(p):
+    pix_rad = []
+    pix_vals = []
+    core_pix_rad = []
+    core_pix_vals = []
+
+    # Icy, Icx = numpy.unravel_index(p.argmax(), p.shape)
+
+    for x in range(p.shape[1] / 2 - 20, p.shape[1] / 2 + 20 + 1):
+        for y in range(p.shape[0] / 2 - 20, p.shape[0] / 2 + 20 + 1):
+            r = sqrt((x - p.shape[1] / 2) ** 2 + (y - p.shape[0] / 2) ** 2)
+            if r > 3:  # remove core
+                pix_rad.append(r)
+                pix_vals.append(p[y][x])
+            else:
+                core_pix_rad.append(r)
+                core_pix_vals.append(p[y][x])
+
+    try:
+        p0 = [0.0, np.max(pix_vals), 20.0, 2.0]
+        p = fmin(residuals, p0, args=(pix_rad, pix_vals), maxiter=1000000, maxfun=1000000, ftol=1e-3,
+                 xtol=1e-3, disp=False)
+
+        p0 = [0.0, np.max(core_pix_vals), 5.0, 2.0]
+        core_p = fmin(residuals, p0, args=(core_pix_rad, core_pix_vals), maxiter=1000000, maxfun=1000000,
+                      ftol=1e-3, xtol=1e-3, disp=False)
+    except OverflowError:
+        return 0, 0
+
+    # Palomar PS = 0.021, KP PS = 0.0175797
+    _core = core_p[2] * 0.0175797
+    _halo = p[2] * 0.0175797
+    return _core, _halo
 
 
 def log_gauss_score(_x, _mu=1.27, _sigma=0.17):
@@ -152,35 +220,40 @@ def make_img(_path, _win, _x=None, _y=None):
 def pca_helper(_args):
     """
     Helper function to run PCA in parallel for multiple sources
+    TODO: implement parallel processing!
 
     :param _args:
     :return:
     """
     # unpack args
-    _trimmed_frame, _win, _sou_name, _sou_dir, _path_library, _out_path, _filt, \
-    plsc, sigma, _nrefs, _klip = _args
+    _trimmed_frame, _win, _sou_name, _sou_dir, _out_path, \
+    _library, _library_names_short, _fwhm, _plsc, _sigma, _nrefs, _klip = _args
+
     # run pca
     try:
         pca(_trimmed_frame=_trimmed_frame, _win=_win, _sou_name=_sou_name,
-            _sou_dir=_sou_dir, _path_library=_path_library, _out_path=_out_path, _filt=_filt,
-            plsc=plsc, sigma=sigma, _nrefs=_nrefs, _klip=_klip)
+            _sou_dir=_sou_dir, _out_path=_out_path,
+            _library=_library, _library_names_short=_library_names_short,
+            _fwhm=_fwhm, _plsc=_plsc, _sigma=_sigma, _nrefs=_nrefs, _klip=_klip)
     finally:
         return
 
 
-def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _path_library, _out_path, _filt,
-        library, library_names_short, fwhm, plsc=0.0168876, sigma=5, _nrefs=5, _klip=1):
+def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _out_path,
+        _library, _library_names_short,
+        _fwhm, _plsc=0.0175797, _sigma=5, _nrefs=5, _klip=1):
     """
 
     :param _trimmed_frame: image cropped around the source
     :param _win: window half-size in pixels
     :param _sou_name: source name
     :param _sou_dir: full Robo-AO source name
-    :param _path_library: path to PSF library
     :param _out_path: output path
-    :param _filt: filter
-    :param plsc: contrast curve parameter - plate scale (check if input img is upsampled)
-    :param sigma: contrast curve parameter - sigma level
+    :param _library: PSF library
+    :param _library_names_short: source names from the library
+    :param _fwhm: FWHM
+    :param _plsc: contrast curve parameter - plate scale (check if input img is upsampled)
+    :param _sigma: contrast curve parameter - sigma level
     :param _nrefs: number of reference sources to use
     :param _klip: number of components to keep
     :return:
@@ -191,11 +264,11 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _path_library, _out_path, _fi
         coeff=5, rel_coeff=2))
 
     # Print the resolution element size 
-    print('Using resolution element size = ', fwhm)
+    print('Using resolution element size = ', _fwhm)
 
     # Center the filtered frame
     centered_cube, shy, shx = (vip.calib.cube_recenter_gauss2d_fit(array=filtered_frame, pos_y=_win,
-                                                                   pos_x=_win, fwhm=fwhm,
+                                                                   pos_x=_win, fwhm=_fwhm,
                                                                    subi_size=6, nproc=1,
                                                                    full_output=True))
     centered_frame = centered_cube[0]
@@ -204,16 +277,16 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _path_library, _out_path, _fi
 
     # Do aperture photometry on the central star
     center_aperture = photutils.CircularAperture(
-        (int(len(centered_frame) / 2), int(len(centered_frame) / 2)), fwhm / 2.0)
+        (int(len(centered_frame) / 2), int(len(centered_frame) / 2)), _fwhm / 2.0)
     center_flux = photutils.aperture_photometry(centered_frame, center_aperture)['aperture_sum'][0]
 
     # Make PSF template for calculating PCA throughput
     psf_template = (
-        centered_frame[len(centered_frame) / 2 - 3 * fwhm:len(centered_frame) / 2 + 3 * fwhm,
-        len(centered_frame) / 2 - 3 * fwhm:len(centered_frame) / 2 + 3 * fwhm])
+        centered_frame[len(centered_frame) / 2 - 3 * _fwhm:len(centered_frame) / 2 + 3 * _fwhm,
+        len(centered_frame) / 2 - 3 * _fwhm:len(centered_frame) / 2 + 3 * _fwhm])
 
     # Choose reference frames via cross correlation
-    library_notmystar = library[~np.in1d(library_names_short, _sou_name)]
+    library_notmystar = _library[~np.in1d(_library_names_short, _sou_name)]
     cross_corr = np.zeros(len(library_notmystar))
     flattened_frame = np.ndarray.flatten(centered_frame)
 
@@ -281,12 +354,12 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _path_library, _out_path, _fi
     # Make contrast curve
     [con, cont, sep] = (vip.phot.contrcurve.contrast_curve(cube=reshaped_frame, angle_list=np.zeros(1),
                                                            psf_template=psf_template,
-                                                           cube_ref=library, fwhm=fwhm, pxscale=plsc,
-                                                           starphot=center_flux, sigma=sigma,
+                                                           cube_ref=library, fwhm=_fwhm, pxscale=_plsc,
+                                                           starphot=center_flux, sigma=_sigma,
                                                            ncomp=_klip, algo='pca-rdi-fullfr',
                                                            debug='false',
                                                            plot='false', nbranch=3, scaling=None,
-                                                           mask_center_px=fwhm, fc_rad_sep=6))
+                                                           mask_center_px=_fwhm, fc_rad_sep=6))
 
     plt.close('all')
     fig = plt.figure('Contrast curve for {:s}'.format(_sou_dir), figsize=(8, 3.5), dpi=200)
@@ -309,51 +382,75 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _path_library, _out_path, _fi
 
 
 if __name__ == '__main__':
-    psf_reference_library = fits.open('/home/roboao/Work/becky/library/all_filter_library.fits')[0].data
-    psf_reference_library_short_names = np.genfromtxt('/home/roboao/Work/becky/library/all_filter_library_short_names.txt', dtype='|S')
-
     # Create parser
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
                                      description='Becky\'s PCA pipeline')
 
-    parser.add_argument('path_pipe', metavar='path_pipe',
-                        action='store', help='path to pipelined data.', type=str)
-    parser.add_argument('path_library', metavar='path_library',
-                        action='store', help='path to library.', type=str)
-    parser.add_argument('path_output', metavar='path_output',
-                        action='store', help='output path.', type=str)
+    parser.add_argument('config_file', metavar='config_file',
+                        action='store', help='path to config file.', type=str)
     parser.add_argument('--date', metavar='date', action='store', dest='date',
                         help='obs date', type=str)
-    parser.add_argument('--win', metavar='win', action='store', dest='win',
-                        help='window size', type=int, default=100)
     parser.add_argument('-p', '--parallel', action='store_true',
                         help='run computation in parallel mode')
 
     args = parser.parse_args()
 
-    path_output = args.path_output
-    path_library = args.path_library
+    # script absolute location
+    abs_path = os.path.dirname(inspect.getfile(inspect.currentframe()))
 
+    ''' Get config data '''
+    # load config data
+    config = ConfigParser.RawConfigParser()
+    # config.read(os.path.join(abs_path, 'config.ini'))
+    if args.config_file[0] not in ('/', '~'):
+        if os.path.isfile(os.path.join(abs_path, args.config_file)):
+            config.read(os.path.join(abs_path, args.config_file))
+            if len(config.read(os.path.join(abs_path, args.config_file))) == 0:
+                raise Exception('Failed to load config file')
+        else:
+            raise IOError('Failed to find config file')
+    else:
+        if os.path.isfile(args.config_file):
+            config.read(args.config_file)
+            if len(config.read(args.config_file)) == 0:
+                raise Exception('Failed to load config file')
+        else:
+            raise IOError('Failed to find config file')
+
+    # path to (standard) pipeline data:
+    path_pipe = config.get('Path', 'path_pipe')
+    # path to Becky-pipeline data (output):
+    path_pca = config.get('Path', 'path_pca')
+    # path to PSF library:
+    path_psf_reference_library = config.get('Path', 'path_psf_reference_library')
+    path_psf_reference_library_short_names = config.get('Path', 'path_psf_reference_library_short_names')
+    psf_reference_library = fits.open(path_psf_reference_library)[0].data
+    psf_reference_library_short_names = np.genfromtxt(path_psf_reference_library_short_names, dtype='|S')
+
+    win = int(config.get('PCA', 'win'))
+    plate_scale = float(config.get('PCA', 'plate_scale'))
+    sigma = float(config.get('PCA', 'sigma'))
+    nrefs = float(config.get('PCA', 'nrefs'))
+    klip = float(config.get('PCA', 'klip'))
+
+    # try processing today if no date provided
     if not args.date:
         now = datetime.datetime.now()
         date = datetime.datetime(now.year, now.month, now.day)
     else:
         date = datetime.datetime.strptime(args.date, '%Y%m%d')
 
-    win = args.win
-    # print(win)
-
     ''' Scientific images '''
-    path = os.path.join(args.path_pipe, datetime.datetime.strftime(date, '%Y%m%d'))
+    path = os.path.join(path_pipe, datetime.datetime.strftime(date, '%Y%m%d'))
 
     # path to pipelined data exists?
     if os.path.exists(path):
         # keep args to run pca for all sources in a safe cold place:
         args_pca = []
         # path to output for date
-        path_data = os.path.join(path_output, datetime.datetime.strftime(date, '%Y%m%d'))
-        if not os.path.exists(path_output):
-            os.mkdir(path_output)
+        path_data = os.path.join(path_pca, datetime.datetime.strftime(date, '%Y%m%d'))
+        if not os.path.exists(path_pca):
+            os.mkdir(path_pca)
         if not os.path.exists(path_data):
             os.mkdir(path_data)
 
@@ -381,8 +478,7 @@ if __name__ == '__main__':
                     # filter used:
                     filt = tmp[-4:-3][0]
                     # date and time of obs:
-                    time = datetime.datetime.strptime(tmp[-2] + tmp[-1].split('.')[0],
-                                                      '%Y%m%d%H%M%S')
+                    time = datetime.datetime.strptime(tmp[-2] + tmp[-1].split('.')[0], '%Y%m%d%H%M%S')
 
                     ''' go off with processing: '''
                     # trimmed image:
@@ -390,36 +486,19 @@ if __name__ == '__main__':
 
                     # Check of observation passes quality check:
                     cy1, cx1 = np.unravel_index(trimmed_frame.argmax(), trimmed_frame.shape)
-                    core, halo = bad.bad_obs_check(trimmed_frame[cy1-30:cy1+30+1, cx1-30:cx1+30+1])
+                    core, halo = bad_obs_check(trimmed_frame[cy1-30:cy1+30+1, cx1-30:cx1+30+1])
                     if core > 0.14 and halo < 1.0:
                         # run PCA
-                        # pca(_trimmed_frame=trimmed_frame, _win=win, _sou_name=sou_name,
-                        #     _sou_dir=sou_dir, _path_library=path_library, _out_path=os.path.join(path_data, pot),
-                        #     _filt=filt, plsc=0.0168876, sigma=5.0, _nrefs=5, _klip=1)
-                        args_pca.append([trimmed_frame, win,
-                                         sou_name, sou_dir, path_library, os.path.join(path_data, pot),
-                                         filt, psf_reference_library, psf_reference_library_short_names, core/0.0175797,  0.0175797, 5.0, 5, 1])
+                        args_pca.append([trimmed_frame, win, sou_name, sou_dir, os.path.join(path_data, pot),
+                                         psf_reference_library, psf_reference_library_short_names,
+                                         core/plate_scale, plate_scale, sigma, nrefs, klip])
                     else:
-                        print 'Bad Observation. Faint star pipeline coming soon . . . '
+                        print('Bad Observation. Faint star pipeline coming soon . . . ')
 
         # run computation:
         if len(args_pca) > 0:
-            # parallel?
             if args.parallel:
-                raise NotImplemented('VIP forks stuff, so it is not straightforward to parallelize it.')
-                # otherwise it would have been as simple as the following:
-                # # number of threads available on the system
-                # n_cpu = multiprocessing.cpu_count()
-                # # create pool (do not create more than necessary)
-                # pool = multiprocessing.Pool(min(n_cpu, len(args_pca)))
-                # # asynchronously apply pca_helper
-                # result = pool.map_async(pca_helper, args_pca)
-                # # close bassejn
-                # pool.close()  # we are not adding any more processes
-                # pool.join()  # wait until all threads are done before going on
-                # # get the ordered results
-                # # output = result.get()
-            # serial?
+                raise NotImplementedError
             else:
                 for arg_pca in args_pca:
                     pca_helper(arg_pca)

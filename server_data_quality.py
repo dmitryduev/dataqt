@@ -20,8 +20,7 @@ config = ConfigParser.RawConfigParser()
 config.read(os.path.join(abs_path, 'config.ini'))
 
 # seeing data dwelling place:
-# path_to_seeing_data = config.get('Path', 'path_to_seeing_data')
-# path_to_website_data = config.get('Path', 'path_to_seeing_data')
+# path_to_website_data = config.get('Path', 'path_to_website_data')
 path_to_website_data = os.path.join(abs_path, 'static', 'data')
 # create if absent:
 if not os.path.exists(path_to_website_data):
@@ -61,10 +60,13 @@ def get_fits_header():
 
     # we're displaying images only of the sources for which the pipeline did not fail
     for pot in ('high_flux', 'faint'):
-        # check the full name, as the same source could be observed multiple times in a night
-        header = [s['header'] for s in data[pot] if source in s['header']['FILENAME'][0]]
-        if len(header) > 0:
-            return jsonify(result=OrderedDict(header[0]))
+        try:
+            # check the full name, as the same source could be observed multiple times in a night
+            header = [s['header'] for s in data[pot] if source in s['header']['FILENAME'][0]]
+            if len(header) > 0:
+                return jsonify(result=OrderedDict(header[0]))
+        except:
+            return jsonify(result={})
 
     # if failed:
     return jsonify(result={})

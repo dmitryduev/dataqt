@@ -6,28 +6,49 @@ from beckys import make_img, pca
 import argparse
 import datetime
 import os
+from astropy.io import fits
+import numpy as np
 
 if __name__ == '__main__':
     # Create parser
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
-                                     description='Becky\'s PCA pipeline')
+                                     description='Run Becky\'s PCA pipeline manually on an individual image')
 
     parser.add_argument('path_source', metavar='path_source',
                         action='store', help='path to pipelined source data.', type=str)
-    parser.add_argument('library_path', metavar='library_path',
-                        action='store', help='path to library.', type=str)
+    parser.add_argument('psf_reference_library', metavar='psf_reference_library',
+                        action='store', help='path to psf library.', type=str)
+    parser.add_argument('psf_reference_library_short_names', metavar='psf_reference_library_short_names',
+                        action='store', help='path to psf library short names.', type=str)
     parser.add_argument('output_path', metavar='output_path',
                         action='store', help='output path.', type=str)
+    parser.add_argument('--fwhm', metavar='fwhm', action='store', dest='fwhm',
+                        help='FWHM', type=float, default=8.5)
     parser.add_argument('--win', metavar='win', action='store', dest='win',
                         help='window size', type=int, default=100)
+    parser.add_argument('--plsc', metavar='plsc', action='store', dest='plsc',
+                        help='(upsampled) plate scale', type=float, default=0.0175797)
+    parser.add_argument('--sigma', metavar='sigma', action='store', dest='sigma',
+                        help='sigma level', type=float, default=5.0)
+    parser.add_argument('--nrefs', metavar='nrefs', action='store', dest='nrefs',
+                        help='number of ref pfsf', type=int, default=5)
+    parser.add_argument('--klip', metavar='klip', action='store', dest='klip',
+                        help='number of components to keep', type=int, default=1)
 
     args = parser.parse_args()
 
     path_source = args.path_source
     output_path = args.output_path
-    library_path = args.library_path
 
+    fwhm = args.fwhm
     win = args.win
+    plsc = args.plsc
+    sigma = args.sigma
+    nrefs = args.nrefs
+    klip = args.klip
+
+    psf_reference_library = fits.open(args.psf_reference_library)[0].data
+    psf_reference_library_short_names = np.genfromtxt(args.psf_reference_library_short_names, dtype='|S')
 
     # get dir name
     sou_dir = os.path.basename(os.path.normpath(path_source))
@@ -44,6 +65,7 @@ if __name__ == '__main__':
             sou_name = 'pointing'
         else:
             sou_name = '_'.join(tmp[0:-5])
+    print(sou_name)
     # filter used:
     filt = tmp[-4:-3][0]
     # date and time of obs:
@@ -56,7 +78,7 @@ if __name__ == '__main__':
 
     # run PCA
     pca(_trimmed_frame=trimmed_frame, _win=win, _sou_name=sou_name,
-        _sou_dir=sou_dir, _library_path=library_path, _out_path=output_path,
-        _filt=filt, psf_reference_library=args.psf_reference_library, 
-        psf_reference_library_short_names=args.psf_reference_library_short_names, 
-        fwhm = args.fwhm, plsc=0.0175797, sigma=5.0, _nrefs=5, _klip=1)
+        _sou_dir=sou_dir, _out_path=output_path,
+        _library=psf_reference_library,
+        _library_names_short=psf_reference_library_short_names,
+        _fwhm=fwhm, _plsc=plsc, _sigma=sigma, _nrefs=nrefs, _klip=klip)
