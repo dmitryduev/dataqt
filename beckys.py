@@ -32,13 +32,11 @@ plt.close('all')
 sns.set_context('talk')
 
 
-'''
 # detect observatiosn which are bad because of being too faint
 # 1. make a radial profile, snip out the central 3 pixels
 #    (removing the ones which are affected by photon noise)
 # 2. measure the width of the remaining flux
 # 3. check for too small a width (=> no flux) or too large a width (=> crappy performance)
-'''
 def gaussian(p, x):
     return p[0] + p[1] * (exp(-x * x / (2.0 * p[2] * p[2])))
 
@@ -64,7 +62,7 @@ def residuals(p, x, y):
     return res
 
 
-def bad_obs_check(p, return_halo = True):
+def bad_obs_check(p, return_halo=True, ps=0.0175797):
     pix_rad = []
     pix_vals = []
     core_pix_rad = []
@@ -83,7 +81,7 @@ def bad_obs_check(p, return_halo = True):
                 core_pix_vals.append(p[y][x])
 
     try:
-        if return_halo == True:
+        if return_halo:
             p0 = [0.0, np.max(pix_vals), 20.0, 2.0]
             p = fmin(residuals, p0, args=(pix_rad, pix_vals), maxiter=1000000, maxfun=1000000, ftol=1e-3,
                      xtol=1e-3, disp=False)
@@ -96,12 +94,12 @@ def bad_obs_check(p, return_halo = True):
         _halo = 0
 
     # Palomar PS = 0.021, KP PS = 0.0175797
-    _core = core_p[2] * 0.0175797
-    
-    if return_halo == True:
-        _halo = p[2] * 0.0175797
+    _core = core_p[2] * ps
+
+    if return_halo:
+        _halo = p[2] * ps
         return _core, _halo
-    if return_halo == False:
+    else:
         return _core
 
 
@@ -273,7 +271,7 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _out_path,
     cy1, cx1 = np.unravel_index(filtered_frame[0].argmax(), filtered_frame[0].shape)
     _fwhm = bad_obs_check(filtered_frame[0][cy1-30:cy1+30+1, cx1-30:cx1+30+1], return_halo=False)
 
-    # Print the resolution element size 
+    # Print the resolution element size
     print('Using resolution element size = ', _fwhm)
 
     # Center the filtered frame
@@ -494,17 +492,18 @@ if __name__ == '__main__':
 
                     # do not try to process planets:
                     if prog_num == planets_prog_num and sou_name.title() not in ('Pluto', ):
-                        continue 
+                        continue
 
                     ''' go off with processing: '''
                     # trimmed image:
                     trimmed_frame = (make_img(_path=path_sou, _win=win))
 
                     # Check of observation passes quality check:
-                    
+
                     try:
                         cy1, cx1 = np.unravel_index(trimmed_frame.argmax(), trimmed_frame.shape)
-                        core, halo = bad_obs_check(trimmed_frame[cy1-30:cy1+30+1, cx1-30:cx1+30+1])
+                        core, halo = bad_obs_check(trimmed_frame[cy1-30:cy1+30+1, cx1-30:cx1+30+1],
+                                                   ps=plate_scale)
                     except:
                         core = 0.14
                         halo = 1.0
