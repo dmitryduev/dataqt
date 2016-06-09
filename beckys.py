@@ -483,7 +483,7 @@ if __name__ == '__main__':
                     time = datetime.datetime.strptime(tmp[-2] + tmp[-1].split('.')[0], '%Y%m%d%H%M%S')
 
                     # do not try to process planets:
-                    if prog_num == planets_prog_num and sou_name.title() not in ('Pluto'):
+                    if prog_num == planets_prog_num and sou_name.title() not in ('Pluto', ):
                         continue 
 
                     ''' go off with processing: '''
