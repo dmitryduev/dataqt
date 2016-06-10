@@ -20,8 +20,8 @@ import numpy as np
 import sewpy
 from skimage import exposure  # , img_as_float
 # from skimage.transform import rescale
-import matplotlib
-matplotlib.use('Agg')
+# import matplotlib
+# matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.patches import Rectangle

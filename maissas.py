@@ -14,7 +14,11 @@ import numpy as np
 from scipy import fftpack, optimize
 from astropy.modeling import models, fitting
 from scipy.optimize import fmin
-from scipy.interpolate import RectBivariateSpline, interp1d
+from scipy.interpolate import interp1d  # , RectBivariateSpline
+import argparse
+import ConfigParser
+import ast
+import inspect
 
 
 # detect observatiosn which are bad because of being too faint
@@ -511,45 +515,81 @@ def Strehl_calculator(name, imagepath, Strehl_factor, plate_scale, boxsize, newl
 
 
 if __name__ == '__main__':
-    date = '20160404'
-    flux = 'high_flux'  # 'faint'
+    # Create parser
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
+                                     description='Becky\'s PCA pipeline')
 
-    path_pipe = '/Users/dmitryduev/_caltech/roboao/_auto_reductions/'
-    dirs = glob.glob(os.path.join(path_pipe, date, flux, '[!pointing]*_VIC_[S,l][i,r,g,z,p]*'))
-    output_dir = os.path.join('static', 'data', date, 'strehl')
+    parser.add_argument('config_file', metavar='config_file',
+                        action='store', help='path to config file.', type=str)
+    parser.add_argument('--date', metavar='date', action='store', dest='date',
+                        help='obs date', type=str)
+    # parser.add_argument('-p', '--parallel', action='store_true',
+    #                     help='run computation in parallel mode')
+
+    args = parser.parse_args()
+
+    # script absolute location
+    abs_path = os.path.dirname(inspect.getfile(inspect.currentframe()))
+
+    ''' Get config data '''
+    # load config data
+    config = ConfigParser.RawConfigParser()
+    # config.read(os.path.join(abs_path, 'config.ini'))
+    if args.config_file[0] not in ('/', '~'):
+        if os.path.isfile(os.path.join(abs_path, args.config_file)):
+            config.read(os.path.join(abs_path, args.config_file))
+            if len(config.read(os.path.join(abs_path, args.config_file))) == 0:
+                raise Exception('Failed to load config file')
+        else:
+            raise IOError('Failed to find config file')
+    else:
+        if os.path.isfile(args.config_file):
+            config.read(args.config_file)
+            if len(config.read(args.config_file)) == 0:
+                raise Exception('Failed to load config file')
+        else:
+            raise IOError('Failed to find config file')
+
+    # path to (standard) pipeline data:
+    path_pipe = config.get('Path', 'path_pipe')
+    # path to website static data:
+    path_to_website_data = config.get('Path', 'path_to_website_data')
+    # path to model PSFs:
+    path_model_psf = config.get('Path', 'path_model_psf')
+
+    # try processing today if no date provided
+    if not args.date:
+        now = datetime.datetime.now()
+        date = datetime.datetime(now.year, now.month, now.day)
+    else:
+        date = datetime.datetime.strptime(args.date, '%Y%m%d')
+    date_str = datetime.datetime.strftime(date, '%Y%m%d')
+
+    ''' go-go-go '''
+    dirs = []
+    for flux in ('high_flux', 'faint'):
+        dirs += glob.glob(os.path.join(path_pipe, date_str, flux, '[!pointing]*_VIC_[S,l][i,r,g,z,p]*'))
+
+    output_dir = os.path.join(path_to_website_data, date_str, 'strehl')
     output_dir_cuts = os.path.join(output_dir, 'tmp')
-
-    path_model_psf = '/Users/dmitryduev/_caltech/python/strehl/Strehl_calcs/SR_RESULTS/model_PSFs/'
 
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
     if not os.path.exists(output_dir_cuts):
         os.mkdir(output_dir_cuts)
 
-    # Palomar - the reduced data pixel scale: 0.043/2"/pixel
-    Pal_scale_red = 0.0215  # "/pixel
-    Pal_scale = 0.043  # "/pixel
-    Pal_scale_IR = 0.0794  # "/pixel
-
-    # Kitt Peak - the reduced data pixel scale: 0.035/2"/pixel (to be confirmed).
-    KP_scale_red = 0.0175797  # 0.0175 # "/pixel [use reduced if using reduced data that has been drizzled in process]
-    KP_scale = 0.035  # "/pixel
-
-    # Diameter of aperture (telescope):
-    D1_Pal = 1.524  # m
-    D2_Pal = 0.578  # m
-    D1_KP = 1.85  # m
-    D2_KP = 0.879  # m
+    # Select telescope by date of obs:
+    if date < datetime.datetime(2015, 9, 1):
+        telescope = 'Palomar'
+    else:
+        telescope = 'KittPeak'
+    # convert string from config into dictionary
+    telescope_data = ast.literal_eval(config.get('Strehl', telescope))
 
     # Create output file:
     output_file = open(os.path.join(output_dir, 'SR_all.dat'), 'w')
     output_file.write(
         '# Object Name, Strehl Ratio [%], Core [arcsec], Halo [arcsec],FWHM [arcsec], Magnitude, Flags, Date \n')
-
-    # Select telescope:
-    telescope = 'Pal'  # 'KP'
-    telescope = 'KP'  # 'KP'
-    IR = False
 
     # Targets to be skipped:
     skip_target = ['']
@@ -591,76 +631,85 @@ if __name__ == '__main__':
     count_seeing = 0
     for d in dirs:
 
-        img_name = os.path.basename(d)
+        try:
+            img_name = os.path.basename(d)
 
-        if img_name in previous_target or img_name in skip_target:
-            continue
-
-        elif img_name[:6] == 'seeing':
-            count_seeing += 1
-            countseeingline = 'Skipped seeing: ' + str(count_seeing) + ' images\n'
-            ReplaceText(output_dir + 'Time_log.txt', 'Skipped seeing: ', countseeingline)
-
-        elif '100p.fits' in os.listdir(d):
-            print("*****************************")
-
-            print(img_name)
-
-            # procedure to identify filter used (i-band, g-band, etc?)
-            if '_Si_' in img_name:
-                band = 'iband'
-            elif '_Sg_' in img_name:
-                band = 'gband'
-            elif '_Sr_' in img_name:
-                band = 'rband'
-            elif '_Sz_' in img_name:
-                band = 'zband'
-            elif '_lp600_' in img_name:
-                band = 'lp600'
-            else:
-                print('Unable to guess filter')
+            if img_name in previous_target or img_name in skip_target:
                 continue
 
-            # selecting correct Strehl factor and plate scale
-            if telescope == 'KP':
-                plate_scale = KP_scale_red
-                Strehl_factor = Strehlf[band]
-            elif telescope == 'Pal':
-                plate_scale = Pal_scale_red
-                Strehl_factor = Strehlf[band + '_' + telescope]
-                if IR:
-                    plate_scale = Pal_scale_IR
-                    Strehl_factor = Strehlf[band + '_' + telescope]
+            elif img_name[:6] == 'seeing':
+                count_seeing += 1
+                countseeingline = 'Skipped seeing: ' + str(count_seeing) + ' images\n'
+                ReplaceText(output_dir + 'Time_log.txt', 'Skipped seeing: ', countseeingline)
 
-            img_path = cutout(d, output_dir_cuts)
+            elif '100p.fits' in os.listdir(d):
+                print("*****************************")
 
-            if img_path == 'Problem':
-                # time_log.write(img_name + ' max x and/or y = 0 in cutout\n')
-                continue
+                print(img_name)
 
-            else:
-                try:
-                    img = pyfits.open(img_path)[0].data
-                    core, halo = bad_obs_check(img, ps=plate_scale)
-                except:
-                    core = 0.139
-                    halo = 1.1
-                if core >= 0.14 and halo <= 1.0:
-                    flag = 'OK'
+                # procedure to identify filter used (i-band, g-band, etc?)
+                if '_Si_' in img_name:
+                    band = 'iband'
+                elif '_Sg_' in img_name:
+                    band = 'gband'
+                elif '_Sr_' in img_name:
+                    band = 'rband'
+                elif '_Sz_' in img_name:
+                    band = 'zband'
+                elif '_lp600_' in img_name:
+                    band = 'lp600'
                 else:
-                    flag = 'BAD?'
+                    print('Unable to guess filter')
+                    continue
 
-                boxsize = int(round(3. / plate_scale))
-                SR, FWHM, mag = Strehl_calculator(img_name, img_path, Strehl_factor[0], plate_scale, boxsize,
-                                                  newloc=output_dir, saveimage=False, save=False)
+                # selecting correct Strehl factor and plate scale
+                if '_VIC_' in img_name:  # visual camera?
+                    # drizzled?
+                    if pyfits.open(os.path.join(d, '100p.fits'))[0].data.shape[0] == 2048:
+                        plate_scale = telescope_data['scale_red']
+                    else:
+                        plate_scale = telescope_data['scale']
+                else:  # IR camera?
+                    plate_scale = telescope_data['scale_IR']
 
-                output_file.write(
-                    img_name + '    ' + str(SR * 100) + '    ' + str(core) + '    ' + str(halo) + '    ' + str(
-                        FWHM) + '    ' + str(mag) + '    ' + flag + '    ' + date + ' \n')
+                if telescope == 'KittPeak':
+                    Strehl_factor = Strehlf[band]
+                elif telescope == 'Palomar':
+                    Strehl_factor = Strehlf[band + '_Pal']
 
-                os.remove(img_path)
+                img_path = cutout(d, output_dir_cuts)
 
-        else:
+                if img_path == 'Problem':
+                    # time_log.write(img_name + ' max x and/or y = 0 in cutout\n')
+                    continue
+
+                else:
+                    try:
+                        img = pyfits.open(img_path)[0].data
+                        core, halo = bad_obs_check(img, ps=plate_scale)
+                    except:
+                        core = 0.139
+                        halo = 1.1
+                    if core >= 0.14 and halo <= 1.0:
+                        flag = 'OK'
+                    else:
+                        flag = 'BAD?'
+
+                    boxsize = int(round(3. / plate_scale))
+                    SR, FWHM, mag = Strehl_calculator(img_name, img_path, Strehl_factor[0], plate_scale, boxsize,
+                                                      newloc=output_dir, saveimage=False, save=False)
+
+                    output_entry = '{:70s} {:8.5f} {:16.13f} {:16.13f} {:16.13f}  {:6.3f} {:s} {:s}\n'.\
+                        format(img_name, SR * 100, core, halo, FWHM, mag, flag, date_str)
+                    output_file.write(output_entry)
+
+                    # remove tmp file:
+                    os.remove(img_path)
+
+            else:
+                continue
+        except Exception as e:
+            print(e)
             continue
 
     output_file.close()
