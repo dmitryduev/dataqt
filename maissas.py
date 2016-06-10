@@ -101,7 +101,7 @@ def make_circle(radius, central_obstruction, posx=512 / 2, posy=512 / 2, size=51
 
     if image:
         hdu = pyfits.PrimaryHDU(detector)
-        hdu.writeto(loc + 'circle.fits', clobber=True)
+        hdu.writeto(os.path.join(loc, 'circle.fits'), clobber=True)
 
     return detector
 
@@ -116,19 +116,19 @@ def make_gaussian(width, posx=512 / 2, posy=512 / 2, size=512, image=False, loc=
         """
     detector = np.zeros((size, size))
 
-    def gaussian(x):
-        gauss = np.e ** (-x ** 2 / (2. * width ** 2))
-        return gauss
+    def _gaussian(x):
+        __gauss = np.e ** (-x ** 2 / (2. * width ** 2))
+        return __gauss
 
     for i in range(size):
         for j in range(size):
             dist = np.sqrt((i - posx) ** 2 + (j - posy) ** 2)
-            gauss = gaussian(dist)
-            detector[j, i] = gauss
+            _gauss = _gaussian(dist)
+            detector[j, i] = _gauss
 
     if image:
         hdu = pyfits.PrimaryHDU(detector)
-        hdu.writeto(loc + 'gaussian.fits', clobber=True)
+        hdu.writeto(os.path.join(loc, 'gaussian.fits'), clobber=True)
 
     return detector
 
@@ -140,14 +140,14 @@ def make_PSF(filled_circle, image=False, loc=None):
 
     if image:
         hdu = pyfits.PrimaryHDU(oversampled_PSF)
-        hdu.writeto(loc + 'FT_circle.fits', clobber=True)
-        np.savez(loc + 'FT_circle.npz', PSF=oversampled_PSF)
+        hdu.writeto(os.path.join(loc, 'FT_circle.fits'), clobber=True)
+        np.savez(os.path.join(loc, 'FT_circle.npz'), PSF=oversampled_PSF)
 
     return oversampled_PSF
 
 
 def calc_fwhm(array):
-    def gaussian(height, center_x, center_y, width_x, width_y):
+    def _gaussian(height, center_x, center_y, width_x, width_y):
         """Returns a gaussian function with the given parameters"""
         width_x = float(width_x)
         width_y = float(width_y)
@@ -171,9 +171,9 @@ def calc_fwhm(array):
     def fitgaussian(data):
         """Returns (height, x, y, width_x, width_y)
         the gaussian parameters of a 2D distribution found by a fit"""
-        params = moments(data)
-        errorfunction = lambda p: np.ravel(gaussian(*p)(*np.indices(data.shape)) - data)
-        p, success = optimize.leastsq(errorfunction, params)
+        _params = moments(data)
+        errorfunction = lambda p: np.ravel(_gaussian(*p)(*np.indices(data.shape)) - data)
+        p, success = optimize.leastsq(errorfunction, _params)
         return p
 
     params = fitgaussian(array)
@@ -256,7 +256,7 @@ def makebox(array, halfwidth, peak1, peak2):
 
     box = array[boxside1a:boxside1b, boxside2a:boxside2b]
     box_fraction = np.sum(box) / np.sum(array)
-    print("box has: ", box_fraction * 100, "% of light")
+    print('box has: {:.2f}% of light'.format(box_fraction * 100))
 
     return box, box_fraction
 
@@ -281,11 +281,11 @@ def ReplaceText(filename, SearchLine, ReplaceLine):
         lines = []
         heres = []
         i = -1
-        for l in f:
+        for _l in f:
             i += 1
-            lines.append(l)
+            lines.append(_l)
             ind = len(SearchLine)
-            find = np.where(l[:ind] == SearchLine)  # [:23]
+            find = np.where(_l[:ind] == SearchLine)  # [:23]
             if find[0] == [0]:
                 here = i
             else:
@@ -311,12 +311,11 @@ def ReplaceText(filename, SearchLine, ReplaceLine):
     return textreturn
 
 
-def cutout(d, output_dir):
+def cutout(_d, _output_dir):
     pix = 256
     scale = 2
 
-    img_name = d + "/100p.fits"
-    print(img_name)
+    _img_name = os.path.join(_d, '100p.fits')
 
     # load the pipeline settings to get the guide star posn
     gs_region_next = False
@@ -324,29 +323,31 @@ def cutout(d, output_dir):
     targ_x = 0
     targ_y = 0
 
-    for l in open(img_name.rsplit("/", 1)[0] + "/pipeline_settings.txt", "r"):
-        if len(l.strip()) > 0 and l[0] != '#':
-            if l.find("[Strehls]") == 0:
-                gs_region_next = True
-            else:
-                if gs_region_next:
-                    x1, y1, x2, y2 = l.split()[2].replace("(", "").replace(")", "").split(",")
-                    targ_x = (int(x1) + int(x2)) / 2
-                    targ_y = (int(y1) + int(y2)) / 2
-                    gs_region_next = False
+    with open(os.path.join(os.path.split(_img_name)[0], 'pipeline_settings.txt'), 'r') as _f:
+        f_lines = _f.readlines()
+    f_lines = [_l for _l in f_lines if len(_l.strip()) > 0 and _l[0] != '#']
+    for _l in f_lines:
+        if _l.find("[Strehls]") == 0:
+            gs_region_next = True
+        else:
+            if gs_region_next:
+                x1, y1, x2, y2 = _l.split()[2].replace("(", "").replace(")", "").split(",")
+                targ_x = (int(x1) + int(x2)) / 2
+                targ_y = (int(y1) + int(y2)) / 2
+                gs_region_next = False
 
     print(targ_x, targ_y)
 
     targ_x *= scale
     targ_y *= scale
 
-    inf = pyfits.open(img_name)[0].data
+    inf = pyfits.open(_img_name)[0].data
     # gain = pyfits.open(img_name)[0].header['AO_GAIN']
-    header_check = 'MAGNITUD' in pyfits.open(img_name)[0].header.keys()
+    header_check = 'MAGNITUD' in pyfits.open(_img_name)[0].header.keys()
     if header_check:
-        mag = pyfits.open(img_name)[0].header['MAGNITUD']
+        _mag = pyfits.open(_img_name)[0].header['MAGNITUD']
     else:
-        mag = '?'
+        _mag = '?'
 
     # center in aperture
     maxv = 0.0
@@ -377,11 +378,11 @@ def cutout(d, output_dir):
                 if 0 <= x < inf.shape[1] and 0 <= y < inf.shape[0]:
                     out_img[y - max_y + pix / 2, x - max_x + pix / 2] = inf[y, x]
 
-        out_img_fn = output_dir + d.split('/')[-1] + ".fits"
+        out_img_fn = os.path.join(_output_dir, os.path.basename(_d) + '.fits')
         print(out_img_fn)
         img_file = pyfits.PrimaryHDU(out_img)
         # img_file.header['AO_GAIN'] = gain
-        img_file.header['MAGNITUD'] = mag
+        img_file.header['MAGNITUD'] = _mag
         img_file.writeto(out_img_fn, clobber=True)
 
     return out_img_fn
@@ -411,6 +412,9 @@ def Strehl_calculator(name, imagepath, Strehl_factor, plate_scale, boxsize, newl
         saveout = sys.stdout
         output = open(newloc + name + '_Strehl_info.txt', 'a')
         sys.stdout = output
+    else:
+        saveout = None
+        output = None
 
     print('-------- Real Image --------')
 
@@ -461,7 +465,7 @@ def Strehl_calculator(name, imagepath, Strehl_factor, plate_scale, boxsize, newl
     # print "normalized peak", image_norm_peak_check, "(check)"
 
     #####################################################
-    ############## CALCULATE STREHL RATIO ###############
+    # ############# CALCULATE STREHL RATIO ###############
     #####################################################
     Strehl_ratio = image_norm_peak / Strehl_factor
     print('\n----------------------------------')
@@ -578,10 +582,10 @@ if __name__ == '__main__':
     #         continue
 
     # Create time log:
-    time_log = open(os.path.join(output_dir, 'Time_log.txt'), 'a')
-    time_log.write('-----------------------------------------\n')
-    time_log.write(telescope + ' data (' + str(len(previous_target)) + ' done out of ' + str(len(dirs)) + ')\n')
-    time_log.write('Start: ' + str(datetime.datetime.now()) + ', Pacific Time\n')
+    # time_log = open(os.path.join(output_dir, 'Time_log.txt'), 'a')
+    # time_log.write('-----------------------------------------\n')
+    # time_log.write(telescope + ' data (' + str(len(previous_target)) + ' done out of ' + str(len(dirs)) + ')\n')
+    # time_log.write('Start: ' + str(datetime.datetime.now()) + ', Pacific Time\n')
 
     # Running through all the desired directories:
     count_seeing = 0
@@ -631,7 +635,8 @@ if __name__ == '__main__':
             img_path = cutout(d, output_dir_cuts)
 
             if img_path == 'Problem':
-                time_log.write(img_name + ' max x and/or y = 0 in cutout\n')
+                # time_log.write(img_name + ' max x and/or y = 0 in cutout\n')
+                continue
 
             else:
                 try:
@@ -659,5 +664,5 @@ if __name__ == '__main__':
             continue
 
     output_file.close()
-    time_log.write('Finish: ' + str(datetime.datetime.now()) + ', Pacific Time\n')
-    time_log.close()
+    # time_log.write('Finish: ' + str(datetime.datetime.now()) + ', Pacific Time\n')
+    # time_log.close()
