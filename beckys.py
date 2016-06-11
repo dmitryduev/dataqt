@@ -349,7 +349,7 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _out_path,
     # draw a horizontal bar with length of 0.1*x_size
     # (ax.transData) with a label underneath.
     bar_len = pca_frame.shape[0] * 0.1
-    bar_len_str = '{:.1f}'.format(bar_len * 34.5858 / 1024 / 2)
+    bar_len_str = '{:.1f}'.format(bar_len * 36 / 1024 / 2)
     asb = AnchoredSizeBar(ax.transData,
                           bar_len,
                           bar_len_str[0] + r"$^{\prime\prime}\!\!\!.$" + bar_len_str[-1],

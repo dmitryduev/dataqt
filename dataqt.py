@@ -18,7 +18,9 @@ import datetime
 from collections import OrderedDict
 import numpy as np
 import sewpy
-from skimage import exposure  # , img_as_float
+from skimage import exposure, img_as_float
+from skimage.morphology import disk
+from skimage.filters import rank
 # from skimage.transform import rescale
 # import matplotlib
 # matplotlib.use('Agg')
@@ -93,7 +95,8 @@ class AnchoredSizeBar(AnchoredOffsetbox):
 
 
 def make_img(_sou_name, _time, _filter, _prog_num, _camera, _marker,
-             _path_sou, _path_data, pipe_out_type, _program_num_planets=24):
+             _path_sou, _path_data, pipe_out_type, _program_num_planets=24,
+             _sr='none'):
     """
 
     :param _sou_name:
@@ -106,6 +109,7 @@ def make_img(_sou_name, _time, _filter, _prog_num, _camera, _marker,
     :param _path_data:
     :param pipe_out_type: 'high_flux' or 'faint'
     :param _program_num_planets:
+    :param _sr:
     :return:
     """
     # read, process and display fits:
@@ -164,12 +168,18 @@ def make_img(_sou_name, _time, _filter, _prog_num, _camera, _marker,
     mask = scidata <= 0
     scidata[mask] = 0
     scidata = np.uint16(scidata/norm*65535)
-    # logarithmic_corrected = exposure.adjust_log(img_as_float(scidata/norm) + 1, 1)
+    # logarithmic_corrected = exposure.adjust_log(scidata, 1)
     # print(np.min(np.min(scidata)), np.max(np.max(scidata)))
 
     # scidata_corrected = exposure.equalize_adapthist(scidata, clip_limit=0.03)
-    p_1, p_2 = np.percentile(scidata, (10, 100))
+    p_1, p_2 = np.percentile(scidata, (8, 100))
     scidata_corrected = exposure.rescale_intensity(scidata, in_range=(p_1, p_2))
+    # scidata_corrected = logarithmic_corrected
+
+    # Equalization
+    # selem = disk(30)
+    # scidata_corrected = rank.equalize(scidata, selem=selem)
+    scidata_corrected = exposure.equalize_adapthist(scidata, clip_limit=0.03)
 
     ''' plot full image '''
     fig = plt.figure(_sou_name+'__full')
@@ -177,11 +187,11 @@ def make_img(_sou_name, _time, _filter, _prog_num, _camera, _marker,
     ax = plt.Axes(fig, [0., 0., 1., 1.])
     ax.set_axis_off()
     fig.add_axes(ax)
+    # plot detected objects:
+    # ax.plot(out['table']['X_IMAGE']-1, out['table']['Y_IMAGE']-1, 'o',
+    #         markeredgewidth=1, markerfacecolor='None', markeredgecolor=plt.cm.Oranges(0.8))
     # ax.imshow(scidata, cmap='gray', origin='lower', interpolation='nearest')
     ax.imshow(scidata_corrected, cmap='gray', origin='lower', interpolation='nearest')
-    # plot detected objects:
-    # ax.plot(out['table']['X_IMAGE']-1, out['table']['Y_IMAGE']-1, 'o', markersize=4,
-    #          c=plt.cm.Blues(0.8))
     # ax.imshow(scidata, cmap='gist_heat', origin='lower', interpolation='nearest')
     # plt.axis('off')
     plt.grid('off')
@@ -216,12 +226,24 @@ def make_img(_sou_name, _time, _filter, _prog_num, _camera, _marker,
     # draw a horizontal bar with length of 0.1*x_size
     # (ax.transData) with a label underneath.
     bar_len = scidata_corrected_cropped.shape[0]*0.1
-    bar_len_str = '{:.1f}'.format(bar_len*34.5858/1024/2)
+    bar_len_str = '{:.1f}'.format(bar_len*36/1024/2)
     asb = AnchoredSizeBar(ax.transData,
                           bar_len,
                           bar_len_str[0] + r"$^{\prime\prime}\!\!\!.$" + bar_len_str[-1],
                           loc=4, pad=0.3, borderpad=0.5, sep=10, frameon=False)
     ax.add_artist(asb)
+    # add Strehl ratio
+    if _sr != 'none':
+        asb2 = AnchoredSizeBar(ax.transData,
+                               0,
+                               'Strehl: {:.2f}%'.format(float(_sr)),
+                               loc=2, pad=0.3, borderpad=0.4, sep=5, frameon=False)
+        ax.add_artist(asb2)
+        # asb3 = AnchoredSizeBar(ax.transData,
+        #                        0,
+        #                        'SR: {:.2f}%'.format(float(_sr)),
+        #                        loc=3, pad=0.3, borderpad=0.5, sep=10, frameon=False)
+        # ax.add_artist(asb3)
 
     # save cropped figure
     fname_cropped = '{:d}_{:s}_{:s}_{:s}_{:s}_{:s}_cropped.png'.format(_prog_num, _sou_name, _camera, _filter,
@@ -302,9 +324,81 @@ if __name__ == '__main__':
         if not os.path.exists(path_data):
             os.mkdir(path_data)
 
-        # contrast curves in txt format
+        ''' make nightly joint Strehl ratio plot '''
+        # store source data
+        SR = OrderedDict()
+        path_strehl = os.path.join(path_to_website_data, date_str, 'strehl')
+        # check if exists and parse SR_{date_str}_all.dat
+        if os.path.isfile(os.path.join(path_strehl, 'SR_{:s}_all.dat'.format(date_str))):
+            print('Generating Strehl plot for {:s}'.format(date_str))
+            with open(os.path.join(path_strehl, 'SR_{:s}_all.dat'.format(date_str)), 'r') as f:
+                f_lines = f.readlines()
+
+            f_lines = [l.split() for l in f_lines if l[0] != '#']
+
+            if len(f_lines) > 0:
+
+                for line in f_lines:
+                    tmp = line[0].split('_')
+                    time = datetime.datetime.strptime(tmp[-2] + tmp[-1], '%Y%m%d%H%M%S.%f')
+                    SR[line[0]] = [time] + line[1:]
+
+                SR_good = np.array([(v[0], float(v[1])) for k, v in SR.iteritems() if v[-2] == 'OK'])
+                SR_notgood = np.array([(v[0], float(v[1])) for k, v in SR.iteritems() if v[-2] != 'OK'])
+
+            if len(SR_good) > 0 or len(SR_notgood) > 0:
+                fig = plt.figure('Strehls for {:s}'.format(date_str), figsize=(7, 3.18), dpi=200)
+                ax = fig.add_subplot(111)
+
+                if len(SR_good) > 0:
+                    # sort by time stamps:
+                    SR_good = SR_good[SR_good[:, 0].argsort()]
+                    good = True
+                    SR_mean = np.mean(SR_good[:, 1])
+                    SR_std = np.std(SR_good[:, 1])
+                    SR_max = np.max(SR_good[:, 1])
+                    SR_min = np.min(SR_good[:, 1])
+
+                    ax.plot(SR_good[:, 0], SR_good[:, 1], 'o', color=plt.cm.Oranges(0.6), markersize=6)
+
+                    ax.axhline(y=SR_mean, linestyle='-', color='teal', linewidth=1,
+                               label='mean = ' + str(round(SR_mean, 2)) + '%')
+                    ax.axhline(y=SR_mean + SR_std, linestyle='--', color='teal', linewidth=1,
+                               label=r'$\sigma _{SR}$ = ' + str(round(SR_std, 2)) + '%')
+                    ax.axhline(y=SR_mean - SR_std, linestyle='--', color='teal', linewidth=1)
+
+                if len(SR_notgood) > 0:
+                    SR_notgood = SR_notgood[SR_notgood[:, 0].argsort()]
+                    ax.plot(SR_notgood[:, 0], SR_notgood[:, 1], 'o', color=plt.cm.Greys(0.6), markersize=6)
+
+                # ax.set_xlabel('Time, UTC')
+                # xstart = np.min([SR_notgood[0, 0], SR_good[0, 0]]) - datetime.timedelta(minutes=15)
+                # xstop = np.max([SR_notgood[-1, 0], SR_good[-1, 0]]) + datetime.timedelta(minutes=15)
+                # ax.set_xlim([xstart, xstop])
+                ax.set_ylabel('Strehl Ratio, %')
+                # ax.legend(bbox_to_anchor=(1.35, 1), ncol=1, numpoints=1, fancybox=True)
+                ax.legend(loc='best', numpoints=1, fancybox=True)
+                ax.grid(linewidth=0.5)
+                ax.margins(0.05, 0.2)
+
+                myFmt = mdates.DateFormatter('%H:%M')
+                ax.xaxis.set_major_formatter(myFmt)
+                fig.autofmt_xdate()
+
+                plt.tight_layout()
+                # fig.subplots_adjust(right=0.75)
+
+                fig.savefig(os.path.join(path_strehl, 'SR_{:s}_all.png'.format(date_str)), dpi=200)
+
+                # save in json
+                source_data['strehls'] = True
+            else:
+                source_data['strehls'] = False
+
+        # contrast curves in txt format:
         ccs = []
 
+        print('Generating images for {:s}'.format(date_str))
         for pot in source_data.keys():
             if os.path.exists(os.path.join(path_pipe, date_str, pot)):
                 print(pot.replace('_', ' ').title())
@@ -360,11 +454,28 @@ if __name__ == '__main__':
                     else:
                         cc = 'none'
 
+                    # Strehl ratio:
+                    if sou_dir in SR:
+                        sr = SR[sou_dir][1]
+                        core = SR[sou_dir][2]
+                        halo = SR[sou_dir][3]
+                        fwhm = SR[sou_dir][4]
+                        sr_flag = SR[sou_dir][5]
+                    else:
+                        sr = 'none'
+                        core = 'none'
+                        halo = 'none'
+                        fwhm = 'none'
+                        sr_flag = 'none'
+
                     # store
                     source = OrderedDict((('prog_num', prog_num), ('sou_name', sou_name),
                                           ('filter', filt),
                                           ('time', datetime.datetime.strftime(time, '%Y%m%d_%H%M%S.%f')),
-                                          ('camera', camera), ('marker', marker), ('contrast_curve', cc)))
+                                          ('camera', camera), ('marker', marker),
+                                          ('contrast_curve', cc),
+                                          ('strehl_ratio', sr), ('core', core), ('halo', halo),
+                                          ('fwhm', fwhm), ('sr_flag', sr_flag)))
                     print(dict(source))
 
                     if pot not in ('zero_flux', 'failed'):
@@ -372,7 +483,7 @@ if __name__ == '__main__':
                             header = make_img(_sou_name=sou_name, _time=time, _filter=filt, _prog_num=prog_num,
                                               _camera=camera, _marker=marker,
                                               _path_sou=path_sou, _path_data=path_data, pipe_out_type=pot,
-                                              _program_num_planets=program_num_planets)
+                                              _program_num_planets=program_num_planets, _sr=sr)
                             # dump header
                             source['header'] = header
                         except IOError:
@@ -381,7 +492,7 @@ if __name__ == '__main__':
                     # put into the basket
                     source_data[pot].append(source)
 
-        # make nightly joint contrast curve plot
+        ''' make nightly joint contrast curve plot '''
         if len(ccs) > 0:
             print('Generating contrast curve summary for {:s}'.format(date_str))
             contrast_curves = []
@@ -418,7 +529,7 @@ if __name__ == '__main__':
         else:
             source_data['contrast_curve'] = False
 
-        # compute dead times
+        ''' compute dead times '''
         path_data_deadtimes = os.path.join(path_to_website_data, date_str, 'dead_times')
         if not os.path.exists(path_data_deadtimes):
             os.mkdir(path_data_deadtimes)
@@ -478,10 +589,10 @@ if __name__ == '__main__':
         # ax.set_title('2.1m vs 4m, WIYN, and 0.9m data from the nightly reports')
         # ax.plot(seeing_plot[:, 0], seeing_plot[:, 1], '-',
         #         c=plt.cm.Blues(0.82), linewidth=1.2, label='2.1m')
-        ax.plot(seeing_plot[:, 0], seeing_plot[:, 1], '--',
-                c=plt.cm.Blues(0.82), linewidth=0.9, label='2.1m')
+        # ax.plot(seeing_plot[:, 0], seeing_plot[:, 1], '--',
+        #         c=plt.cm.Blues(0.82), linewidth=0.9, label='2.1m')
         ax.plot(seeing_plot[:, 0], seeing_plot[:, 1], '.',
-                c=plt.cm.Oranges(0.82), markersize=10)
+                c=plt.cm.Oranges(0.82), markersize=10, label='2.1m')
         # ax.set_ylim([0, 3])
         ax.grid(linewidth=0.5)
 

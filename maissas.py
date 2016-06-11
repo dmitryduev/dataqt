@@ -587,7 +587,7 @@ if __name__ == '__main__':
     telescope_data = ast.literal_eval(config.get('Strehl', telescope))
 
     # Create output file:
-    output_file = open(os.path.join(output_dir, 'SR_all.dat'), 'w')
+    output_file = open(os.path.join(output_dir, 'SR_{:s}_all.dat'.format(date_str)), 'w')
     output_file.write(
         '# Object Name, Strehl Ratio [%], Core [arcsec], Halo [arcsec],FWHM [arcsec], Magnitude, Flags, Date \n')
 
@@ -609,7 +609,7 @@ if __name__ == '__main__':
 
     # Targets already calculated:
     previous_target = []
-    for l in open(os.path.join(output_dir, 'SR_all.dat'), 'r'):
+    for l in open(os.path.join(output_dir, 'SR_{:s}_all.dat'.format(date_str)), 'r'):
         if l[0] != '#':
             previous_target.append(l.split('    ')[0])
         else:
