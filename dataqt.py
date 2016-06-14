@@ -172,17 +172,19 @@ def make_img(_sou_name, _time, _filter, _prog_num, _camera, _marker,
     scidata[mask] = 0
     scidata = np.uint16(scidata/norm*65535)
     # logarithmic_corrected = exposure.adjust_log(scidata, 1)
+    # scidata_corrected = logarithmic_corrected
     # print(np.min(np.min(scidata)), np.max(np.max(scidata)))
 
-    # scidata_corrected = exposure.equalize_adapthist(scidata, clip_limit=0.03)
-    p_1, p_2 = np.percentile(scidata, (8, 100))
-    scidata_corrected = exposure.rescale_intensity(scidata, in_range=(p_1, p_2))
-    # scidata_corrected = logarithmic_corrected
-
-    # Equalization
-    # selem = disk(30)
-    # scidata_corrected = rank.equalize(scidata, selem=selem)
-    scidata_corrected = exposure.equalize_adapthist(scidata, clip_limit=0.03)
+    # don't do histogram equalization for planets:
+    if _sou_name.lower() in ('mars', 'venus', 'jupiter', 'saturn'):
+        p_1, p_2 = np.percentile(scidata, (8, 100))
+        scidata_corrected = exposure.rescale_intensity(scidata, in_range=(p_1, p_2))
+    #
+    else:
+        # Equalization
+        # selem = disk(30)
+        # scidata_corrected = rank.equalize(scidata, selem=selem)
+        scidata_corrected = exposure.equalize_adapthist(scidata, clip_limit=0.03)
 
     ''' plot full image '''
     fig = plt.figure(_sou_name+'__full')

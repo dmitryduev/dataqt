@@ -333,9 +333,13 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _out_path,
     # logarithmic_corrected = exposure.adjust_log(img_as_float(scidata/norm) + 1, 1)
     # print(np.min(np.min(scidata)), np.max(np.max(scidata)))
 
+    # add more contrast to the image:
     # scidata_corrected = exposure.equalize_adapthist(scidata, clip_limit=0.03)
     p_1, p_2 = np.percentile(scidata, (5, 100))
-    scidata_corrected = exposure.rescale_intensity(scidata, in_range=(p_1, p_2))
+    # scidata_corrected = exposure.rescale_intensity(scidata, in_range=(p_1, p_2))
+
+    # perform local histogram equalization instead:
+    scidata_corrected = exposure.equalize_adapthist(scidata, clip_limit=0.03)
 
     plt.close('all')
     fig = plt.figure(_sou_dir)
@@ -508,7 +512,7 @@ if __name__ == '__main__':
                         core = 0.14
                         halo = 1.0
                         continue
-                    if core > 0.14 and halo < 1.0:
+                    if core > 0.14e-10 and halo < 1.0e10:
                         # run PCA
                         args_pca.append([trimmed_frame, win, sou_name, sou_dir, os.path.join(path_data, pot),
                                          psf_reference_library, psf_reference_library_short_names,
