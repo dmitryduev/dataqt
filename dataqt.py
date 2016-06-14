@@ -1,9 +1,9 @@
 """
-    Data quality monitoring for Robo-AO
+    Data Quality Monitoring for Robo-AO
 
     Generates stuff to be displayed on the DQM web-site
 
-    DAD, RMJC @ Caltech, 2016
+    DAD (Caltech), RMJC (Caltech), MS (UH) 2016
 """
 from __future__ import print_function
 from dead_times import dead_times
@@ -17,6 +17,9 @@ import shutil
 import datetime
 from collections import OrderedDict
 import numpy as np
+from sklearn import linear_model
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.pipeline import make_pipeline
 import sewpy
 from skimage import exposure, img_as_float
 from skimage.morphology import disk
@@ -582,6 +585,17 @@ if __name__ == '__main__':
         seeing_plot = np.array([[datetime.datetime.strptime(t, '%Y-%m-%d %H:%M:%S'), float(s)]
                                 for t, s in seeing_plot])
 
+        # make a robust fit to seeing data for visual reference
+        t_seeing_plot = np.array([(t-seeing_plot[0, 0]).total_seconds() for t in seeing_plot[:, 0]])
+        t_seeing_plot = np.expand_dims(t_seeing_plot, axis=1)
+
+        # estimators = [('OLS', linear_model.LinearRegression()),
+        #               ('Theil-Sen', linear_model.TheilSenRegressor(random_state=42)),
+        #               ('RANSAC', linear_model.RANSACRegressor(random_state=42)), ]
+        # estimators = [('OLS', linear_model.LinearRegression()),
+        #               ('RANSAC', linear_model.RANSACRegressor()), ]
+        estimators = [('RANSAC', linear_model.RANSACRegressor()), ]
+
         fig = plt.figure('Seeing data', figsize=(8, 3), dpi=200)
         ax = fig.add_subplot(111)
         # ax = plt.Axes(fig, [0.1, 0.2, 0.8, 0.8])
@@ -592,9 +606,17 @@ if __name__ == '__main__':
         # ax.plot(seeing_plot[:, 0], seeing_plot[:, 1], '--',
         #         c=plt.cm.Blues(0.82), linewidth=0.9, label='2.1m')
         ax.plot(seeing_plot[:, 0], seeing_plot[:, 1], '.',
-                c=plt.cm.Oranges(0.82), markersize=10, label='2.1m')
+                c=plt.cm.Oranges(0.82), markersize=10)  #, label='2.1m seeing measurements')
         # ax.set_ylim([0, 3])
         ax.grid(linewidth=0.5)
+
+        # evaluate estimators
+        for name, estimator in estimators:
+            model = make_pipeline(PolynomialFeatures(degree=5), estimator)
+            model.fit(t_seeing_plot, seeing_plot[:, 1])
+            y_plot = model.predict(t_seeing_plot)
+            ax.plot(seeing_plot[:, 0], y_plot, '--', label='Robust {:s} fit'.format(name))
+        ax.legend(loc='best')
 
         myFmt = mdates.DateFormatter('%H:%M')
         ax.xaxis.set_major_formatter(myFmt)

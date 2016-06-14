@@ -1,3 +1,9 @@
+"""
+    Flask-based server fro the Robo-AO DQM service
+
+    Dmitry A. Duev @ Caltech, 2016
+"""
+
 from __future__ import print_function
 import os
 import json
@@ -105,6 +111,7 @@ def show_date(date):
                 seeing = OrderedDict(seeing)
         else:
             seeing = False
+
         return render_template('template.html', date=str(date), data=data, seeing=seeing,
                                date_m1=date_m1, date_p1=date_p1)
 
