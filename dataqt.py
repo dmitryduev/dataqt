@@ -613,12 +613,16 @@ if __name__ == '__main__':
         ax.grid(linewidth=0.5)
 
         # evaluate estimators
-        for name, estimator in estimators:
-            model = make_pipeline(PolynomialFeatures(degree=5), estimator)
-            model.fit(t_seeing_plot, seeing_plot[:, 1])
-            y_plot = model.predict(t_seeing_plot)
-            ax.plot(seeing_plot[:, 0], y_plot, '--', label='Robust {:s} fit'.format(name))
-        ax.legend(loc='best')
+        try:
+            for name, estimator in estimators:
+                model = make_pipeline(PolynomialFeatures(degree=5), estimator)
+                model.fit(t_seeing_plot, seeing_plot[:, 1])
+                y_plot = model.predict(t_seeing_plot)
+                ax.plot(seeing_plot[:, 0], y_plot, '--', label='Robust {:s} fit'.format(name))
+            ax.legend(loc='best')
+        except Exception as e:
+            print(e)
+            pass
 
         myFmt = mdates.DateFormatter('%H:%M')
         ax.xaxis.set_major_formatter(myFmt)
