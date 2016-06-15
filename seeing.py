@@ -14,6 +14,8 @@ import functools
 import subprocess
 import multiprocessing
 import datetime
+import inspect
+import ConfigParser
 
 # Force matplotlib to not use any Xwindows backend.
 import matplotlib
@@ -466,144 +468,132 @@ def calc_seeing(f_in, model='Gaussian2D', out_path='./', pipe_path=None):
 
 def process_date(_args):
     _path, _seeing_imgs = _args
-    for seeing_img in _seeing_imgs:
+    for _seeing_img in _seeing_imgs:
         # print(_path, seeing_img)
         # call(['gtar', '-jxvf', '{:s}'.format(os.path.join(_path, seeing_img))])
-        print('unbzipping {:s}'.format(seeing_img))
-        p1 = subprocess.Popen(['bzip2', '-dk', '{:s}'.format(os.path.join(_path, seeing_img))])
+        print('unbzipping {:s}'.format(_seeing_img))
+        p1 = subprocess.Popen(['bzip2', '-dk', '{:s}'.format(os.path.join(_path, _seeing_img))])
         p1.wait()
-        unbzipped = os.path.splitext(seeing_img)[0]
-        unbzipped_base = unbzipped
-        # print(unbzipped)
+        _unbzipped = os.path.splitext(_seeing_img)[0]
+        _unbzipped_base = _unbzipped
+        # print(_unbzipped)
         # get time stamp
-        underscores = [i for i, c in enumerate(unbzipped) if c == '_']
-        dots = [i for i, c in enumerate(unbzipped) if c == '.']
-        date_str = unbzipped[underscores[-2]+1:dots[-2]]
-        t_stamp = datetime.datetime.strptime(date_str, '%Y%m%d_%H%M%S')
-        # print(t_stamp)
-        unbzipped = '{:s}'.format(os.path.join(_path, unbzipped))
-        # print(unbzipped)
-        p2 = subprocess.Popen(['mv', unbzipped, 'tmp/'])
+        _underscores = [i for i, c in enumerate(_unbzipped) if c == '_']
+        dots = [i for i, c in enumerate(_unbzipped) if c == '.']
+        date_str = _unbzipped[_underscores[-2]+1:dots[-2]]
+        _t_stamp = datetime.datetime.strptime(date_str, '%Y%m%d_%H%M%S')
+        # print(_t_stamp)
+        _unbzipped = '{:s}'.format(os.path.join(_path, _unbzipped))
+        # print(_unbzipped)
+        p2 = subprocess.Popen(['mv', _unbzipped, 'tmp/'])
         p2.wait()
 
         # calculate seeing:
-        print('processing {:s}'.format(seeing_img))
-        calc_seeing(os.path.join('tmp', unbzipped_base))
+        print('processing {:s}'.format(_seeing_img))
+        calc_seeing(os.path.join('tmp', _unbzipped_base))
 
 
 if __name__ == '__main__':
     # Create parser
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
-                                     description='Program to calculate the FWHM (seeing) of an image '
-                                                 'by fitting its stars. ')
+                                     description='Calculate the FWHM (seeing) of an image '
+                                                 'by fitting its stars.')
 
-    parser.add_argument('input_path', metavar='input_path',
-                        action='store', help='path to raw seeing data.', type=str)
-    parser.add_argument('output_path', metavar='output_path',
-                        action='store', help='path to output.', type=str)
-    parser.add_argument('pipe_path', metavar='pipe_path',
-                        action='store', help='path to pipelined calibrated data.', type=str)
-    parser.add_argument('--start', metavar='start', action='store', dest='start',
-                        help='start date', type=str)
-    parser.add_argument('--stop', metavar='stop', action='store', dest='stop',
-                        help='stop date', type=str)
-    parser.add_argument('-p', '--parallel', action='store_true',
-                        help='run computation in parallel mode')
+    parser.add_argument('config_file', metavar='config_file',
+                        action='store', help='path to config file.', type=str)
+    parser.add_argument('--date', metavar='date', action='store', dest='date',
+                        help='obs date', type=str)
+    # parser.add_argument('-p', '--parallel', action='store_true',
+    #                     help='run computation in parallel mode')
 
     args = parser.parse_args()
 
-    if not args.start:
-        start = datetime.datetime(2012, 5, 1)
+    # script absolute location
+    abs_path = os.path.dirname(inspect.getfile(inspect.currentframe()))
+
+    ''' Get config data '''
+    # load config data
+    config = ConfigParser.RawConfigParser()
+    # config.read(os.path.join(abs_path, 'config.ini'))
+    if args.config_file[0] not in ('/', '~'):
+        if os.path.isfile(os.path.join(abs_path, args.config_file)):
+            config.read(os.path.join(abs_path, args.config_file))
+            if len(config.read(os.path.join(abs_path, args.config_file))) == 0:
+                raise Exception('Failed to load config file')
+        else:
+            raise IOError('Failed to find config file')
     else:
-        start = datetime.datetime.strptime(args.start, '%Y%m%d')
-    if not args.stop:
+        if os.path.isfile(args.config_file):
+            config.read(args.config_file)
+            if len(config.read(args.config_file)) == 0:
+                raise Exception('Failed to load config file')
+        else:
+            raise IOError('Failed to find config file')
+
+    # path to raw data:
+    path_raw = config.get('Path', 'path_raw')
+    # path to (standard) pipeline data:
+    path_pipe = config.get('Path', 'path_pipe')
+    # path to output seeing data:
+    path_seeing = config.get('Path', 'path_seeing')
+
+    if not args.date:
         now = datetime.datetime.now()
-        stop = datetime.datetime(now.year, now.month, now.day)
+        date = datetime.datetime(now.year, now.month, now.day)
     else:
-        stop = datetime.datetime.strptime(args.stop, '%Y%m%d')
+        date = datetime.datetime.strptime(args.date, '%Y%m%d')
 
-    # print(start, stop)
+    path = os.path.join(path_raw, datetime.datetime.strftime(date, '%Y%m%d'))
+    # print(path)
+    path_tmp = os.path.join(path_seeing, 'tmp/')
 
-    dt_range = (stop - start).days
+    if not os.path.exists(path_seeing):
+        os.mkdir(path_seeing)
+    if not os.path.exists(path_tmp):
+        os.mkdir(path_tmp)
 
-    if not args.parallel:
+    # path exists?
+    if os.path.exists(path):
+        try:
+            # taken seeing measurements?
+            seeing_imgs = sorted([f for f in os.listdir(path) if 'seeing' in f and 'bz2' in f and
+                                  f[0] != '.'])
+            for seeing_img in seeing_imgs:
+                # print(path, seeing_img)
+                # call(['gtar', '-jxvf', '{:s}'.format(os.path.join(path, seeing_img))])
+                print('unbzipping {:s}'.format(seeing_img))
+                p0 = subprocess.Popen(['cp', os.path.join(path, seeing_img), path_tmp])
+                p0.wait()
+                p1 = subprocess.Popen(['bzip2', '-dk',
+                                       '{:s}'.format(os.path.join(path_tmp, seeing_img))])
+                # p1 = subprocess.Popen(['tar', '-jxvf',
+                #                       '{:s}'.format(os.path.join(path, seeing_img)),
+                #                       '-C', path_tmp])
+                p1.wait()
+                unbzipped = os.path.splitext(seeing_img)[0]
+                unbzipped_base = unbzipped
+                # print(unbzipped)
+                # get time stamp
+                underscores = [i for i, c in enumerate(unbzipped) if c == '_']
+                dots = [i for i, c in enumerate(unbzipped) if c == '.']
+                date_str = unbzipped[underscores[-2]+1:dots[-2]]
+                t_stamp = datetime.datetime.strptime(date_str, '%Y%m%d_%H%M%S')
+                # print(t_stamp)
+                unbzipped = '{:s}'.format(os.path.join(path, unbzipped))
+                # print(unbzipped)
+                # p2 = subprocess.Popen(['mv', unbzipped, path_tmp])
+                # p2.wait()
 
-        for dt in range(dt_range+1):
-            date = start + datetime.timedelta(days=dt)
+                # calculate seeing:
+                print('processing {:s}'.format(seeing_img))
+                calc_seeing(os.path.join(path_tmp, unbzipped_base),
+                            out_path=path_seeing,
+                            pipe_path=path_pipe)
 
-            path = os.path.join(args.input_path, datetime.datetime.strftime(date, '%Y%m%d'))
-            # print(path)
-            path_tmp = os.path.join(args.output_path, 'tmp/')
-
-            if not os.path.exists(path_tmp):
-                os.mkdir(path_tmp)
-
-            # path exists?
-            if os.path.exists(path):
-                try:
-                    # taken seeing measurements?
-                    seeing_imgs = sorted([f for f in os.listdir(path) if 'seeing' in f and 'bz2' in f and
-                                   f[0] != '.'])
-                    for seeing_img in seeing_imgs:
-                        # print(path, seeing_img)
-                        # call(['gtar', '-jxvf', '{:s}'.format(os.path.join(path, seeing_img))])
-                        print('unbzipping {:s}'.format(seeing_img))
-                        p0 = subprocess.Popen(['cp', os.path.join(path, seeing_img), path_tmp])
-                        p0.wait()
-                        p1 = subprocess.Popen(['bzip2', '-dk',
-                                               '{:s}'.format(os.path.join(path_tmp, seeing_img))])
-                        # p1 = subprocess.Popen(['tar', '-jxvf',
-                        #                       '{:s}'.format(os.path.join(path, seeing_img)),
-                        #                       '-C', path_tmp])
-                        p1.wait()
-                        unbzipped = os.path.splitext(seeing_img)[0]
-                        unbzipped_base = unbzipped
-                        # print(unbzipped)
-                        # get time stamp
-                        underscores = [i for i, c in enumerate(unbzipped) if c == '_']
-                        dots = [i for i, c in enumerate(unbzipped) if c == '.']
-                        date_str = unbzipped[underscores[-2]+1:dots[-2]]
-                        t_stamp = datetime.datetime.strptime(date_str, '%Y%m%d_%H%M%S')
-                        # print(t_stamp)
-                        unbzipped = '{:s}'.format(os.path.join(path, unbzipped))
-                        # print(unbzipped)
-                        # p2 = subprocess.Popen(['mv', unbzipped, path_tmp])
-                        # p2.wait()
-
-                        # calculate seeing:
-                        print('processing {:s}'.format(seeing_img))
-                        calc_seeing(os.path.join(path_tmp, unbzipped_base),
-                                    out_path=args.output_path,
-                                    pipe_path=args.pipe_path)
-
-                        # remove unbzipped + copied files:
-                        p3 = subprocess.Popen(['rm', '-f', os.path.join(path_tmp, unbzipped_base)])
-                        p3.wait()
-                        p4 = subprocess.Popen(['rm', '-f', os.path.join(path_tmp, seeing_img)])
-                        p4.wait()
-                except Exception as err:
-                    print(str(err))
-
-    # TODO: parallel mode; does not work at the moment
-    else:
-        n_cpu = multiprocessing.cpu_count()
-        # create pool
-        pool = multiprocessing.Pool(n_cpu)
-        # asynchronously apply process_date
-        argz = []
-        for dt in range(dt_range+1):
-            date = start + datetime.timedelta(days=dt)
-
-            path = os.path.join(args.input_path, datetime.datetime.strftime(date, '%Y%m%d'))
-            # print(path)
-
-            # path exists?
-            if os.path.exists(path):
-                seeing_imgs = [f for f in os.listdir(path) if 'seeing' in f and 'bz2' in f and
-                               f[0] != '.']
-                argz.append([path, seeing_imgs])
-        result = pool.map_async(process_date, argz)
-        # close bassejn
-        pool.close()  # we are not adding any more processes
-        pool.join()  # wait until all threads are done before going on
-
+                # remove unbzipped + copied files:
+                p3 = subprocess.Popen(['rm', '-f', os.path.join(path_tmp, unbzipped_base)])
+                p3.wait()
+                p4 = subprocess.Popen(['rm', '-f', os.path.join(path_tmp, seeing_img)])
+                p4.wait()
+        except Exception as err:
+            print(str(err))
