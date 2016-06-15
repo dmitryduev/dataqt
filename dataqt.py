@@ -187,6 +187,7 @@ def make_img(_sou_name, _time, _filter, _prog_num, _camera, _marker,
         scidata_corrected = exposure.equalize_adapthist(scidata, clip_limit=0.03)
 
     ''' plot full image '''
+    plt.close('all')
     fig = plt.figure(_sou_name+'__full')
     fig.set_size_inches(4, 4, forward=False)
     ax = plt.Axes(fig, [0., 0., 1., 1.])
