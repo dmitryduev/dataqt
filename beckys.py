@@ -266,19 +266,24 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _out_path,
     # Filter the trimmed frame with IUWT filter, 2 coeffs
     filtered_frame = (vip.var.cube_filter_iuwt(
         np.reshape(_trimmed_frame, (1, np.shape(_trimmed_frame)[0], np.shape(_trimmed_frame)[1])),
-        coeff=5, rel_coeff=1))
+        coeff=5, rel_coeff=2))
 
-    cy1, cx1 = np.unravel_index(filtered_frame[0].argmax(), filtered_frame[0].shape)
-    _fwhm = bad_obs_check(filtered_frame[0][cy1-30:cy1+30+1, cx1-30:cx1+30+1], return_halo=False)
+    mean_y, mean_x, fwhm_y, fwhm_x, amplitude, theta = (vip.var.fit_2dgaussian(filtered_frame[0], crop=True, 
+                                                        cropsize=50, debug=False, full_output=True))
+    _fwhm = np.mean([fwhm_y, fwhm_x])
 
     # Print the resolution element size
     print('Using resolution element size = ', _fwhm)
+    if _fwhm < 2:
+        _fwhm = 2.0
+        print('Too small, changing to ', _fwhm)
 
     # Center the filtered frame
     centered_cube, shy, shx = (vip.calib.cube_recenter_gauss2d_fit(array=filtered_frame, pos_y=_win,
                                                                    pos_x=_win, fwhm=_fwhm,
                                                                    subi_size=6, nproc=1,
                                                                    full_output=True))
+
     centered_frame = centered_cube[0]
     if shy > 5 or shx > 5:
         raise TypeError('Centering failed: pixel shifts too big')
@@ -508,6 +513,9 @@ if __name__ == '__main__':
                         cy1, cx1 = np.unravel_index(trimmed_frame.argmax(), trimmed_frame.shape)
                         core, halo = bad_obs_check(trimmed_frame[cy1-30:cy1+30+1, cx1-30:cx1+30+1],
                                                    ps=plate_scale)
+                        f_handle = file('/Data2/becky/compile_data/core_and_halo.txt', 'a')
+                        np.savetxt(f_handle, np.array(['\n'+path_sou, core, halo]), newline=" ",fmt="%s")
+                        f_handle.close()
                     except:
                         core = 0.14
                         halo = 1.0
