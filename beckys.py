@@ -266,13 +266,16 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _out_path,
     # Filter the trimmed frame with IUWT filter, 2 coeffs
     filtered_frame = (vip.var.cube_filter_iuwt(
         np.reshape(_trimmed_frame, (1, np.shape(_trimmed_frame)[0], np.shape(_trimmed_frame)[1])),
-        coeff=5, rel_coeff=1))
+        coeff=5, rel_coeff=2))
 
     cy1, cx1 = np.unravel_index(filtered_frame[0].argmax(), filtered_frame[0].shape)
     _fwhm = bad_obs_check(filtered_frame[0][cy1-30:cy1+30+1, cx1-30:cx1+30+1], return_halo=False)
 
     # Print the resolution element size
     print('Using resolution element size = ', _fwhm)
+    if _fwhm < 2:
+        _fwhm = 2
+        print('Too small, changing to ', _fwhm)
 
     # Center the filtered frame
     centered_cube, shy, shx = (vip.calib.cube_recenter_gauss2d_fit(array=filtered_frame, pos_y=_win,
