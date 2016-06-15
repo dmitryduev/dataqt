@@ -573,6 +573,8 @@ if __name__ == '__main__':
     output_dir = os.path.join(path_to_website_data, date_str, 'strehl')
     output_dir_cuts = os.path.join(output_dir, 'tmp')
 
+    if not os.path.exists(os.path.join(path_to_website_data, date_str)):
+        os.mkdir(os.path.join(path_to_website_data, date_str))
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
     if not os.path.exists(output_dir_cuts):

@@ -9,13 +9,13 @@ Robo-AO data monitoring service
 
 - Settings and paths are stored in config.ini
 
-- Run Becky's PCA pipeline for a given date:
+- Run the PCA pipeline for a given date (default - today):
 
 ```
 	python beckys.py path_to_config_file [--date YYYYMMDD]
 ```
 
-- Run Becky's PCA pipeline for a single source:
+- Run the PCA pipeline for a single source:
 
 ```
 	python pcapipe.py path_to_pipelined_source_data path_to_psf_reference_library
@@ -24,7 +24,13 @@ Robo-AO data monitoring service
                       [--nrefs nrefs] [--klip klip]
 ```
 
-- Generate data to be shown on the website:
+- Run the Strehl ratio calculator for a given date (default - today):
+
+```
+	python maissas.py path_to_config_file [--date YYYYMMDD]
+```
+
+- Generate data to be shown on the website for a given date (default - today):
 
 ```
 	python dataqt.py path_to_config_file [--date YYYYMMDD]

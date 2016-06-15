@@ -610,6 +610,7 @@ if __name__ == '__main__':
         ax.plot(seeing_plot[:, 0], seeing_plot[:, 1], '.',
                 c=plt.cm.Oranges(0.82), markersize=10)  #, label='2.1m seeing measurements')
         # ax.set_ylim([0, 3])
+        ax.set_ylabel('Seeing, arcsec')  # , fontsize=18)
         ax.grid(linewidth=0.5)
 
         # evaluate estimators
