@@ -176,7 +176,8 @@ def make_img(_sou_name, _time, _filter, _prog_num, _camera, _marker,
     # print(np.min(np.min(scidata)), np.max(np.max(scidata)))
 
     # don't do histogram equalization for planets:
-    if _sou_name.lower() in ('mars', 'venus', 'jupiter', 'saturn'):
+    if _sou_name.lower() in ('mars', 'venus', 'jupiter', 'saturn', 'neptune', 'uranus',
+                             'callisto', 'ganymede', 'europa', 'io'):
         p_1, p_2 = np.percentile(scidata, (8, 100))
         scidata_corrected = exposure.rescale_intensity(scidata, in_range=(p_1, p_2))
     #
