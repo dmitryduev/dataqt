@@ -459,6 +459,10 @@ if __name__ == '__main__':
                     else:
                         cc = 'none'
 
+                    # we don't need contrast curves for pointing observations:
+                    if 'pointing' in sou_name:
+                        cc = 'none'
+
                     # Strehl ratio:
                     if sou_dir in SR:
                         sr = SR[sou_dir][1]
