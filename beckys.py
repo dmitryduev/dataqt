@@ -268,10 +268,14 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _out_path,
         np.reshape(_trimmed_frame, (1, np.shape(_trimmed_frame)[0], np.shape(_trimmed_frame)[1])),
         coeff=5, rel_coeff=2))
 
+    mean_y, mean_x, fwhm_y, fwhm_x, amplitude, theta = (vip.var.fit_2dgaussian(filtered_frame[0], crop=True, 
+                                                        cropsize=50, debug=False, full_output=True))
+    gaussian_fwhm = np.mean([fwhm_y, fwhm_x])
+
     # Print the resolution element size
-    print('Using resolution element size = ', _fwhm)
+    print('Using resolution element size = ', _fwhm, ', gaussian FWHM = ', gaussian_fwhm)
     if _fwhm < 2:
-        _fwhm = 2
+        _fwhm = 2.0
         print('Too small, changing to ', _fwhm)
 
     # Center the filtered frame
@@ -279,9 +283,6 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _out_path,
                                                                    pos_x=_win, fwhm=_fwhm,
                                                                    subi_size=6, nproc=1,
                                                                    full_output=True))
-
-    filtered_core, filtered_halo = bad_obs_check(centered_cube[0])
-    print('Filtered core and halo = ', filtered_core, filtered_halo)
 
     centered_frame = centered_cube[0]
     if shy > 5 or shx > 5:
