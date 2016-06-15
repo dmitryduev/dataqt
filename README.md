@@ -30,6 +30,12 @@ Robo-AO data monitoring service
 	python maissas.py path_to_config_file [--date YYYYMMDD]
 ```
 
+- Run the seeing estimation code for a given date (default - today):
+
+```
+	python seeing.py path_to_config_file [--date YYYYMMDD]
+```
+
 - Generate data to be shown on the website for a given date (default - today):
 
 ```
