@@ -270,10 +270,10 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _out_path,
 
     mean_y, mean_x, fwhm_y, fwhm_x, amplitude, theta = (vip.var.fit_2dgaussian(filtered_frame[0], crop=True, 
                                                         cropsize=50, debug=False, full_output=True))
-    gaussian_fwhm = np.mean([fwhm_y, fwhm_x])
+    _fwhm = np.mean([fwhm_y, fwhm_x])
 
     # Print the resolution element size
-    print('Using resolution element size = ', _fwhm, ', gaussian FWHM = ', gaussian_fwhm)
+    print('Using resolution element size = ', _fwhm)
     if _fwhm < 2:
         _fwhm = 2.0
         print('Too small, changing to ', _fwhm)
