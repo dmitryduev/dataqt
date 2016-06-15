@@ -269,7 +269,8 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _out_path,
         coeff=5, rel_coeff=2))
 
     cy1, cx1 = np.unravel_index(filtered_frame[0].argmax(), filtered_frame[0].shape)
-    _fwhm = bad_obs_check(filtered_frame[0][cy1-30:cy1+30+1, cx1-30:cx1+30+1], return_halo=False)
+    filtered_core, filtered_halo = bad_obs_check(filtered_frame[0][cy1-30:cy1+30+1, cx1-30:cx1+30+1])
+    print('Filtered core and halo = ', filtered_core, filtered_halo)
 
     # Print the resolution element size
     print('Using resolution element size = ', _fwhm)
