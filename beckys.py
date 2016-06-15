@@ -514,7 +514,7 @@ if __name__ == '__main__':
                         core, halo = bad_obs_check(trimmed_frame[cy1-30:cy1+30+1, cx1-30:cx1+30+1],
                                                    ps=plate_scale)
                         f_handle = file('/Data2/becky/compile_data/core_and_halo.txt', 'a')
-                        np.savetxt(f_handle, np.c_[path_sou,core, halo])
+                        np.savetxt(f_handle, np.array(['\n'+path_sou, core, halo]), newline=" ",fmt="%s")
                         f_handle.close()
                     except:
                         core = 0.14
