@@ -1,5 +1,5 @@
 """
-    Flask-based server fro the Robo-AO DQM service
+    Flask-based server for the Robo-AO DQM service
 
     Dmitry A. Duev @ Caltech, 2016
 """
@@ -12,7 +12,8 @@ import ConfigParser
 import inspect
 from collections import OrderedDict
 from flask import Flask, render_template, request, jsonify  # send_from_directory
-from flask.ext.basicauth import BasicAuth
+from flask_basicauth import BasicAuth
+
 app = Flask(__name__)
 
 # basic HTTP authentification
