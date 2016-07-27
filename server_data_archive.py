@@ -78,30 +78,34 @@ def login():
             return flask.redirect(flask.url_for('root'))
         # serve template if not:
         else:
-            return flask.render_template('template-login.html')
+            return flask.render_template('template-login.html', fail=False)
     # print(flask.request.form['username'], flask.request.form['password'])
 
     username = flask.request.form['username']
-    if check_password_hash(users[username]['password'], flask.request.form['password']):
+    if username in users and \
+            check_password_hash(users[username]['password'], flask.request.form['password']):
         user = User()
         user.id = username
         flask_login.login_user(user, remember=True)
         return flask.redirect(flask.url_for('root'))
     else:
         # serve template with flag failed=true, display fail message
-        return flask.redirect(flask.url_for('login'))
+        return flask.render_template('template-login.html', fail=True)
 
 
 # serve root
 @app.route('/')
 @flask_login.login_required
 def root():
-    return 'Logged in as: {:s}'.format(flask_login.current_user.id) + \
-        '''
-            <form action='logout' method='POST'>
-                <input type='submit' name='logout'></input>
-            </form>
-        '''
+    return flask.render_template('template-archive.html',
+                                 user=flask_login.current_user.id,
+                                 dates=['20160602', '20160726'])
+    # return 'Logged in as: {:s}'.format(flask_login.current_user.id) + \
+    #     '''
+    #         <form action='logout' method='POST'>
+    #             <input type='submit' name='logout'></input>
+    #         </form>
+    #     '''
 
 
 @app.route('/logout', methods=['GET', 'POST'])
