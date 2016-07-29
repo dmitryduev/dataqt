@@ -37,6 +37,28 @@ users = {'admin': {'password': generate_password_hash('robo@0'),
          }
 # users = {'admin': {'password': 'pbkdf2:sha1:1000$tytMHt8x$121b8c130d98997228c100b13aa82acc9696c172'}}
 
+''' serve additional static data (preview images, compressed source data)
+
+When deploying, make sure WSGIScriptAlias is overridden by Apache's directive:
+
+Alias "/data/" "/path/to/archive/data"
+<Directory "/path/to/app/static/">
+  Order allow,deny
+  Allow from all
+</Directory>
+
+Check details at:
+http://stackoverflow.com/questions/31298755/how-to-get-apache-to-serve-static-files-on-flask-webapp
+
+Once deployed, comment the following definition:
+'''
+
+
+# FIXME:
+@app.route('/data/<path:filename>')
+def data_static(filename):
+    return flask.send_from_directory(config.get('Path', 'path_to_website_data'), filename)
+
 
 ''' handle user login'''
 
@@ -82,6 +104,7 @@ def login():
     # print(flask.request.form['username'], flask.request.form['password'])
 
     username = flask.request.form['username']
+    # check if username exists and passwords match
     if username in users and \
             check_password_hash(users[username]['password'], flask.request.form['password']):
         user = User()
@@ -89,7 +112,7 @@ def login():
         flask_login.login_user(user, remember=True)
         return flask.redirect(flask.url_for('root'))
     else:
-        # serve template with flag failed=true, display fail message
+        # serve template with flag fail=True to display fail message
         return flask.render_template('template-login.html', fail=True)
 
 
@@ -99,13 +122,8 @@ def login():
 def root():
     return flask.render_template('template-archive.html',
                                  user=flask_login.current_user.id,
+                                 programs=['4', '41'],
                                  dates=['20160602', '20160726'])
-    # return 'Logged in as: {:s}'.format(flask_login.current_user.id) + \
-    #     '''
-    #         <form action='logout' method='POST'>
-    #             <input type='submit' name='logout'></input>
-    #         </form>
-    #     '''
 
 
 @app.route('/logout', methods=['GET', 'POST'])
