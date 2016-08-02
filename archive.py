@@ -16,6 +16,11 @@ import logging
 import datetime
 from pymongo import MongoClient
 import sys
+import re
+
+
+def empty_db_record():
+    pass
 
 
 if __name__ == '__main__':
@@ -78,6 +83,8 @@ if __name__ == '__main__':
 
         # planetary program number (do no crop planetary images!)
         program_num_planets = int(config.get('Programs', 'planets'))
+        # path to raw data:
+        path_raw = config.get('Path', 'path_raw')
         # path to (standard) pipeline data:
         path_pipe = config.get('Path', 'path_pipe')
         # path to Becky-pipeline data:
@@ -125,13 +132,30 @@ if __name__ == '__main__':
         '''
 
         ''' check all raw data from, say, January 2016 '''
-        # get all dates
-        # for each date get all source names
-        # skip calibration files and pointings
-        # TODO: handle seeing files separately [lower priority]
-        # for each source name see if there's an entry in the database
-        # if not, create an empty one
-        # if yes, check further
+        # get all dates with some raw data
+        dates = os.listdir(path_raw)
+        # for each date get all unique obs names (used as _id 's in the db)
+        for date in dates:
+            date_files = os.listdir(os.path.join(path_raw, date))
+            # check the endings (\Z) and skip _N.fits.bz2:
+            pattern = r'.[0-9]{6}.fits.bz2\Z'
+            # skip calibration files and pointings
+            date_obs = [re.split(pattern, s)[0] for s in date_files
+                        if re.search(pattern, s) is not None and
+                        re.match('pointing_', s) is None and
+                        re.match('bias_', s) is None and
+                        re.match('dark_', s) is None and
+                        re.match('flat_', s) is None and
+                        re.match('seeing_', s) is None]
+            print(date_obs)
+            # TODO: handle seeing files separately [lower priority]
+            date_seeing = [re.split(pattern, s)[0] for s in date_files
+                           if re.search(pattern, s) is not None and
+                           re.match('seeing_', s) is not None]
+            print(date_seeing)
+            # TODO: for each source name see if there's an entry in the database
+            # TODO: if not, create an empty one
+            # TODO: if yes, check further
 
         ''' check Nick-pipelined data '''
         # for each date for each source check if processed
