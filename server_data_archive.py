@@ -140,7 +140,7 @@ def user_loader(username):
 @login_manager.request_loader
 def request_loader(request):
     username = request.form.get('username')
-
+    # look up in the database
     select = coll.find_one({'_id': username})
     if select is None:
         return
@@ -167,6 +167,7 @@ def login():
 
     username = flask.request.form['username']
     # check if username exists and passwords match
+    # look up in the database first:
     select = coll.find_one({'_id': username})
     if select is not None and \
             check_password_hash(select['password'], flask.request.form['password']):
@@ -194,12 +195,16 @@ def root():
 @flask_login.login_required
 def manage_users():
     if flask_login.current_user.id == 'admin':
-        # TODO: fetch users from the database:
+        # fetch users from the database:
         _users = {}
         cursor = coll.find()
         for usr in cursor:
-            print(usr)
-            _users[usr['_id']] = {'programs': [usr['programs']]}
+            # print(usr)
+            if usr['programs'] == 'all':
+                _users[usr['_id']] = {'programs': ['all']}
+            else:
+                _users[usr['_id']] = {'programs': [p.encode('ascii', 'ignore')
+                                                   for p in usr['programs']]}
 
         return flask.render_template('template-users.html',
                                      user=flask_login.current_user.id,
@@ -214,13 +219,66 @@ def add_user():
     try:
         user = flask.request.args['user']
         password = flask.request.args['password']
-        programs = flask.request.args['programs']
-        print(user, password, programs)
+        programs = [p.strip().encode('ascii', 'ignore')
+                    for p in flask.request.args['programs'].split(',')]
+        # print(user, password, programs)
+        # print(len(user), len(password), len(programs))
+        if len(user) == 0 or len(password) == 0 or len(programs[0]) == 0:
+            return 'everything must be set'
         result = coll.insert_one(
             {'_id': user,
              'password': generate_password_hash(password),
-             'programs': programs}
+             'programs': programs,
+             'last_modified': datetime.datetime.now()}
         )
+        # print(result.inserted_id)
+        return 'success'
+    except Exception as _e:
+        print(_e)
+        return _e
+
+
+@app.route('/edit_user', methods=['GET'])
+@flask_login.login_required
+def edit_user():
+    try:
+        # print(flask.request.args)
+        id = flask.request.args['_user']
+        if id == 'admin':
+            return 'Cannot remove the admin!'
+        user = flask.request.args['edit-user']
+        password = flask.request.args['edit-password']
+        programs = [p.strip().encode('ascii', 'ignore')
+                    for p in flask.request.args['edit-programs'].split(',')]
+        # print(user, password, programs, id)
+        # print(len(user), len(password), len(programs))
+        if len(user) == 0 or len(programs[0]) == 0:
+            return 'username and program numbers must be set'
+        # keep old password:
+        if len(password) == 0:
+            result = coll.update_one(
+                {'_id': id},
+                {
+                    '$set': {
+                        '_id': user,
+                        'programs': programs
+                    },
+                    '$currentDate': {'last_modified': True}
+                }
+            )
+        # else change password too:
+        else:
+            result = coll.update_one(
+                {'_id': id},
+                {
+                    '$set': {
+                        '_id': user,
+                        'password': generate_password_hash(password),
+                        'programs': programs
+                    },
+                    '$currentDate': {'last_modified': True}
+                }
+            )
         # print(result.inserted_id)
         return 'success'
     except Exception as _e:
@@ -231,7 +289,19 @@ def add_user():
 @app.route('/remove_user', methods=['GET', 'POST'])
 @flask_login.login_required
 def remove_user():
-    return flask.redirect(flask.url_for('manage_users'))
+    try:
+        # print(flask.request.args)
+        # get username from request
+        user = flask.request.args['user']
+        if user == 'admin':
+            return 'Cannot remove the admin!'
+        # print(user)
+        # try to remove
+        result = coll.delete_one({'_id': user})
+        return 'success'
+    except Exception as _e:
+        print(_e)
+        return _e
 
 
 @app.route('/logout', methods=['GET', 'POST'])
