@@ -4,7 +4,7 @@
     Generates stuff to be displayed on the archive
     Updates the database
 
-    DAD (Caltech) 2016
+    Dmitry Duev (Caltech) 2016
 """
 from __future__ import print_function
 
@@ -20,7 +20,85 @@ import re
 
 
 def empty_db_record():
-    pass
+    return {
+            '_id': None,
+            'date_added': datetime.datetime.now(),
+            'name': None,
+            'alternative_names': [],
+            'science_program': {
+                'program_id': None,
+                'program_PI': None,
+                'distributed': None
+            },
+            'date_utc': None,
+            'telescope': None,
+            'camera': None,
+            'filter': None,
+            'exposure': None,
+            'magnitude': None,
+            'coordinates': {
+                'epoch': None,
+                'radec': None,
+                'radec_str': None,
+                'azel': None
+            },
+            'pipelined': {
+                'automated': {
+                    'status': {
+                        'done': False
+                    },
+                    'location': [],
+                    'classified_as': None,
+                    'fits_header': {},
+                    'last_modified': datetime.datetime.now()
+                },
+                'faint': {
+                    'status': {
+                        'done': False,
+                        'retries': 0
+                    },
+                    'location': [],
+                    'last_modified': datetime.datetime.now()
+                },
+                'pca': {
+                    'status': {
+                        'done': False,
+                        'retries': 0
+                    },
+                    'location': [],
+                    'contrast_curve': {},
+                    'last_modified': datetime.datetime.now()
+                },
+                'strehl': {
+                    'status': {
+                        'done': False,
+                        'retries': 0
+                    },
+                    'ratio_percent': None,
+                    'core_arcsec': None,
+                    'halo_arcsec': None,
+                    'fwhm_arcsec': None,
+                    'flag': None,
+                    'last_modified': datetime.datetime.now()
+                }
+            },
+
+            'seeing': {
+                'median': None,
+                'mean': None,
+                'last_modified': datetime.datetime.now()
+            },
+            'bzip2': {
+                'location': [],
+                'last_modified': datetime.datetime.now()
+            },
+            'raw_data': {
+                'location': [],
+                'data': [],
+                'last_modified': datetime.datetime.now()
+            },
+            'comment': None
+        }
 
 
 if __name__ == '__main__':
@@ -124,6 +202,18 @@ if __name__ == '__main__':
             logger.error('Authentication failed for the Robo-AO database at {:s}:{:d}'.
                          format(mongo_host, mongo_port))
             sys.exit()
+        try:
+            coll = db[mongo_collection_obs]
+            # cursor = coll.find()
+            # for doc in cursor:
+            #     print(doc)
+            logger.debug('Using collection {:s} with obs data in the database'.
+                         format(mongo_collection_obs))
+        except Exception as e:
+            logger.error(e)
+            logger.error('Failed to use a collection {:s} with obs data in the database'.
+                         format(mongo_collection_obs))
+            sys.exit()
 
         '''
          ###############################
@@ -133,15 +223,21 @@ if __name__ == '__main__':
 
         ''' check all raw data from, say, January 2016 '''
         # get all dates with some raw data
-        dates = os.listdir(path_raw)
+        dates = [p for p in os.listdir(path_raw)
+                 if os.path.isdir(os.path.join(path_raw, p))]
+        print(dates)
         # for each date get all unique obs names (used as _id 's in the db)
         for date in dates:
             date_files = os.listdir(os.path.join(path_raw, date))
             # check the endings (\Z) and skip _N.fits.bz2:
-            pattern = r'.[0-9]{6}.fits.bz2\Z'
+            # must start with program number (e.g. 24_ or 24.1_)
+            pattern_start = r'\d+.?\d??_'
+            # must be a bzipped fits file
+            pattern_end = r'.[0-9]{6}.fits.bz2\Z'
             # skip calibration files and pointings
-            date_obs = [re.split(pattern, s)[0] for s in date_files
-                        if re.search(pattern, s) is not None and
+            date_obs = [re.split(pattern_end, s)[0] for s in date_files
+                        if re.search(pattern_end, s) is not None and
+                        re.match(pattern_start, s) is not None and
                         re.match('pointing_', s) is None and
                         re.match('bias_', s) is None and
                         re.match('dark_', s) is None and
@@ -149,12 +245,40 @@ if __name__ == '__main__':
                         re.match('seeing_', s) is None]
             print(date_obs)
             # TODO: handle seeing files separately [lower priority]
-            date_seeing = [re.split(pattern, s)[0] for s in date_files
-                           if re.search(pattern, s) is not None and
+            date_seeing = [re.split(pattern_end, s)[0] for s in date_files
+                           if re.search(pattern_end, s) is not None and
                            re.match('seeing_', s) is not None]
             print(date_seeing)
             # TODO: for each source name see if there's an entry in the database
-            # TODO: if not, create an empty one
+            for obs in date_obs:
+                print('processing {:s}'.format(obs))
+                logger.debug('processing {:s}'.format(obs))
+                # parse name:
+                tmp = obs.split('_')
+                # program num
+                prog_num = int(tmp[0])
+                # stack name together if necessary (if contains underscores):
+                sou_name = '_'.join(tmp[1:-5])
+                # code of the filter used:
+                filt = tmp[-4:-3][0]
+                # date and time of obs:
+                time = datetime.datetime.strptime(tmp[-2] + tmp[-1], '%Y%m%d%H%M%S.%f')
+                # camera:
+                camera = tmp[-5:-4][0]
+                # marker:
+                marker = tmp[-3:-2][0]
+                # look up entry in the database:
+                select = coll.find_one({'_id': obs})
+                # if entry not in database, create an empty one and populate it
+                if select is None:
+                    print('{:s} not in database, adding'.format(obs))
+                    logger.info('{:s} not in database, adding'.format(obs))
+                    entry = empty_db_record()
+                    # populate:
+                    entry['_id'] = obs
+                    entry['name'] = sou_name
+
+
             # TODO: if yes, check further
 
         ''' check Nick-pipelined data '''
@@ -185,7 +309,7 @@ if __name__ == '__main__':
         # for each date for each source check if processed
         # collect jobs to execute on the way
         # update last_modified if necessary
-
-
+    except:
+        logger.error('Unknown error.')
     finally:
         logger.info('Finished daily archiving job.')

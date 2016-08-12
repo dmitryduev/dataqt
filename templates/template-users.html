@@ -13,12 +13,9 @@
 
     <!-- Bootstrap core CSS -->
     <link rel="stylesheet" href="/static/css/bootstrap.min.css">
-    <link rel="stylesheet" href="/static/css/bootstrap-magnify.min.css">
+    {#    <link rel="stylesheet" href="/static/css/bootstrap-magnify.min.css">#}
 
     <style>
-        body {
-            padding-top: 70px;
-        }
         .main-container {
             padding: 40px 15px;
             text-align: center;
@@ -123,8 +120,14 @@
 
 <body>
 
+<div class="alert alert-danger fade in" id="add-failed"
+     role="alert" style="margin-bottom:0; display:none">
+    <a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a>
+    <strong>Error!</strong> Failed to add a user.
+</div>
+
 <!-- Fixed navbar -->
-<nav class="navbar navbar-default navbar-fixed-top">
+<nav class="navbar navbar-default navbar-static-top">
     <div class="container">
         <div class="navbar-header">
             <button type="button" class="navbar-toggle collapsed"
@@ -166,111 +169,117 @@
 
 <!-- Main section -->
 
-<!--
 <div class="container">
-    <h1>Hi {{ user }}</h1><br>
+    <div class="col-md-12">
+        <h2>
+            Manage user access
+            <button type="button" class="btn btn-info"
+                    data-toggle="modal" data-target="#addUserModal"
+                    data-user="" data-programs="">Add user</button>
+        </h2><br>
+    </div>
+
+    {% if users|length > 0 %}
+        <div class="col-md-6">
+            <table class="table table-condensed table-hover">
+                <thead>
+                    <tr>
+                        <th>username</th>
+                        <th>programs</th>
+                        <th style="width:5%"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for usr in users %}
+                    <tr class="clickable-row">
+                    <td>{{ usr }}</td>
+                    <td>
+                        {% for program in users[usr]['programs'] %}
+                            {{ program }}
+                        {% endfor %}
+                    </td>
+                    <td><button type="button" class="btn btn-xs btn-default"
+                                data-toggle="modal" data-target="#editUserModal"
+                                data-user="{{ usr }}" data-programs="{{ users[usr]['programs'] }}">
+                        edit</button>
+                    </td>
+                  </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
 </div>
--->
 
-{#TODO: add lazy content loading#}
-{% if dates|length > 0 %}
-    <div class="container">
-        <div class="col-md-12">
-            <h2>
-                Science data
-                <div class="btn-group">
-                    <button type="button" class="btn btn-info dropdown-toggle"
-                            data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                        Toggle view <span class="caret"></span>
-                    </button>
-                    <ul class="dropdown-menu">
-                        <li><a href="#">Data</a></li>
-                        <li><a href="#">Preview</a></li>
-                        <li><a href="#">Auxiliary data</a></li>
-                    </ul>
-                </div>
-                <div class="btn-group">
-                    <button type="button" class="btn btn-primary dropdown-toggle"
-                            data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                        Show dates <span class="caret"></span>
-                    </button>
-                    <ul class="dropdown-menu">
-                        <li><a href="#">This month</a></li>
-                        <li><a href="#">Everything</a></li>
-                        <li><a href="#">Show calendar</a></li>
-                    </ul>
-                </div>
-            </h2>
-        </div>
-    </div>
-    {% for date in dates %}
-        <div class="container">
-            <div class="col-md-12">
-                <h3>{{ date }}</h3><br>
-
-                <div class="data-tabs">
-
-                    <!-- Nav tabs -->
-                    <ul class="nav nav-tabs" role="tablist">
-                        <li role="presentation" class="active">
-                            <a href="#{{ date }}-data" aria-controls="{ date }}-data"
-                               role="tab" data-toggle="tab">Data</a></li>
-                        <li role="presentation">
-                            <a href="#{{ date }}-preview" aria-controls="{ date }}-preview"
-                               role="tab" data-toggle="tab">Preview</a></li>
-                        <li role="presentation">
-                            <a href="#{{ date }}-auxiliary" aria-controls="{{ date }}-auxiliary"
-                               role="tab" data-toggle="tab">Auxiliary data</a></li>
-                    </ul>
-
-                    <!-- Tab panes -->
-                    <div class="tab-content">
-                        <div role="tabpanel" class="tab-pane active" id="{{ date }}-data">
-                            {% for program in programs %}
-                                <h4>Program {{ program }}: data access</h4>
-                                Master wget-script to fetch all data:
-                                <a href="#">program_{{ program }}_{{ date }}.wget.sh</a>
-                                <br>
-                                Individual bzipped files
-                            {% endfor %}
-                        </div>
-                        <div role="tabpanel" class="tab-pane" id="{{ date }}-preview">
-                            {% for program in programs %}
-                                <h4>Program {{ program }}: images preview</h4>
-                            {% endfor %}
-                        </div>
-                        <div role="tabpanel" class="tab-pane" id="{{ date }}-auxiliary">
-                            <h4>System performance and meteo data</h4>
-                        </div>
-                    </div>
-
-                </div>
+<!-- Modal to add a user-->
+<div class="modal fade" tabindex="-1" role="dialog" id="addUserModal" >
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal"
+                        aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title">Manage user access</h4>
             </div>
-        </div>
-        <br>
-    {% endfor %}
-{% else %}
-    <div class="container">
-        <div class="col-md-12">
-            <h1>No science data to show</h1>
-        </div>
-    </div>
-{% endif %}
-
+            <div class="modal-body">
+                <form id="tempAddUser">
+                    <div class="form-group">
+                        <label for="form-usr">username</label>
+                        <input id="form-usr" type="text" class="form-control"
+                               name="user" autocomplete="off" value="">
+                    </div>
+                    <div class="form-group">
+                        <label for="form-pwd">password</label>
+                        <input type="password" class="form-control" name="password" id="form-pwd"
+                               placeholder="keep empty to keep the current password"
+                               autocomplete="address-level4" value="">
+                    </div>
+                    <div class="form-group">
+                        <label for="form-programs">programs</label>
+                        <input id="form-programs" type="text" class="form-control"
+                               name="programs" autocomplete="off" value="">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="addUserButton">Add user</button>
+            </div>
+        </div><!-- /.modal-content -->
+    </div><!-- /.modal-dialog -->
+</div><!-- /.modal -->
+<!-- End Modal -->
 
 <!-- Bootstrap core JavaScript
 ================================================== -->
 <!-- Placed at the end of the document so the pages load faster -->
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
 <script src="/static/js/bootstrap.min.js"></script>
-<script src="/static/js/bootstrap-magnify.js"></script>
+<script src="//oss.maxcdn.com/bootbox/4.4.0/bootbox.min.js"></script>
 <script>
     // for AJAX requests [absolute website's uri]:
-    $SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
-    $('.data-tabs a').click(function (e) {
-        e.preventDefault();
-        $(this).tab('show')
-    })
+    $SCRIPT_ROOT = {{ request.script_root|tojson|safe }}
+
+     // send AJAX GET request to server
+    $('#addUserButton').click(function (e) {
+        $.ajax({url: '../add_user?' + $('#tempAddUser').serialize(),
+                method: 'GET',
+                success: function(data) {
+                    if (data=='success') {
+                        location.reload(true);
+                    }
+                    else {
+                        $('#addUserModal').modal('hide')
+                        $("#add-failed").slideDown("slow");
+                    }
+                },
+                error: function(data) {
+                    $('#addUserModal').modal('hide')
+                    $("#add-failed").slideDown("slow");
+                }
+        });
+        return false;
+    });
 </script>
+
 </body>
 </html>

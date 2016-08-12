@@ -1,4 +1,4 @@
-# Set up mongodb with authentication
+# Set up and use mongodb with authentication
 
 Also check https://docs.mongodb.com/manual/tutorial/enable-authentication/
 
@@ -17,7 +17,7 @@ Add:
     setParameter:
       enableLocalhostAuthBypass: true
 ```
-- Start mongod without authorization requirment:
+- Start mongod without authorization requirement:
 ```
    mongod --dbpath /Users/dmitryduev/web/mongodb/ 
 ```
@@ -55,6 +55,10 @@ Add:
     sudo service mongod stop
     sudo mv /data/admin.* .  # for backup
     sudo service mongod start
+```
+- To run manually (i.e. not as a service):
+```
+    mongod --auth --dbpath /Users/dmitryduev/web/mongodb/
 ```
 - Connect to database from pymongo:
 ```
