@@ -28,14 +28,14 @@ Add:
     > use admin
     > db.createUser(
         {
-            user :"someadmin",
-            pwd: "secret", 
+            user :"admin",
+            pwd: "roboaokicksass", 
             roles: [{role: "userAdminAnyDatabase", db:"admin"}]})
     > exit 
 ```
 - Connect to mongodb
 ```
-   mongo -u "someadmin" -p "secret" --authenticationDatabase "admin" 
+   mongo -u "admin" -p "roboaokicksass" --authenticationDatabase "admin" 
 ```
 - Add user to your database:
 ```
@@ -44,8 +44,8 @@ Add:
     > use some_db
     > db.createUser(
         {
-          user: "mongouser",
-          pwd: "someothersecret",
+          user: "roboao",
+          pwd: "roboaokicksass",
           roles: ["readWrite"]
         }
     )
@@ -64,10 +64,31 @@ Add:
 ```
     from pymongo import MongoClient
     client = MongoClient('ip_address_or_uri')
-    db = client.some_db
-    db.authenticate('mongouser', 'someothersecret')
+    db = client.roboao
+    db.authenticate('roboao', 'roboaokicksass')
 ```
 Check it out:
 ```
     db['some_collection'].find_one()
 ```
+
+** Add admin user for data access on the website **
+
+- Connect to database from pymongo and do an insertion:
+```
+    from pymongo import MongoClient
+    from werkzeug.security import generate_password_hash
+    import datetime
+    client = MongoClient('ip_address_or_uri')
+    db = client.roboao
+    db.authenticate('roboao', 'roboaokicksass')
+    coll = db['users']
+    result = coll.insert_one(
+            {'_id': 'adminus',
+             'password': generate_password_hash('robo@0'),
+             'programs': 'all',
+             'last_modified': datetime.datetime.now()}
+    )
+```
+
+** Use Robomongo to display DB data!! It's super handy! **

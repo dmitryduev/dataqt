@@ -223,7 +223,7 @@ def add_user():
                     for p in flask.request.args['programs'].split(',')]
         # print(user, password, programs)
         # print(len(user), len(password), len(programs))
-        if len(user) == 0 or len(password) == 0 or len(programs[0]) == 0:
+        if len(user) == 0 or len(password) == 0:
             return 'everything must be set'
         result = coll.insert_one(
             {'_id': user,
@@ -252,8 +252,8 @@ def edit_user():
                     for p in flask.request.args['edit-programs'].split(',')]
         # print(user, password, programs, id)
         # print(len(user), len(password), len(programs))
-        if len(user) == 0 or len(programs[0]) == 0:
-            return 'username and program numbers must be set'
+        if len(user) == 0:
+            return 'username must be set'
         # keep old password:
         if len(password) == 0:
             result = coll.update_one(

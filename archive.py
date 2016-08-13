@@ -177,6 +177,7 @@ if __name__ == '__main__':
         mongo_port = int(config.get('Database', 'port'))
         mongo_db = config.get('Database', 'db')
         mongo_collection_obs = config.get('Database', 'collection_obs')
+        mongo_collection_pwd = config.get('Database', 'collection_pwd')
         mongo_user = config.get('Database', 'user')
         mongo_pwd = config.get('Database', 'pwd')
 
@@ -213,6 +214,33 @@ if __name__ == '__main__':
             logger.error(e)
             logger.error('Failed to use a collection {:s} with obs data in the database'.
                          format(mongo_collection_obs))
+            sys.exit()
+        try:
+            coll_usr = db[mongo_collection_pwd]
+            # cursor = coll.find()
+            # for doc in cursor:
+            #     print(doc)
+            logger.debug('Using collection {:s} with user access credentials in the database'.
+                         format(mongo_collection_pwd))
+        except Exception as e:
+            logger.error(e)
+            logger.error('Failed to use a collection {:s} with user access credentials in the database'.
+                         format(mongo_collection_pwd))
+            sys.exit()
+        try:
+            # build dictionary program num -> pi name
+            cursor = coll_usr.find()
+            program_pi = {}
+            for doc in cursor:
+                # handle admin separately
+                if doc['_id'] == 'admin':
+                    continue
+                _progs = doc['programs']
+                for v in _progs:
+                    program_pi[str(v)] = doc['_id'].encode('ascii', 'ignore')
+                print(program_pi)
+        except Exception as e:
+            logger.error(e)
             sys.exit()
 
         '''
@@ -256,7 +284,7 @@ if __name__ == '__main__':
                 # parse name:
                 tmp = obs.split('_')
                 # program num
-                prog_num = int(tmp[0])
+                prog_num = str(tmp[0])
                 # stack name together if necessary (if contains underscores):
                 sou_name = '_'.join(tmp[1:-5])
                 # code of the filter used:

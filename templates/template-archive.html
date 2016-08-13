@@ -184,9 +184,9 @@
                         Toggle view <span class="caret"></span>
                     </button>
                     <ul class="dropdown-menu">
-                        <li><a href="#">Data</a></li>
-                        <li><a href="#">Preview</a></li>
-                        <li><a href="#">Auxiliary data</a></li>
+                        <li><a href="#" onclick="showAll(0)">Data</a></li>
+                        <li><a href="#" onclick="showAll(1)">Preview</a></li>
+                        <li><a href="#" onclick="showAll(2)">Auxiliary data</a></li>
                     </ul>
                 </div>
                 <div class="btn-group">
@@ -211,7 +211,7 @@
                 <div class="data-tabs">
 
                     <!-- Nav tabs -->
-                    <ul class="nav nav-tabs" role="tablist">
+                    <ul class="nav nav-tabs" role="tablist" id="{{ date }}-nav-tabs">
                         <li role="presentation" class="active">
                             <a href="#{{ date }}-data" aria-controls="{ date }}-data"
                                role="tab" data-toggle="tab">Data</a></li>
@@ -267,10 +267,19 @@
 <script>
     // for AJAX requests [absolute website's uri]:
     $SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
+
+    // switch tabs
     $('.data-tabs a').click(function (e) {
         e.preventDefault();
         $(this).tab('show')
-    })
+    });
+
+    // switch tabs
+    function showAll(tabn) {
+        {% for date in dates %}
+            $('#{{ date }}-nav-tabs li:eq(' + tabn + ') a').tab('show');
+        {% endfor %}
+    }
 </script>
 </body>
 </html>

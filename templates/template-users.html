@@ -191,11 +191,11 @@
 
     {% if users|length > 0 %}
         <div class="col-md-6">
-            <table class="table table-condensed table-hover">
+            <table class="table table-condensed table-hover tablesorter" id="user-table">
                 <thead>
                     <tr>
-                        <th>username</th>
-                        <th>programs</th>
+                        <th style="cursor: pointer; cursor: hand;">username</th>
+                        <th style="cursor: pointer; cursor: hand;">programs</th>
                         <th style="width:20%"></th>
                     </tr>
                 </thead>
@@ -306,6 +306,7 @@
 ================================================== -->
 <!-- Placed at the end of the document so the pages load faster -->
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+<script type="text/javascript" src="/static/js/jquery.tablesorter.min.js"></script>
 <script src="/static/js/bootstrap.min.js"></script>
 <script src="//oss.maxcdn.com/bootbox/4.4.0/bootbox.min.js"></script>
 <script>
@@ -313,6 +314,14 @@
     $SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
     // global var to keep track of user name changes
     var user_keep;
+
+    $(document).ready(function() {
+        // call the tablesorter plugin
+        $("#user-table").tablesorter({
+            // sort on the first column and third column, order asc
+            sortList: [[0,0]]
+        });
+    });
 
     // send AJAX GET request to server
     $('#addUserButton').click(function (e) {
