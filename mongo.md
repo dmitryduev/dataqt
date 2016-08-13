@@ -72,7 +72,7 @@ Check it out:
     db['some_collection'].find_one()
 ```
 
-** Add admin user for data access on the website **
+**Add admin user for data access on the website**
 
 - Connect to database from pymongo and do an insertion:
 ```
