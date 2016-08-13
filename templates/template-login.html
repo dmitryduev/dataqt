@@ -54,7 +54,7 @@
 {% if fail %}
     <div class="alert alert-danger fade in" id="login-failed"
          role="alert" style="margin-bottom:0; display:none">
-        <a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a>
+        <a href="#" class="close" onclick="$('#login-failed').slideUp('fast');">&times;</a>
         <strong>Error!</strong> Incorrect username or password.
     </div>
 {% endif %}

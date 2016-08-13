@@ -277,7 +277,7 @@ if __name__ == '__main__':
                            if re.search(pattern_end, s) is not None and
                            re.match('seeing_', s) is not None]
             print(date_seeing)
-            # TODO: for each source name see if there's an entry in the database
+            # for each source name see if there's an entry in the database
             for obs in date_obs:
                 print('processing {:s}'.format(obs))
                 logger.debug('processing {:s}'.format(obs))
@@ -285,19 +285,25 @@ if __name__ == '__main__':
                 tmp = obs.split('_')
                 # program num
                 prog_num = str(tmp[0])
+                # who's pi?
+                if prog_num in program_pi.keys():
+                    prog_pi = program_pi[prog_num]
+                else:
+                    prog_pi = 'admin'
                 # stack name together if necessary (if contains underscores):
                 sou_name = '_'.join(tmp[1:-5])
                 # code of the filter used:
                 filt = tmp[-4:-3][0]
                 # date and time of obs:
-                time = datetime.datetime.strptime(tmp[-2] + tmp[-1], '%Y%m%d%H%M%S.%f')
+                date_utc = datetime.datetime.strptime(tmp[-2] + tmp[-1], '%Y%m%d%H%M%S.%f')
                 # camera:
                 camera = tmp[-5:-4][0]
                 # marker:
                 marker = tmp[-3:-2][0]
+
                 # look up entry in the database:
                 select = coll.find_one({'_id': obs})
-                # if entry not in database, create an empty one and populate it
+                # if entry not in database, create empty one and populate it
                 if select is None:
                     print('{:s} not in database, adding'.format(obs))
                     logger.info('{:s} not in database, adding'.format(obs))
@@ -305,39 +311,49 @@ if __name__ == '__main__':
                     # populate:
                     entry['_id'] = obs
                     entry['name'] = sou_name
+                    entry['science_program']['program_id'] = prog_num
+                    entry['science_program']['program_PI'] = prog_pi
+                    entry['date_utc'] = date_utc
+                    if date_utc > datetime.datetime(2015, 11, 1):
+                        entry['telescope'] = 'KPNO_2.1m'
+                    entry['camera'] = camera
+                    # entry['filter'] = filter  # get this from FITS header?
 
+                # TODO: if yes, check further
+                else:
+                    ''' check Nick-pipelined data '''
+                    # for each date for each source check if processed
+                    # update last_modified if necessary
 
-            # TODO: if yes, check further
+                    ''' check Faint-pipelined data '''
+                    # for each date for each source check if processed
+                    # update last_modified if necessary
 
-        ''' check Nick-pipelined data '''
-        # for each date for each source check if processed
-        # update last_modified if necessary
+                    ''' check (PCA-)pipelined data '''
+                    # for each date for each source check if processed
+                    # collect jobs to execute on the way
+                    # update last_modified if necessary
 
-        ''' check Faint-pipelined data '''
-        # for each date for each source check if processed
-        # update last_modified if necessary
+                    ''' check Strehl data '''
+                    # for each date for each source check if processed
+                    # collect jobs to execute on the way
+                    # update last_modified if necessary
 
-        ''' check (PCA-)pipelined data '''
-        # for each date for each source check if processed
-        # collect jobs to execute on the way
-        # update last_modified if necessary
+                    ''' check seeing data '''
+                    # TODO: [lower priority]
+                    # for each date check if lists of processed and raw seeing files match
+                    # rerun seeing.py for each date if necessary
+                    # update last_modified if necessary
 
-        ''' check Strehl data '''
-        # for each date for each source check if processed
-        # collect jobs to execute on the way
-        # update last_modified if necessary
+                    ''' check preview data '''
+                    # for each date for each source check if processed
+                    # collect jobs to execute on the way
+                    # update last_modified if necessary
 
-        ''' check seeing data '''
-        # TODO: [lower priority]
-        # for each date check if lists of processed and raw seeing files match
-        # rerun seeing.py for each date if necessary
-        # update last_modified if necessary
+                    # TODO: mark distributed when all pipelines done or n_retries>2?
 
-        ''' check preview data '''
-        # for each date for each source check if processed
-        # collect jobs to execute on the way
-        # update last_modified if necessary
-    except:
+    except Exception as e:
+        logger(e)
         logger.error('Unknown error.')
     finally:
         logger.info('Finished daily archiving job.')
