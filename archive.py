@@ -15,17 +15,52 @@ import os
 import logging
 import datetime
 import pytz
+import time
 from astropy.io import fits
 from pymongo import MongoClient
 import sys
 import re
 from collections import OrderedDict
 
+# import numba
+from huey import RedisHuey
+huey = RedisHuey('roboao.archive')
+
+
+@huey.task()
+# @numba.jit
+def job(_obs):
+    tic = time.time()
+    a = 0
+    for i in range(100):
+        for j in range(100):
+            for k in range(1000):
+                a += 3**2
+    print('It took {:.2f} s to finish the job on {:s}'.format(time.time() - tic, _obs))
+    return True
+
+
+def utc_now():
+    return datetime.datetime.now(pytz.utc)
+
+
+def naptime(nap_time_start, nap_time_stop):
+    """
+        Return time to sleep in seconds for the archiving engine
+        before waking up to rerun itself.
+         In the daytime, it's 1 hour
+         In the nap time, it's nap_time_start_utc - utc_now()
+    :return:
+    """
+    now_local = datetime.datetime.now()
+    # TODO: finish!
+
 
 def empty_db_record():
+    time_now_utc = utc_now()
     return {
             '_id': None,
-            'date_added': datetime.datetime.now(),
+            'date_added': time_now_utc,
             'name': None,
             'alternative_names': [],
             'science_program': {
@@ -53,7 +88,7 @@ def empty_db_record():
                     'location': [],
                     'classified_as': None,
                     'fits_header': {},
-                    'last_modified': datetime.datetime.now()
+                    'last_modified': time_now_utc
                 },
                 'faint': {
                     'status': {
@@ -61,7 +96,7 @@ def empty_db_record():
                         'retries': 0
                     },
                     'location': [],
-                    'last_modified': datetime.datetime.now()
+                    'last_modified': time_now_utc
                 },
                 'pca': {
                     'status': {
@@ -70,7 +105,7 @@ def empty_db_record():
                     },
                     'location': [],
                     'contrast_curve': {},
-                    'last_modified': datetime.datetime.now()
+                    'last_modified': time_now_utc
                 },
                 'strehl': {
                     'status': {
@@ -82,32 +117,35 @@ def empty_db_record():
                     'halo_arcsec': None,
                     'fwhm_arcsec': None,
                     'flag': None,
-                    'last_modified': datetime.datetime.now()
+                    'last_modified': time_now_utc
                 }
             },
 
             'seeing': {
                 'median': None,
                 'mean': None,
-                'last_modified': datetime.datetime.now()
+                'last_modified': time_now_utc
             },
             'bzip2': {
                 'location': [],
-                'last_modified': datetime.datetime.now()
+                'last_modified': time_now_utc
             },
             'raw_data': {
                 'location': [],
                 'data': [],
-                'last_modified': datetime.datetime.now()
+                'last_modified': time_now_utc
             },
             'comment': None
         }
 
 
-def set_up_logging(_path='logs', _name='archive', _level=logging.DEBUG):
+def set_up_logging(_path='logs', _name='archive', _level=logging.DEBUG, _mode='w'):
     """ Set up logging
 
     :param _path:
+    :param _name:
+    :param _level: DEBUG, INFO, etc.
+    :param _mode: overwrite log-file or append: w or a
     :return: logger instance
     """
 
@@ -117,12 +155,13 @@ def set_up_logging(_path='logs', _name='archive', _level=logging.DEBUG):
 
     # http://www.blog.pythonlibrary.org/2012/08/02/python-101-an-intro-to-logging/
     _logger = logging.getLogger(_name)
-    # logger.setLevel(logging.INFO)
+
     _logger.setLevel(_level)
     # create the logging file handler
     fh = logging.FileHandler(os.path.join(_path,
                                           '{:s}.{:s}.log'.format(_name, utc_now.strftime('%Y%m%d'))),
-                             mode='w')
+                             mode=_mode)
+    logging.Formatter.converter = time.gmtime
 
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     # formatter = logging.Formatter('%(asctime)s %(message)s')
@@ -273,7 +312,157 @@ def get_fits_header(fits_file):
     return header
 
 
+def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
+    """
+        Check if observation has been automatically pipelined
+    :param _config: config data
+    :param _logger: logger instance
+    :param _coll: collection in the database
+    :param _select: database entry
+    :param _date: date of obs
+    :param _obs: obs name
+
+    :return:
+    """
+    if not _select['pipelined']['automated']['status']['done']:
+        # for each date for each source check if processed
+        for tag in ('high_flux', 'faint', 'zero_flux', 'failed'):
+            path_obs = os.path.join(_config['path_pipe'], _date, tag, _obs)
+            if os.path.exists(path_obs):
+                try:
+                    # check folder modified date:
+                    time_tag = datetime.datetime.utcfromtimestamp(
+                        os.stat(path_obs).st_mtime)
+
+                    fits100p = os.path.join(path_obs, '100p.fits')
+                    header = get_fits_header(fits100p) if tag != 'failed' else {}
+
+                    _coll.update_one(
+                        {'_id': _obs},
+                        {
+                            '$set': {
+                                'pipelined.automated.status.done': True,
+                                'pipelined.automated.classified_as': tag,
+                                'pipelined.automated.last_modified': time_tag,
+                                'pipelined.automated.fits_header': header
+                            },
+                            '$push': {
+                                'pipelined.automated.location': ['{:s}:{:s}'.format(
+                                                    _config['analysis_machine_external_host'],
+                                                    _config['analysis_machine_external_port']),
+                                                    _config['path_pipe']],
+                            }
+                        }
+                    )
+                    _logger.debug('Updated automated pipeline entry for {:s}'.format(_obs))
+                    # TODO: make preview images
+                except Exception as _e:
+                    print(_e)
+                    _logger.error(_e)
+                    return False
+    # done? check modified time tag for updates:
+    else:
+        for tag in ('high_flux', 'faint', 'zero_flux', 'failed'):
+            path_obs = os.path.join(_config['path_pipe'], _date, tag, _obs)
+            if os.path.exists(path_obs):
+                try:
+                    # check folder modified date:
+                    time_tag = datetime.datetime.utcfromtimestamp(
+                        os.stat(path_obs).st_mtime)
+                    # changed?
+                    if _select['pipelined']['automated']['last_modified'] != time_tag:
+                        fits100p = os.path.join(path_obs, '100p.fits')
+                        header = get_fits_header(fits100p) if tag != 'failed' else {}
+
+                        _coll.update_one(
+                            {'_id': _obs},
+                            {
+                                '$set': {
+                                    'pipelined.automated.classified_as': tag,
+                                    'pipelined.automated.last_modified': time_tag,
+                                    'pipelined.automated.fits_header': header
+                                }
+                            }
+                        )
+                        _logger.debug('Updated automated pipeline entry for {:s}'.format(_obs))
+                        # TODO: remake preview images
+                except Exception as _e:
+                    print(_e)
+                    logger.error(_e)
+                    return False
+
+    return True
+
+
+def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
+    """
+        Check if observation has been processed
+    :param _config: config data
+    :param _logger: logger instance
+    :param _coll: collection in the database
+    :param _select: database entry
+    :param _date: date of obs
+    :param _obs: obs name
+
+    :return:
+    """
+    if not _select['pipelined']['faint']['status']['done'] or \
+                    _select['pipelined']['faint']['status']['retries'] < 3:
+        # TODO: put job into the huey execution queue
+        return False
+
+    return True
+
+
+def check_pipe_pca(_config, _logger, _coll, _select, _date, _obs):
+    """
+        Check if observation has been processed
+    :param _config: config data
+    :param _logger: logger instance
+    :param _coll: collection in the database
+    :param _select: database entry
+    :param _date: date of obs
+    :param _obs: obs name
+
+    :return:
+    """
+    if not _select['pipelined']['faint']['status']['done'] or \
+                    _select['pipelined']['faint']['status']['retries'] < 3:
+        # TODO: put job into the huey execution queue
+        job(_obs)
+        print('put a pca job into the queue')
+        return False
+
+    return True
+
+
+def check_strehl(_config, _logger, _coll, _select, _date, _obs):
+    """
+        Check if observation has been processed
+    :param _config: config data
+    :param _logger: logger instance
+    :param _coll: collection in the database
+    :param _select: database entry
+    :param _date: date of obs
+    :param _obs: obs name
+
+    :return:
+    """
+    if not _select['pipelined']['faint']['status']['done'] or \
+                    _select['pipelined']['faint']['status']['retries'] < 3:
+        job(_obs)
+        print('put a Strehl job into the queue')
+        return False
+
+    return True
+
+
 if __name__ == '__main__':
+    """
+        - create argument parser, parse command line arguments
+        - set up logging
+        - load config
+    """
 
     ''' Create command line argument parser '''
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -378,7 +567,7 @@ if __name__ == '__main__':
                 select = coll.find_one({'_id': obs})
                 # if entry not in database, create empty one and populate it
                 if select is None:
-                    print('{:s} not in database, adding'.format(obs))
+                    print('{:s} not in database, adding...'.format(obs))
                     logger.info('{:s} not in database, adding'.format(obs))
                     entry = empty_db_record()
                     # populate:
@@ -394,90 +583,44 @@ if __name__ == '__main__':
                     entry['camera'] = camera
                     entry['filter'] = filt  # also get this from FITS header
 
+                    # find raw fits files:
+                    raws = [s for s in date_files if re.match(obs, s) is not None]
+                    entry['raw_data']['location'].append(['{:s}:{:s}'.format(
+                                                    config['analysis_machine_external_host'],
+                                                    config['analysis_machine_external_port']),
+                                                    config['path_raw']])
+                    entry['raw_data']['data'] = raws
+                    entry['raw_data']['last_modified'] = datetime.datetime.now(pytz.utc)
+
                     # insert into database
                     result = coll.insert_one(entry)
 
-                # entry in database, check if pipelined
+                # entry found in database, check if pipelined, update entry if necessary
                 else:
-                    print('{:s} in database, checking'.format(obs))
+                    print('{:s} in database, checking...'.format(obs))
                     ''' check Nick-pipelined data '''
-                    if not select['pipelined']['automated']['status']['done']:
-                        # for each date for each source check if processed
-                        for tag in ('high_flux', 'faint', 'zero_flux', 'failed'):
-                            path_obs = os.path.join(config['path_pipe'], date, tag, obs)
-                            if os.path.exists(path_obs):
-                                try:
-                                    # check folder modified date:
-                                    time_tag = datetime.datetime.utcfromtimestamp(
-                                                    os.stat(path_obs).st_mtime)
-
-                                    fits100p = os.path.join(path_obs, '100p.fits')
-                                    header = get_fits_header(fits100p) if tag != 'failed' else {}
-
-                                    result = coll.update_one(
-                                        {'_id': obs},
-                                        {
-                                            '$set': {
-                                                'pipelined.automated.status.done': True,
-                                                'pipelined.automated.classified_as': tag,
-                                                'pipelined.automated.location':
-                                                    select['pipelined']['automated']['location'].append(
-                                                        ['{:s}:{:s}'.format(
-                                                            config['analysis_machine_external_host'],
-                                                            config['analysis_machine_external_port']),
-                                                            config['path_pipe']]
-                                                    ),
-                                                'pipelined.automated.last_modified': time_tag,
-                                                'pipelined.automated.fits_header': header
-                                            }
-                                        }
-                                    )
-                                    logger.debug('Updated automated pipeline entry for {:s}'.format(obs))
-                                except Exception as e:
-                                    print(e)
-                                    logger.error(e)
-                    # done? check modified time tag for updates:
-                    else:
-                        for tag in ('high_flux', 'faint', 'zero_flux', 'failed'):
-                            path_obs = os.path.join(config['path_pipe'], date, tag, obs)
-                            if os.path.exists(path_obs):
-                                try:
-                                    # check folder modified date:
-                                    time_tag = datetime.datetime.utcfromtimestamp(
-                                                    os.stat(path_obs).st_mtime)
-                                    # changed?
-                                    if select['pipelined']['automated']['last_modified'] != time_tag:
-                                        fits100p = os.path.join(path_obs, '100p.fits')
-                                        header = get_fits_header(fits100p) if tag != 'failed' else {}
-
-                                        result = coll.update_one(
-                                            {'_id': obs},
-                                            {
-                                                '$set': {
-                                                    'pipelined.automated.classified_as': tag,
-                                                    'pipelined.automated.last_modified': time_tag,
-                                                    'pipelined.automated.fits_header': header
-                                                }
-                                            }
-                                        )
-                                        logger.debug('Updated automated pipeline entry for {:s}'.format(obs))
-                                except Exception as e:
-                                    print(e)
-                                    logger.error(e)
+                    status_ok = check_pipe_automated(_config=config, _logger=logger, _coll=coll,
+                                                     _select=select, _date=date, _obs=obs)
+                    if not status_ok:
+                        logger.error('Checking failed for automatic pipeline: {:s}'.format(obs))
 
                     ''' check Faint-pipelined data '''
-                    # for each date for each source check if processed
-                    # update last_modified if necessary
+                    status_ok = check_pipe_faint(_config=config, _logger=logger, _coll=coll,
+                                                 _select=select, _date=date, _obs=obs)
+                    if not status_ok:
+                        logger.error('Checking failed for faint pipeline: {:s}'.format(obs))
 
                     ''' check (PCA-)pipelined data '''
-                    # for each date for each source check if processed
-                    # collect jobs to execute on the way
-                    # update last_modified if necessary
+                    status_ok = check_pipe_pca(_config=config, _logger=logger, _coll=coll,
+                                               _select=select, _date=date, _obs=obs)
+                    if not status_ok:
+                        logger.error('Checking failed for PCA pipeline: {:s}'.format(obs))
 
                     ''' check Strehl data '''
-                    # for each date for each source check if processed
-                    # collect jobs to execute on the way
-                    # update last_modified if necessary
+                    status_ok = check_strehl(_config=config, _logger=logger, _coll=coll,
+                                                     _select=select, _date=date, _obs=obs)
+                    if not status_ok:
+                        logger.error('Checking failed for automatic pipeline: {:s}'.format(obs))
 
                     ''' check seeing data '''
                     # TODO: [lower priority]
@@ -492,6 +635,9 @@ if __name__ == '__main__':
 
                 # TODO: mark distributed when all pipelines done or n_retries>3,
                 # TODO: compress everything with bzip2, store and transfer over to Caltech
+
+            # TODO: query database for all contrast curves and Strehls [+seeing - lower priority]
+            # TODO: make joint plots to display on the website
 
     except Exception as e:
         print(e)

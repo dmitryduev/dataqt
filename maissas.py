@@ -517,7 +517,7 @@ def Strehl_calculator(name, imagepath, Strehl_factor, plate_scale, boxsize, newl
 if __name__ == '__main__':
     # Create parser
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
-                                     description='Becky\'s PCA pipeline')
+                                     description='Maissa\'s Strehl calculator')
 
     parser.add_argument('config_file', metavar='config_file',
                         action='store', help='path to config file.', type=str)
