@@ -5,6 +5,9 @@
 """
 
 from __future__ import print_function
+from gevent import monkey
+monkey.patch_all()
+
 import os
 from pymongo import MongoClient
 import json
@@ -18,61 +21,107 @@ import flask_login
 from werkzeug.security import generate_password_hash, check_password_hash
 
 
-''' load config data '''
-abs_path = os.path.dirname(inspect.getfile(inspect.currentframe()))
-config = ConfigParser.RawConfigParser()
-config.read(os.path.join(abs_path, 'config.ini'))
-# logger.debug('Successfully read in the config file {:s}'.format(args.config_file))
+def get_config(config_file='config.ini'):
+    """
+        load config data
+    """
+    try:
+        abs_path = os.path.dirname(inspect.getfile(inspect.currentframe()))
+        _config = ConfigParser.RawConfigParser()
+        _config.read(os.path.join(abs_path, config_file))
+        # logger.debug('Successfully read in the config file {:s}'.format(args.config_file))
+
+        ''' connect to mongodb database '''
+        conf = dict()
+        # database access:
+        conf['mongo_host'] = _config.get('Database', 'host')
+        conf['mongo_port'] = int(_config.get('Database', 'port'))
+        conf['mongo_db'] = _config.get('Database', 'db')
+        conf['mongo_user'] = _config.get('Database', 'user')
+        conf['mongo_pwd'] = _config.get('Database', 'pwd')
+        conf['mongo_collection_pwd'] = _config.get('Database', 'collection_pwd')
+
+        ''' server location '''
+        conf['server_host'] = _config.get('Server', 'host')
+        conf['server_port'] = _config.get('Server', 'port')
+
+        return conf
+
+    except Exception as _e:
+        print(_e)
+        raise Exception('Failed to read in the config file')
 
 
-''' connect to mongodb database '''
-# database access:
-mongo_host = config.get('Database', 'host')
-mongo_port = int(config.get('Database', 'port'))
-mongo_db = config.get('Database', 'db')
-mongo_user = config.get('Database', 'user')
-mongo_pwd = config.get('Database', 'pwd')
-mongo_collection_pwd = config.get('Database', 'collection_pwd')
+def connect_to_db(_config):
+    """ Connect to the mongodb database
 
-''' Connect to the mongodb database '''
-try:
-    client = MongoClient(host=mongo_host, port=mongo_port)
-    db = client[mongo_db]
-    # logger.debug('Successfully connected to the Robo-AO database at {:s}:{:d}'.
-    #              format(mongo_host, mongo_port))
-except Exception as e:
-    print(e)
-    # logger.error(e)
-    # logger.error('Failed to connect to the Robo-AO database at {:s}:{:d}'.
-    #              format(mongo_host, mongo_port))
-    # sys.exit()
-    db = None
-try:
-    db.authenticate(mongo_user, mongo_pwd)
-    # logger.debug('Successfully authenticated with the Robo-AO database at {:s}:{:d}'.
-    #              format(mongo_host, mongo_port))
-except Exception as e:
-    print(e)
-    # logger.error(e)
-    # logger.error('Authentication failed for the Robo-AO database at {:s}:{:d}'.
-    #              format(mongo_host, mongo_port))
-    # sys.exit()
-    pass
-try:
-    coll = db[mongo_collection_pwd]
-    # cursor = coll.find()
-    # for doc in cursor:
-    #     print(doc)
-    # logger.debug('Using collection {:s} with user credentials data in the database'.
-    #              format(mongo_collection_pwd))
-except Exception as e:
-    print(e)
-    # logger.error(e)
-    # logger.error('Failed to use a collection {:s} with user credentials data in the database'.
-    #              format(mongo_collection_pwd))
-    # sys.exit()
-    coll = None
+    :return:
+    """
+    try:
+        client = MongoClient(host=_config['mongo_host'], port=_config['mongo_port'])
+        db = client[_config['mongo_db']]
+        # logger.debug('Successfully connected to the Robo-AO database at {:s}:{:d}'.
+        #              format(mongo_host, mongo_port))
+    except Exception as e:
+        print(e)
+        # logger.error(e)
+        # logger.error('Failed to connect to the Robo-AO database at {:s}:{:d}'.
+        #              format(mongo_host, mongo_port))
+        # sys.exit()
+        db = None
+    try:
+        db.authenticate(_config['mongo_user'], _config['mongo_pwd'])
+        # logger.debug('Successfully authenticated with the Robo-AO database at {:s}:{:d}'.
+        #              format(mongo_host, mongo_port))
+    except Exception as e:
+        print(e)
+        # logger.error(e)
+        # logger.error('Authentication failed for the Robo-AO database at {:s}:{:d}'.
+        #              format(mongo_host, mongo_port))
+        # sys.exit()
+    try:
+        coll = db[_config['mongo_collection_pwd']]
+        # cursor = coll.find()
+        # for doc in cursor:
+        #     print(doc)
+        # logger.debug('Using collection {:s} with user credentials data in the database'.
+        #              format(mongo_collection_pwd))
+    except Exception as e:
+        print(e)
+        # logger.error(e)
+        # logger.error('Failed to use a collection {:s} with user credentials data in the database'.
+        #              format(mongo_collection_pwd))
+        # sys.exit()
+        coll = None
 
+    return db, coll
+
+# import functools
+# def background(f):
+#     @functools.wraps(f)
+#     def wrapper(*args, **kwargs):
+#         jobid = uuid4().hex
+#         key = 'job-{0}'.format(jobid)
+#         skey = 'job-{0}-status'.format(jobid)
+#         expire_time = 3600
+#         redis.set(skey, 202)
+#         redis.expire(skey, expire_time)
+#
+#         @copy_current_request_context
+#         def task():
+#             try:
+#                 data = f(*args, **kwargs)
+#             except:
+#                 redis.set(skey, 500)
+#             else:
+#                 redis.set(skey, 200)
+#                 redis.set(key, data)
+#                 redis.expire(key, expire_time)
+#             redis.expire(skey, expire_time)
+#
+#         gevent.spawn(task)
+#         return jsonify({"job": jobid})
+#     return wrapper
 
 ''' initialize the Flask app '''
 app = flask.Flask(__name__)
@@ -81,6 +130,13 @@ app.secret_key = 'roboaokicksass'
 login_manager = flask_login.LoginManager()
 
 login_manager.init_app(app)
+
+''' get config data '''
+config = get_config(config_file='config.ini')
+# print(config)
+
+''' Connect to the mongodb database '''
+db, coll = connect_to_db(config)
 
 ''' throw error 500 if could not connect to database '''
 if db is None and coll is None:
@@ -331,4 +387,4 @@ def unauthorized_handler():
 
 
 if __name__ == '__main__':
-    app.run(host=config.get('Server', 'host'), port=config.get('Server', 'port'), threaded=True)
+    app.run(host=config['server_host'], port=config['server_port'], threaded=True)
