@@ -514,6 +514,11 @@ if __name__ == '__main__':
                 for sou_dir in sorted(os.listdir(os.path.join(path, pot))):
                     # frame_name = os.path.splitext(sou_dir)[0]
                     path_sou = os.path.join(path, pot, sou_dir)
+
+                    path_out = os.path.join(path_data, pot, sou_dir)
+                    if not os.path.exists(path_out):
+                        os.mkdir(path_out)
+
                     tmp = sou_dir.split('_')
                     try:
                         # prog num set?
@@ -556,7 +561,7 @@ if __name__ == '__main__':
                     if core > 0.14 and halo < 1.0:
                     # if core > 0.14e-10 and halo < 1.0e10:
                         # run PCA
-                        args_pca.append([trimmed_frame, win, sou_name, sou_dir, os.path.join(path_data, pot),
+                        args_pca.append([trimmed_frame, win, sou_name, sou_dir, path_out,
                                          psf_reference_library, psf_reference_library_short_names,
                                          core/plate_scale, plate_scale, sigma, nrefs, klip])
                     else:
@@ -569,9 +574,8 @@ if __name__ == '__main__':
                 # raise NotImplementedError
                 n_cpu = multiprocessing.cpu_count()
                 # create pool
-                # pool = multiprocessing.Pool(n_cpu)
-                pool = multiprocessing.Pool(1)
-                result = pool.map_async(pca_helper, args_pca[:1])
+                pool = multiprocessing.Pool(n_cpu)
+                result = pool.map_async(pca_helper, args_pca)
                 # close bassejn
                 pool.close()  # we are not adding any more processes
                 pool.join()  # wait until all threads are done before going on
