@@ -553,8 +553,8 @@ if __name__ == '__main__':
                         core = 0.14
                         halo = 1.0
                         continue
-                    # if core > 0.14 and halo < 1.0:
-                    if core > 0.14e-10 and halo < 1.0e10:
+                    if core > 0.14 and halo < 1.0:
+                    # if core > 0.14e-10 and halo < 1.0e10:
                         # run PCA
                         args_pca.append([trimmed_frame, win, sou_name, sou_dir, os.path.join(path_data, pot),
                                          psf_reference_library, psf_reference_library_short_names,

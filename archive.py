@@ -350,7 +350,7 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
     :return:
     """
     if not _select['pipelined']['automated']['status']['done']:
-        # for each date for each source check if processed
+        # check if processed
         for tag in ('high_flux', 'faint', 'zero_flux', 'failed'):
             path_obs = os.path.join(_config['path_pipe'], _date, tag, _obs)
             if os.path.exists(path_obs):
@@ -451,8 +451,9 @@ def check_pipe_pca(_config, _logger, _coll, _select, _date, _obs):
 
     :return:
     """
-    if not _select['pipelined']['faint']['status']['done'] or \
-                    _select['pipelined']['faint']['status']['retries'] < 3:
+    # not pipelined yet after <3 retries?
+    if not _select['pipelined']['pca']['status']['done'] or \
+                    _select['pipelined']['pca']['status']['retries'] < 3:
         # TODO: put job into the huey execution queue
         job_pca(_obs, _logger, _coll)
         print('put a pca job into the queue')
