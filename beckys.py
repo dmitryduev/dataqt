@@ -20,16 +20,17 @@ from scipy.optimize import fmin
 from math import sqrt, pow, exp
 from skimage import exposure
 from copy import deepcopy
+import matplotlib
+# matplotlib.use('Qt4Agg')
+matplotlib.use('agg')
 from matplotlib.patches import Rectangle
 from matplotlib.offsetbox import AnchoredOffsetbox, AuxTransformBox, VPacker, TextArea
-import matplotlib
-matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
-import seaborn as sns
-sns.set_style('whitegrid')
-# sns.set_palette(sns.diverging_palette(10, 220, sep=80, n=7))
-plt.close('all')
-sns.set_context('talk')
+# import seaborn as sns
+# sns.set_style('whitegrid')
+# # sns.set_palette(sns.diverging_palette(10, 220, sep=80, n=7))
+# plt.close('all')
+# sns.set_context('talk')
 
 
 # detect observatiosn which are bad because of being too faint
@@ -235,12 +236,16 @@ def pca_helper(_args):
 
     # run pca
     try:
-        pca(_trimmed_frame=_trimmed_frame, _win=_win, _sou_name=_sou_name,
-            _sou_dir=_sou_dir, _out_path=_out_path,
-            _library=_library, _library_names_short=_library_names_short,
-            _fwhm=_fwhm, _plsc=_plsc, _sigma=_sigma, _nrefs=_nrefs, _klip=_klip)
-    finally:
-        return
+        output = pca(_trimmed_frame=_trimmed_frame, _win=_win, _sou_name=_sou_name,
+                     _sou_dir=_sou_dir, _out_path=_out_path,
+                     _library=_library, _library_names_short=_library_names_short,
+                     _fwhm=_fwhm, _plsc=_plsc, _sigma=_sigma, _nrefs=_nrefs, _klip=_klip)
+        return output
+    except Exception as _e:
+        print(_e)
+        return None
+    # finally:
+    #     return None
 
 
 def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _out_path,
@@ -318,6 +323,7 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _out_path,
     pca_frame = vip.pca.pca(reshaped_frame, np.zeros(1), library, ncomp=_klip)
 
     pca_file_name = os.path.join(_out_path, _sou_dir + '_pca.fits')
+    # print(pca_file_name)
 
     # remove fits if already exists
     if os.path.isfile(pca_file_name):
@@ -346,56 +352,83 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _out_path,
     # perform local histogram equalization instead:
     scidata_corrected = exposure.equalize_adapthist(scidata, clip_limit=0.03)
 
-    plt.close('all')
-    fig = plt.figure(_sou_dir)
-    fig.set_size_inches(3, 3, forward=False)
-    # ax = fig.add_subplot(111)
-    ax = plt.Axes(fig, [0., 0., 1., 1.])
-    ax.set_axis_off()
-    fig.add_axes(ax)
-    ax.imshow(scidata_corrected, cmap='gray', origin='lower', interpolation='nearest')
-    # add scale bar:
-    # draw a horizontal bar with length of 0.1*x_size
-    # (ax.transData) with a label underneath.
-    bar_len = pca_frame.shape[0] * 0.1
-    bar_len_str = '{:.1f}'.format(bar_len * 36 / 1024 / 2)
-    asb = AnchoredSizeBar(ax.transData,
-                          bar_len,
-                          bar_len_str[0] + r"$^{\prime\prime}\!\!\!.$" + bar_len_str[-1],
-                          loc=4, pad=0.3, borderpad=0.5, sep=10, frameon=False)
-    ax.add_artist(asb)
-
-    # save figure
-    fig.savefig(os.path.join(_out_path, _sou_dir + '_pca.png'), dpi=300)
-
     # Make contrast curve
     [con, cont, sep] = (vip.phot.contrcurve.contrast_curve(cube=reshaped_frame, angle_list=np.zeros(1),
                                                            psf_template=psf_template,
                                                            cube_ref=library, fwhm=_fwhm, pxscale=_plsc,
                                                            starphot=center_flux, sigma=_sigma,
                                                            ncomp=_klip, algo='pca-rdi-fullfr',
-                                                           debug='false',
-                                                           plot='false', nbranch=3, scaling=None,
+                                                           debug=False,
+                                                           plot=False, nbranch=3, scaling=None,
                                                            mask_center_px=_fwhm, fc_rad_sep=6))
-
-    plt.close('all')
-    fig = plt.figure('Contrast curve for {:s}'.format(_sou_dir), figsize=(8, 3.5), dpi=200)
-    ax = fig.add_subplot(111)
-    ax.set_title(_sou_dir)  # , fontsize=14)
-    ax.plot(sep, -2.5 * np.log10(cont), 'k-', linewidth=2.5)
-    ax.set_xlim([0.2, 1.45])
-    ax.set_xlabel('Separation [arcseconds]')  # , fontsize=18)
-    ax.set_ylabel('Contrast [$\Delta$mag]')  # , fontsize=18)
-    ax.set_ylim([0, 8])
-    ax.set_ylim(ax.get_ylim()[::-1])
-    ax.grid(linewidth=0.5)
-    plt.tight_layout()
-    fig.savefig(os.path.join(_out_path, _sou_dir + '_contrast_curve.png'), dpi=200)
 
     # save txt for nightly median calc/plot
     with open(os.path.join(_out_path, _sou_dir + '_contrast_curve.txt'), 'w') as f:
         for s, dm in zip(sep, -2.5 * np.log10(cont)):
             f.write('{:.3f} {:.3f}\n'.format(s, dm))
+
+    # return stuff to generate plots:
+    # print(scidata_corrected, pca_frame, sep, cont, _sou_dir, _out_path)
+    return scidata_corrected, pca_frame, sep, cont, _sou_dir, _out_path
+
+
+def generate_images(_scidata_corrected, _pca_frame, _sep, _cont, _sou_dir, _out_path):
+    """
+        Generate preview images
+
+        This must be done outside the main pca function for it to work with the
+        multiprocessing module
+    :param _scidata_corrected:
+    :param _pca_frame:
+    :param _sep:
+    :param _cont:
+    :param _sou_dir:
+    :param _out_path:
+    :return:
+    """
+    try:
+        ''' plot psf-subtracted image '''
+        plt.close('all')
+        fig = plt.figure(_sou_dir)
+        fig.set_size_inches(3, 3, forward=False)
+        # ax = fig.add_subplot(111)
+        ax = plt.Axes(fig, [0., 0., 1., 1.])
+        ax.set_axis_off()
+        fig.add_axes(ax)
+        ax.imshow(_scidata_corrected, cmap='gray', origin='lower', interpolation='nearest')
+        # add scale bar:
+        # draw a horizontal bar with length of 0.1*x_size
+        # (ax.transData) with a label underneath.
+        bar_len = _pca_frame.shape[0] * 0.1
+        bar_len_str = '{:.1f}'.format(bar_len * 36 / 1024 / 2)
+        asb = AnchoredSizeBar(ax.transData,
+                              bar_len,
+                              bar_len_str[0] + r"$^{\prime\prime}\!\!\!.$" + bar_len_str[-1],
+                              loc=4, pad=0.3, borderpad=0.5, sep=10, frameon=False)
+        ax.add_artist(asb)
+
+        # save figure
+        fig.savefig(os.path.join(_out_path, _sou_dir + '_pca.png'), dpi=300)
+
+        ''' plot the contrast curve '''
+        # plt.close('all')
+        fig = plt.figure('Contrast curve for {:s}'.format(_sou_dir), figsize=(8, 3.5), dpi=200)
+        ax = fig.add_subplot(111)
+        ax.set_title(_sou_dir)  # , fontsize=14)
+        ax.plot(_sep, -2.5 * np.log10(_cont), 'k-', linewidth=2.5)
+        ax.set_xlim([0.2, 1.45])
+        ax.set_xlabel('Separation [arcseconds]')  # , fontsize=18)
+        ax.set_ylabel('Contrast [$\Delta$mag]')  # , fontsize=18)
+        ax.set_ylim([0, 8])
+        ax.set_ylim(ax.get_ylim()[::-1])
+        ax.grid(linewidth=0.5)
+        plt.tight_layout()
+        fig.savefig(os.path.join(_out_path, _sou_dir + '_contrast_curve.png'), dpi=200)
+    except Exception as e:
+        print(e)
+        return False
+
+    return True
 
 
 if __name__ == '__main__':
@@ -513,14 +546,15 @@ if __name__ == '__main__':
                         cy1, cx1 = np.unravel_index(trimmed_frame.argmax(), trimmed_frame.shape)
                         core, halo = bad_obs_check(trimmed_frame[cy1-30:cy1+30+1, cx1-30:cx1+30+1],
                                                    ps=plate_scale)
-                        f_handle = file('/Data2/becky/compile_data/core_and_halo.txt', 'a')
-                        np.savetxt(f_handle, np.array(['\n'+path_sou, core, halo]), newline=" ",fmt="%s")
-                        f_handle.close()
+                        # f_handle = file('/Data2/becky/compile_data/core_and_halo.txt', 'a')
+                        # np.savetxt(f_handle, np.array(['\n'+path_sou, core, halo]), newline=" ",fmt="%s")
+                        # f_handle.close()
                     except:
                         core = 0.14
                         halo = 1.0
                         continue
-                    if core > 0.14 and halo < 1.0:
+                    # if core > 0.14 and halo < 1.0:
+                    if core > 0.14e-10 and halo < 1.0e10:
                         # run PCA
                         args_pca.append([trimmed_frame, win, sou_name, sou_dir, os.path.join(path_data, pot),
                                          psf_reference_library, psf_reference_library_short_names,
@@ -531,7 +565,25 @@ if __name__ == '__main__':
         # run computation:
         if len(args_pca) > 0:
             if args.parallel:
-                raise NotImplementedError
+                import multiprocessing
+                # raise NotImplementedError
+                n_cpu = multiprocessing.cpu_count()
+                # create pool
+                # pool = multiprocessing.Pool(n_cpu)
+                pool = multiprocessing.Pool(1)
+                result = pool.map_async(pca_helper, args_pca[:1])
+                # close bassejn
+                pool.close()  # we are not adding any more processes
+                pool.join()  # wait until all threads are done before going on
+                # get the ordered results
+                preview = result.get()
+                print('Done with the PCA pipeline.')
+                print('Generating plots...')
+                for source_data in preview:
+                    if source_data is not None:
+                        generate_images(*source_data)
             else:
                 for arg_pca in args_pca:
-                    pca_helper(arg_pca)
+                    source_data = pca_helper(arg_pca)
+                    if source_data is not None:
+                        generate_images(*source_data)

@@ -24,12 +24,12 @@ from collections import OrderedDict
 
 # import numba
 from huey import RedisHuey
-huey = RedisHuey('roboao.archive')
+huey = RedisHuey('roboao.archive', result_store=True)
 
 
 @huey.task()
 # @numba.jit
-def job(_obs):
+def job_pca(_obs, _logger, _coll):
     tic = time.time()
     a = 0
     for i in range(100):
@@ -37,6 +37,28 @@ def job(_obs):
             for k in range(1000):
                 a += 3**2
     print('It took {:.2f} s to finish the job on {:s}'.format(time.time() - tic, _obs))
+    _logger.debug('done a pca job on {:s}'.format(_obs))
+    _coll.update_one(
+        {'_id': _obs},
+        {
+            '$set': {
+                'pipelined.pca.status.done': True,
+            }
+        }
+    )
+    return True
+
+@huey.task()
+# @numba.jit
+def job_strehl(_obs):
+    tic = time.time()
+    a = 0
+    for i in range(100):
+        for j in range(100):
+            for k in range(1000):
+                a += 3**2
+    print('It took {:.2f} s to finish the job on {:s}'.format(time.time() - tic, _obs))
+
     return True
 
 
@@ -83,7 +105,8 @@ def empty_db_record():
             'pipelined': {
                 'automated': {
                     'status': {
-                        'done': False
+                        'done': False,
+                        'preview': False
                     },
                     'location': [],
                     'classified_as': None,
@@ -93,6 +116,7 @@ def empty_db_record():
                 'faint': {
                     'status': {
                         'done': False,
+                        'preview': False,
                         'retries': 0
                     },
                     'location': [],
@@ -101,6 +125,7 @@ def empty_db_record():
                 'pca': {
                     'status': {
                         'done': False,
+                        'preview': False,
                         'retries': 0
                     },
                     'location': [],
@@ -429,7 +454,7 @@ def check_pipe_pca(_config, _logger, _coll, _select, _date, _obs):
     if not _select['pipelined']['faint']['status']['done'] or \
                     _select['pipelined']['faint']['status']['retries'] < 3:
         # TODO: put job into the huey execution queue
-        job(_obs)
+        job_pca(_obs, _logger, _coll)
         print('put a pca job into the queue')
         return False
 
@@ -450,7 +475,7 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs):
     """
     if not _select['pipelined']['faint']['status']['done'] or \
                     _select['pipelined']['faint']['status']['retries'] < 3:
-        job(_obs)
+        job_strehl(_obs, _logger, _coll)
         print('put a Strehl job into the queue')
         return False
 
