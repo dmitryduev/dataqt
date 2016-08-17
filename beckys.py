@@ -325,14 +325,14 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _out_path,
     pca_file_name = os.path.join(_out_path, _sou_dir + '_pca.fits')
     # print(pca_file_name)
 
-    # remove fits if already exists
-    if os.path.isfile(pca_file_name):
-        os.remove(pca_file_name)
+    # create output path if necessary:
+    if not os.path.exists(_out_path):
+        os.mkdir(_out_path)
 
     # save fits after PCA
     hdu = fits.PrimaryHDU(pca_frame)
     hdulist = fits.HDUList([hdu])
-    hdulist.writeto(pca_file_name)
+    hdulist.writeto(pca_file_name, clobber=True)
 
     # save png after PCA
     # scale for beautification:
@@ -372,7 +372,7 @@ def pca(_trimmed_frame, _win, _sou_name, _sou_dir, _out_path,
     return scidata_corrected, pca_frame, sep, cont, _sou_dir, _out_path
 
 
-def generate_images(_scidata_corrected, _pca_frame, _sep, _cont, _sou_dir, _out_path):
+def generate_pca_images(_scidata_corrected, _pca_frame, _sep, _cont, _sou_dir, _out_path):
     """
         Generate preview images
 
@@ -516,8 +516,6 @@ if __name__ == '__main__':
                     path_sou = os.path.join(path, pot, sou_dir)
 
                     path_out = os.path.join(path_data, pot, sou_dir)
-                    if not os.path.exists(path_out):
-                        os.mkdir(path_out)
 
                     tmp = sou_dir.split('_')
                     try:
@@ -585,9 +583,9 @@ if __name__ == '__main__':
                 print('Generating plots...')
                 for source_data in preview:
                     if source_data is not None:
-                        generate_images(*source_data)
+                        generate_pca_images(*source_data)
             else:
                 for arg_pca in args_pca:
                     source_data = pca_helper(arg_pca)
                     if source_data is not None:
-                        generate_images(*source_data)
+                        generate_pca_images(*source_data)

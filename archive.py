@@ -21,6 +21,7 @@ from pymongo import MongoClient
 import sys
 import re
 from collections import OrderedDict
+import numpy as np
 
 # import numba
 from huey import RedisHuey
@@ -129,7 +130,7 @@ def empty_db_record():
                         'retries': 0
                     },
                     'location': [],
-                    'contrast_curve': {},
+                    'contrast_curve': None,
                     'last_modified': time_now_utc
                 },
                 'strehl': {
@@ -413,7 +414,7 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
                         # TODO: remake preview images
                 except Exception as _e:
                     print(_e)
-                    logger.error(_e)
+                    _logger.error(_e)
                     return False
 
     return True
@@ -442,6 +443,8 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
 def check_pipe_pca(_config, _logger, _coll, _select, _date, _obs):
     """
         Check if observation has been processed
+        - when run for the first time, will put a task into the queue and retries++
+        - when run for the second time, will generate preview images and mark as done
     :param _config: config data
     :param _logger: logger instance
     :param _coll: collection in the database
@@ -451,12 +454,80 @@ def check_pipe_pca(_config, _logger, _coll, _select, _date, _obs):
 
     :return:
     """
-    # not pipelined yet after <3 retries?
-    if not _select['pipelined']['pca']['status']['done'] or \
-                    _select['pipelined']['pca']['status']['retries'] < 3:
-        # TODO: put job into the huey execution queue
-        job_pca(_obs, _logger, _coll)
-        print('put a pca job into the queue')
+    try:
+        # not pipelined yet after <3 retries?
+        if not _select['pipelined']['pca']['status']['done'] or \
+                        _select['pipelined']['pca']['status']['retries'] < 3:
+            # check if processed
+            # name in accordance with the automated pipeline output,
+            # but check the faint pipeline output folder too
+            for tag in ('high_flux', 'faint'):
+                path_obs = os.path.join(_config['path_pca'], _date, tag, _obs)
+                # already processed?
+                if os.path.exists(path_obs):
+                    # check folder modified date:
+                    time_tag = datetime.datetime.utcfromtimestamp(
+                        os.stat(path_obs).st_mtime)
+                    # load contrast curve
+                    f_cc = [f for f in os.listdir(path_obs) if '_contrast_curve.txt' in f][0]
+                    cc = np.loadtxt(f_cc).tolist()
+                    # load fits file
+                    f_fits = [f for f in os.listdir(path_obs) if '.fits' in f][0]
+                    # TODO:
+                    fits = load_fits(f_fits)
+                    # previews generated?
+                    if not _select['pipelined']['pca']['status']['review']:
+                        # TODO:
+                        _status = generate_pca_images(fits, cc)
+
+                        if _status:
+                            _coll.update_one(
+                                {'_id': _obs},
+                                {
+                                    '$set': {
+                                        'pipelined.pca.status.preview': True
+                                    }
+                                }
+                            )
+                            _logger.debug('Updated pca pipeline entry [status.review] for {:s}'.format(_obs))
+                    # update database entry
+                    _coll.update_one(
+                        {'_id': _obs},
+                        {
+                            '$set': {
+                                'pipelined.pca.status.done': True,
+                                'pipelined.pca.contrast_curve': cc,
+                                'pipelined.pca.last_modified': time_tag
+                            },
+                            '$push': {
+                                'pipelined.automated.location': ['{:s}:{:s}'.format(
+                                    _config['analysis_machine_external_host'],
+                                    _config['analysis_machine_external_port']),
+                                    _config['path_pca']]
+                            }
+                        }
+                    )
+                    _logger.debug('Updated pca pipeline entry for {:s}'.format(_obs))
+                # not processed yet? put a job into the queue then:
+                else:
+                    # this will produce a fits file with the psf-subtracted image
+                    # and a text file with the contrast curve
+                    # TODO:
+                    job_pca(_obs, _logger, _coll)
+                    _logger.debug('put a pca job into the queue for {:s}'.format(_obs))
+                    _coll.update_one(
+                        {'_id': _obs},
+                        {
+                            '$inc': {
+                                'pipelined.pca.status.retries': 1
+                            }
+                        }
+                    )
+                    _logger.debug('Updated pca pipeline entry [status.retries] for {:s}'.format(_obs))
+
+    except Exception as _e:
+        print(_e)
+        logger.error(_e)
         return False
 
     return True
@@ -474,8 +545,8 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs):
 
     :return:
     """
-    if not _select['pipelined']['faint']['status']['done'] or \
-                    _select['pipelined']['faint']['status']['retries'] < 3:
+    if not _select['pipelined']['strehl']['status']['done'] or \
+                    _select['pipelined']['strehl']['status']['retries'] < 3:
         job_strehl(_obs, _logger, _coll)
         print('put a Strehl job into the queue')
         return False
