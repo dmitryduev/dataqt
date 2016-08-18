@@ -45,14 +45,14 @@ def log_gauss_score(_x, _mu=1.27, _sigma=0.17):
         _x: pixel for pixel in [1,2048] - source FWHM.
             has a max of 1 around 35 pix, drops fast to the left, drops slower to the right
     """
-    return np.exp(-(np.log(np.log(_x)) - _mu)**2 / (2*_sigma**2)) / 2
+    return np.exp(-(np.log(np.log(_x)) - _mu)**2 / (2*_sigma**2))
 
 
 def gauss_score(_r, _mu=0, _sigma=512):
     """
         _r - distance from centre to source in pix
     """
-    return np.exp(-(_r - _mu)**2 / (2*_sigma**2)) / 2
+    return np.exp(-(_r - _mu)**2 / (2*_sigma**2))
 
 
 def rho(x, y, x_0=1024, y_0=1024):
@@ -147,11 +147,17 @@ def make_img(_sou_name, _time, _filter, _prog_num, _camera, _marker,
 
     # print(out['table'])  # This is an astropy table.
 
-    # get first 5 and score them:
+    # get first 10 and score them:
     scores = []
+    # maximum width of a fix Gaussian. Real sources usually have larger 'errors'
+    gauss_error_max = [np.max([sou['A_IMAGE'] for sou in out['table'][0:10]]),
+                       np.max([sou['B_IMAGE'] for sou in out['table'][0:10]])]
     for sou in out['table'][0:10]:
         if sou['FWHM_IMAGE'] > 1:
-            score = log_gauss_score(sou['FWHM_IMAGE']) + gauss_score(rho(sou['X_IMAGE'], sou['Y_IMAGE']))
+            score = (log_gauss_score(sou['FWHM_IMAGE']) +
+                     gauss_score(rho(sou['X_IMAGE'], sou['Y_IMAGE'])) +
+                     np.mean([sou['A_IMAGE'] / gauss_error_max[0],
+                              sou['B_IMAGE'] / gauss_error_max[1]])) / 3.0
         else:
             score = 0  # it could so happen that reported FWHM is 0
         scores.append(score)
