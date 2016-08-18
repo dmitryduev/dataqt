@@ -20,17 +20,17 @@ from scipy.optimize import fmin
 from math import sqrt, pow, exp
 from skimage import exposure
 from copy import deepcopy
-import matplotlib
+# import matplotlib
 # matplotlib.use('Qt4Agg')
-matplotlib.use('agg')
+# matplotlib.use('agg')
 from matplotlib.patches import Rectangle
 from matplotlib.offsetbox import AnchoredOffsetbox, AuxTransformBox, VPacker, TextArea
 import matplotlib.pyplot as plt
-# import seaborn as sns
-# sns.set_style('whitegrid')
-# # sns.set_palette(sns.diverging_palette(10, 220, sep=80, n=7))
-# plt.close('all')
-# sns.set_context('talk')
+import seaborn as sns
+sns.set_style('whitegrid')
+# sns.set_palette(sns.diverging_palette(10, 220, sep=80, n=7))
+plt.close('all')
+sns.set_context('talk')
 
 
 # detect observatiosn which are bad because of being too faint
@@ -109,14 +109,14 @@ def log_gauss_score(_x, _mu=1.27, _sigma=0.17):
         _x: pixel for pixel in [1,2048] - source FWHM.
             has a max of 1 around 35 pix, drops fast to the left, drops slower to the right
     """
-    return np.exp(-(np.log(np.log(_x)) - _mu)**2 / (2*_sigma**2)) / 2
+    return np.exp(-(np.log(np.log(_x)) - _mu)**2 / (2*_sigma**2))  # / 2
 
 
 def gauss_score(_r, _mu=0, _sigma=512):
     """
         _r - distance from centre to source in pix
     """
-    return np.exp(-(_r - _mu)**2 / (2*_sigma**2)) / 2
+    return np.exp(-(_r - _mu)**2 / (2*_sigma**2))  # / 2
 
 
 def rho(x, y, x_0=1024, y_0=1024):
@@ -161,26 +161,37 @@ class AnchoredSizeBar(AnchoredOffsetbox):
                                    frameon=frameon)
 
 
-def make_img(_path, _win, _x=None, _y=None):
+def get_xy_from_frames_txt(_path):
+    with open(os.path.join(_path, 'frames.txt'), 'r') as _f:
+        f_lines = _f.readlines()
+    xy = np.array([map(float, l.split()[3:5]) for l in f_lines if l[0] != '#'])
+
+    return np.median(xy[:, 0]), np.median(xy[:, 1])
+
+
+def trim_frame(_path, _fits_name, _win=100, _method='frames.txt', _x=None, _y=None, _drizzled=True):
     """
 
-    :param _path: path to 100p.fits
+    :param _path: path
+    :param _fits_name: fits-file name
     :param _win: window width
+    :param _method: from 'frames.txt', using 'sextractor', a simple 'max', or 'manual'
     :param _x: source x position -- if known in advance
     :param _y: source y position -- if known in advance
+    :param _drizzled: was it drizzled?
 
     :return: cropped image
     """
-    scidata = fits.open(os.path.join(_path, '100p.fits'))[0].data
+    scidata = fits.open(os.path.join(_path, _fits_name))[0].data
 
-    if _x is None and _y is None:
+    if _method == 'sextractor':
         # extract sources
         sew = sewpy.SEW(params=["X_IMAGE", "Y_IMAGE", "XPEAK_IMAGE", "YPEAK_IMAGE",
                                 "A_IMAGE", "B_IMAGE", "FWHM_IMAGE", "FLAGS"],
                                 config={"DETECT_MINAREA": 10, "PHOT_APERTURES": "10", 'DETECT_THRESH': '5.0'},
                                 sexpath="sex")
 
-        out = sew(os.path.join(_path, '100p.fits'))
+        out = sew(os.path.join(_path, _fits_name))
         # sort by FWHM
         out['table'].sort('FWHM_IMAGE')
         # descending order
@@ -188,11 +199,17 @@ def make_img(_path, _win, _x=None, _y=None):
 
         print(out['table'])  # This is an astropy table.
 
-        # get first 5 and score them:
+        # get first 10 and score them:
         scores = []
+        # maximum width of a fix Gaussian. Real sources usually have larger 'errors'
+        gauss_error_max = [np.max([sou['A_IMAGE'] for sou in out['table'][0:10]]),
+                           np.max([sou['B_IMAGE'] for sou in out['table'][0:10]])]
         for sou in out['table'][0:10]:
             if sou['FWHM_IMAGE'] > 1:
-                score = log_gauss_score(sou['FWHM_IMAGE']) + gauss_score(rho(sou['X_IMAGE'], sou['Y_IMAGE']))
+                score = (log_gauss_score(sou['FWHM_IMAGE']) +
+                         gauss_score(rho(sou['X_IMAGE'], sou['Y_IMAGE'])) +
+                         np.mean([sou['A_IMAGE'] / gauss_error_max[0],
+                                  sou['B_IMAGE'] / gauss_error_max[1]])) / 3.0
             else:
                 score = 0  # it could so happen that reported FWHM is 0
             scores.append(score)
@@ -205,6 +222,8 @@ def make_img(_path, _win, _x=None, _y=None):
             # sou_xy = [out['table']['X_IMAGE'][0], out['table']['Y_IMAGE'][0]]
             best_score = np.argmax(scores) if len(scores) > 0 else 0
             # sou_size = np.max((int(out['table']['FWHM_IMAGE'][best_score] * 3), 90))
+            # print(out['table']['XPEAK_IMAGE'][best_score], out['table']['YPEAK_IMAGE'][best_score])
+            # print(get_xy_from_frames_txt(_path))
             scidata_cropped = scidata[out['table']['YPEAK_IMAGE'][best_score] - _win:
                                       out['table']['YPEAK_IMAGE'][best_score] + _win + 1,
                                       out['table']['XPEAK_IMAGE'][best_score] - _win:
@@ -214,10 +233,23 @@ def make_img(_path, _win, _x=None, _y=None):
             x, y = np.unravel_index(scidata.argmax(), scidata.shape)
             scidata_cropped = scidata[x - _win: x + _win + 1,
                                       y - _win: y + _win + 1]
-    else:
+    elif _method == 'max':
+        x, y = np.unravel_index(scidata.argmax(), scidata.shape)
+        scidata_cropped = scidata[x - _win: x + _win + 1,
+                                  y - _win: y + _win + 1]
+    elif _method == 'frames.txt':
+        x, y = get_xy_from_frames_txt(_path)
+        if _drizzled:
+            x *= 2.0
+            y *= 2.0
+        scidata_cropped = scidata[y - _win: y + _win + 1,
+                          x - _win: x + _win + 1]
+    elif _method == 'manual' and _x is not None and _y is not None:
         x, y = _x, _y
         scidata_cropped = scidata[x - _win: x + _win + 1,
                                   y - _win: y + _win + 1]
+    else:
+        raise Exception('unrecognized trimming method.')
 
     return scidata_cropped
 
@@ -411,7 +443,7 @@ def generate_pca_images(_scidata_corrected, _pca_frame, _sep, _cont, _sou_dir, _
         fig.savefig(os.path.join(_out_path, _sou_dir + '_pca.png'), dpi=300)
 
         ''' plot the contrast curve '''
-        # plt.close('all')
+        plt.close('all')
         fig = plt.figure('Contrast curve for {:s}'.format(_sou_dir), figsize=(8, 3.5), dpi=200)
         ax = fig.add_subplot(111)
         ax.set_title(_sou_dir)  # , fontsize=14)
@@ -432,6 +464,8 @@ def generate_pca_images(_scidata_corrected, _pca_frame, _sep, _cont, _sou_dir, _
 
 
 if __name__ == '__main__':
+    from time import time as _time
+    tic = _time()
     # Create parser
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
                                      description='Becky\'s PCA pipeline')
@@ -512,6 +546,7 @@ if __name__ == '__main__':
                 if not os.path.exists(os.path.join(path_data, pot)):
                     os.mkdir(os.path.join(path_data, pot))
                 for sou_dir in sorted(os.listdir(os.path.join(path, pot))):
+                    print(sou_dir)
                     # frame_name = os.path.splitext(sou_dir)[0]
                     path_sou = os.path.join(path, pot, sou_dir)
 
@@ -541,7 +576,9 @@ if __name__ == '__main__':
 
                     ''' go off with processing: '''
                     # trimmed image:
-                    trimmed_frame = (make_img(_path=path_sou, _win=win))
+                    trimmed_frame = (trim_frame(_path=path_sou, _fits_name='100p.fits',
+                                                _win=win, _method='sextractor',
+                                                _x=None, _y=None, _drizzled=True))
 
                     # Check of observation passes quality check:
 
@@ -555,7 +592,6 @@ if __name__ == '__main__':
                     except:
                         core = 0.14
                         halo = 1.0
-                        continue
                     if core > 0.14 and halo < 1.0:
                     # if core > 0.14e-10 and halo < 1.0e10:
                         # run PCA
@@ -564,9 +600,10 @@ if __name__ == '__main__':
                                          core/plate_scale, plate_scale, sigma, nrefs, klip])
                     else:
                         print('Bad Observation. Faint star pipeline coming soon . . . ')
-
+        # raw_input()
         # run computation:
         if len(args_pca) > 0:
+            print([l[2] for l in args_pca])
             if args.parallel:
                 import multiprocessing
                 # raise NotImplementedError
@@ -589,3 +626,4 @@ if __name__ == '__main__':
                     source_data = pca_helper(arg_pca)
                     if source_data is not None:
                         generate_pca_images(*source_data)
+    print(_time() - tic)

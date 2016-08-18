@@ -22,15 +22,66 @@ import sys
 import re
 from collections import OrderedDict
 import numpy as np
+from copy import deepcopy
+
+from skimage import exposure, img_as_float
+from matplotlib.patches import Rectangle
+from matplotlib.offsetbox import AnchoredOffsetbox, AuxTransformBox, VPacker, TextArea
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 # import numba
 from huey import RedisHuey
 huey = RedisHuey('roboao.archive', result_store=True)
 
+# set up plotting
+sns.set_style('whitegrid')
+# sns.set_palette(sns.diverging_palette(10, 220, sep=80, n=7))
+plt.close('all')
+sns.set_context('talk')
+
+
+# Scale bars
+class AnchoredSizeBar(AnchoredOffsetbox):
+    def __init__(self, transform, size, label, loc,
+                 pad=0.1, borderpad=0.1, sep=2, prop=None, frameon=True):
+        """
+        Draw a horizontal bar with the size in data coordinate of the give axes.
+        A label will be drawn underneath (center-aligned).
+
+        pad, borderpad in fraction of the legend font size (or prop)
+        sep in points.
+        loc:
+            'upper right'  : 1,
+            'upper left'   : 2,
+            'lower left'   : 3,
+            'lower right'  : 4,
+            'right'        : 5,
+            'center left'  : 6,
+            'center right' : 7,
+            'lower center' : 8,
+            'upper center' : 9,
+            'center'       : 10
+        """
+        self.size_bar = AuxTransformBox(transform)
+        self.size_bar.add_artist(Rectangle((0, 0), size, 0, fc='none', color='white', lw=3))
+
+        self.txt_label = TextArea(label, dict(color='white', size='x-large', weight='normal'),
+                                  minimumdescent=False)
+
+        self._box = VPacker(children=[self.size_bar, self.txt_label],
+                            align="center",
+                            pad=0, sep=sep)
+
+        AnchoredOffsetbox.__init__(self, loc, pad=pad, borderpad=borderpad,
+                                   child=self._box,
+                                   prop=prop,
+                                   frameon=frameon)
+
 
 @huey.task()
 # @numba.jit
-def job_pca(_obs, _logger, _coll):
+def job_pca(_obs):
     tic = time.time()
     a = 0
     for i in range(100):
@@ -48,6 +99,7 @@ def job_pca(_obs, _logger, _coll):
         }
     )
     return True
+
 
 @huey.task()
 # @numba.jit
@@ -77,6 +129,100 @@ def naptime(nap_time_start, nap_time_stop):
     """
     now_local = datetime.datetime.now()
     # TODO: finish!
+
+
+def load_fits(fin):
+    with fits.open(fin) as _f:
+        scidata = _f[0].data
+    return scidata
+
+
+def scale_image(image, correction='local'):
+    """
+
+    :param image:
+    :param correction: 'local', 'log', or 'global'
+    :return:
+    """
+    # scale image for beautification:
+    scidata = deepcopy(image)
+    norm = np.max(np.max(scidata))
+    mask = scidata <= 0
+    scidata[mask] = 0
+    scidata = np.uint16(scidata / norm * 65535)
+
+    # add more contrast to the image:
+    if correction == 'log':
+        return exposure.adjust_log(img_as_float(scidata/norm) + 1, 1)
+    elif correction == 'global':
+        p_1, p_2 = np.percentile(scidata, (5, 100))
+        return exposure.rescale_intensity(scidata, in_range=(p_1, p_2))
+    elif correction == 'local':
+        # perform local histogram equalization instead:
+        return exposure.equalize_adapthist(scidata, clip_limit=0.03)
+    else:
+        raise Exception('Contrast correction option not recognized')
+
+
+def generate_pca_images(_out_path, _sou_dir, _preview_img, _cc,
+                        _fow_x=36, _pix_x=1024, _drizzle=True):
+    """
+            Generate preview images for the pca pipeline
+
+        :param _out_path:
+        :param _sou_dir:
+        :param _preview_img:
+        :param _cc:
+        :param _fow_x: full FoW in arcseconds in the x direction
+        :param _pix_x: original full frame size in pixels
+        :param _drizzle: drizzle on or off?
+
+        :return:
+        """
+    try:
+        ''' plot psf-subtracted image '''
+        plt.close('all')
+        fig = plt.figure(_sou_dir)
+        fig.set_size_inches(3, 3, forward=False)
+        # ax = fig.add_subplot(111)
+        ax = plt.Axes(fig, [0., 0., 1., 1.])
+        ax.set_axis_off()
+        fig.add_axes(ax)
+        ax.imshow(_preview_img, cmap='gray', origin='lower', interpolation='nearest')
+        # add scale bar:
+        # draw a horizontal bar with length of 0.1*x_size
+        # (ax.transData) with a label underneath.
+        bar_len = _preview_img.shape[0] * 0.1
+        bar_len_str = '{:.1f}'.format(bar_len * _fow_x / _pix_x / 2) if _drizzle \
+            else '{:.1f}'.format(bar_len * _fow_x / _pix_x)
+        asb = AnchoredSizeBar(ax.transData,
+                              bar_len,
+                              bar_len_str[0] + r"$^{\prime\prime}\!\!\!.$" + bar_len_str[-1],
+                              loc=4, pad=0.3, borderpad=0.5, sep=10, frameon=False)
+        ax.add_artist(asb)
+
+        # save figure
+        fig.savefig(os.path.join(_out_path, _sou_dir + '_pca.png'), dpi=300)
+
+        ''' plot the contrast curve '''
+        plt.close('all')
+        fig = plt.figure('Contrast curve for {:s}'.format(_sou_dir), figsize=(8, 3.5), dpi=200)
+        ax = fig.add_subplot(111)
+        ax.set_title(_sou_dir)  # , fontsize=14)
+        ax.plot(_cc[:, 0], -2.5 * np.log10(_cc[:, 1]), 'k-', linewidth=2.5)
+        ax.set_xlim([0.2, 1.45])
+        ax.set_xlabel('Separation [arcseconds]')  # , fontsize=18)
+        ax.set_ylabel('Contrast [$\Delta$mag]')  # , fontsize=18)
+        ax.set_ylim([0, 8])
+        ax.set_ylim(ax.get_ylim()[::-1])
+        ax.grid(linewidth=0.5)
+        plt.tight_layout()
+        fig.savefig(os.path.join(_out_path, _sou_dir + '_contrast_curve.png'), dpi=200)
+    except Exception as _e:
+        print(_e)
+        return False
+
+    return True
 
 
 def empty_db_record():
@@ -450,7 +596,7 @@ def check_pipe_pca(_config, _logger, _coll, _select, _date, _obs):
     :param _coll: collection in the database
     :param _select: database entry
     :param _date: date of obs
-    :param _obs: obs name
+    :param _obs: obs full name
 
     :return:
     """
@@ -470,15 +616,19 @@ def check_pipe_pca(_config, _logger, _coll, _select, _date, _obs):
                         os.stat(path_obs).st_mtime)
                     # load contrast curve
                     f_cc = [f for f in os.listdir(path_obs) if '_contrast_curve.txt' in f][0]
-                    cc = np.loadtxt(f_cc).tolist()
-                    # load fits file
-                    f_fits = [f for f in os.listdir(path_obs) if '.fits' in f][0]
-                    # TODO:
-                    fits = load_fits(f_fits)
+                    cc = np.loadtxt(f_cc)
+
                     # previews generated?
                     if not _select['pipelined']['pca']['status']['review']:
-                        # TODO:
-                        _status = generate_pca_images(fits, cc)
+                        # load first image frame from a fits file
+                        f_fits = [f for f in os.listdir(path_obs) if '.fits' in f][0]
+                        _fits = load_fits(f_fits)
+                        # scale with local contrast optimization for preview:
+                        preview_img = scale_image(_fits, correction='local')
+
+                        _status = generate_pca_images(_out_path=_config['path_pca'],
+                                                      _sou_dir=_obs, _preview_img=preview_img,
+                                                      _cc=cc, _fow_x=36, _pix_x=1024, _drizzle=True)
 
                         if _status:
                             _coll.update_one(
@@ -490,13 +640,15 @@ def check_pipe_pca(_config, _logger, _coll, _select, _date, _obs):
                                 }
                             )
                             _logger.debug('Updated pca pipeline entry [status.review] for {:s}'.format(_obs))
+                        else:
+                            _logger.debug('Failed to generate pca pipeline preview images for {:s}'.format(_obs))
                     # update database entry
                     _coll.update_one(
                         {'_id': _obs},
                         {
                             '$set': {
                                 'pipelined.pca.status.done': True,
-                                'pipelined.pca.contrast_curve': cc,
+                                'pipelined.pca.contrast_curve': cc.tolist(),
                                 'pipelined.pca.last_modified': time_tag
                             },
                             '$push': {
@@ -515,6 +667,7 @@ def check_pipe_pca(_config, _logger, _coll, _select, _date, _obs):
                     # TODO:
                     job_pca(_obs, _logger, _coll)
                     _logger.debug('put a pca job into the queue for {:s}'.format(_obs))
+                    # increment number of tries
                     _coll.update_one(
                         {'_id': _obs},
                         {

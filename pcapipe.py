@@ -2,7 +2,7 @@
 Run Becky's PCA pipeline on an individual image
 """
 from __future__ import print_function
-from beckys import make_img, pca, generate_pca_images
+from beckys import trim_frame, pca, generate_pca_images
 import argparse
 import datetime
 import os
@@ -74,7 +74,7 @@ if __name__ == '__main__':
 
     ''' go off with processing: '''
     # trimmed image:
-    trimmed_frame = (make_img(_path=path_source, _win=win))
+    trimmed_frame = (trim_frame(_path=path_source, _win=win))
 
     # run PCA
     output = pca(_trimmed_frame=trimmed_frame, _win=win, _sou_name=sou_name,

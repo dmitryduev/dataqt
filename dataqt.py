@@ -524,7 +524,7 @@ if __name__ == '__main__':
                 ax.plot(contrast_curve[:, 0], contrast_curve[:, 1], '-', c=plt.cm.Greys(0.3), linewidth=1.2)
                 cc_mean.append(np.interp(sep_mean, contrast_curve[:, 0], contrast_curve[:, 1]))
             # add mean to plot:
-            ax.plot(sep_mean, np.mean(np.array(cc_mean).T, axis=1), '-', c=plt.cm.Oranges(0.7), linewidth=2.5)
+            ax.plot(sep_mean, np.median(np.array(cc_mean).T, axis=1), '-', c=plt.cm.Oranges(0.7), linewidth=2.5)
             # beautify and save:
             ax.set_xlim([0.2, 1.45])
             ax.set_xlabel('Separation [arcseconds]')  # , fontsize=18)
