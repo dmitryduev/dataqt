@@ -169,7 +169,7 @@ def get_xy_from_frames_txt(_path):
     return np.median(xy[:, 0]), np.median(xy[:, 1])
 
 
-def trim_frame(_path, _fits_name, _win=100, _method='frames.txt', _x=None, _y=None, _drizzled=True):
+def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=None, _drizzled=True):
     """
 
     :param _path: path

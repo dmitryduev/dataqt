@@ -30,6 +30,8 @@ from matplotlib.offsetbox import AnchoredOffsetbox, AuxTransformBox, VPacker, Te
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from beckys import trim_frame, pca, bad_obs_check
+
 # import numba
 from huey import RedisHuey
 huey = RedisHuey('roboao.archive', result_store=True)
@@ -81,23 +83,41 @@ class AnchoredSizeBar(AnchoredOffsetbox):
 
 @huey.task()
 # @numba.jit
-def job_pca(_obs):
-    tic = time.time()
-    a = 0
-    for i in range(100):
-        for j in range(100):
-            for k in range(1000):
-                a += 3**2
-    print('It took {:.2f} s to finish the job on {:s}'.format(time.time() - tic, _obs))
-    _logger.debug('done a pca job on {:s}'.format(_obs))
-    _coll.update_one(
-        {'_id': _obs},
-        {
-            '$set': {
-                'pipelined.pca.status.done': True,
-            }
-        }
-    )
+def job_pca(_config, _date, _out_path, _x=None, _y=None, _drizzled=True):
+    try:
+        # TODO: first run the Strehl calculator on the 100p
+        trimmed_frame = (trim_frame(_path=_config['path_pipe'], _fits_name='100p.fits',
+                                    _win=_config['win'], _method='sextractor',
+                                    _x=_x, _y=_y, _drizzled=_drizzled))
+
+        # Check of observation passes quality check:
+
+        try:
+            cy1, cx1 = np.unravel_index(trimmed_frame.argmax(), trimmed_frame.shape)
+            core, halo = bad_obs_check(trimmed_frame[cy1 - 30:cy1 + 30 + 1, cx1 - 30:cx1 + 30 + 1],
+                                       ps=plate_scale)
+            # f_handle = file('/Data2/becky/compile_data/core_and_halo.txt', 'a')
+            # np.savetxt(f_handle, np.array(['\n'+path_sou, core, halo]), newline=" ",fmt="%s")
+            # f_handle.close()
+        except:
+            core = 0.14
+            halo = 1.0
+
+        # run PCA
+        if core > 0.14 and halo < 1.0:
+            # run on lucky-pipelined image
+            output = pca(_trimmed_frame=trimmed_frame, _win=_config['pca']['win'], _sou_name=sou_name,
+                         _sou_dir=sou_dir, _out_path=_out_path,
+                         _library=psf_reference_library,
+                         _library_names_short=psf_reference_library_short_names,
+                         _fwhm=fwhm, _plsc=plsc, _sigma=sigma, _nrefs=nrefs, _klip=klip)
+        else:
+            # run on faint-pipelined image
+            pass
+    except Exception as _e:
+        print(_e)
+        return False
+
     return True
 
 
@@ -260,6 +280,18 @@ def empty_db_record():
                     'fits_header': {},
                     'last_modified': time_now_utc
                 },
+                'strehl': {
+                    'status': {
+                        'done': False,
+                        'retries': 0
+                    },
+                    'ratio_percent': None,
+                    'core_arcsec': None,
+                    'halo_arcsec': None,
+                    'fwhm_arcsec': None,
+                    'flag': None,
+                    'last_modified': time_now_utc
+                },
                 'faint': {
                     'status': {
                         'done': False,
@@ -277,18 +309,6 @@ def empty_db_record():
                     },
                     'location': [],
                     'contrast_curve': None,
-                    'last_modified': time_now_utc
-                },
-                'strehl': {
-                    'status': {
-                        'done': False,
-                        'retries': 0
-                    },
-                    'ratio_percent': None,
-                    'core_arcsec': None,
-                    'halo_arcsec': None,
-                    'fwhm_arcsec': None,
-                    'flag': None,
                     'last_modified': time_now_utc
                 }
             },
@@ -380,6 +400,23 @@ def get_config(_config_file='config.ini'):
     _config['path_seeing'] = config.get('Path', 'path_seeing')
     # website data dwelling place:
     _config['path_to_website_data'] = config.get('Path', 'path_to_website_data')
+
+    # pca pipeline
+    _config['pca'] = dict()
+    # path to PSF library:
+    path_psf_reference_library = config.get('Path', 'path_psf_reference_library')
+    path_psf_reference_library_short_names = config.get('Path', 'path_psf_reference_library_short_names')
+    _config['pca']['psf_reference_library'] = fits.open(path_psf_reference_library)[0].data
+    _config['pca']['psf_reference_library_short_names'] = np.genfromtxt(path_psf_reference_library_short_names,
+                                                                 dtype='|S')
+
+    _config['pca']['win'] = int(config.get('PCA', 'win'))
+    _config['pca']['plate_scale'] = float(config.get('PCA', 'plate_scale'))
+    _config['pca']['sigma'] = float(config.get('PCA', 'sigma'))
+    _config['pca']['nrefs'] = float(config.get('PCA', 'nrefs'))
+    _config['pca']['klip'] = float(config.get('PCA', 'klip'))
+
+    _config['pca']['planets_prog_num'] = int(config.get('Programs', 'planets'))
 
     # database access:
     _config['mongo_host'] = config.get('Database', 'host')
@@ -665,7 +702,7 @@ def check_pipe_pca(_config, _logger, _coll, _select, _date, _obs):
                     # this will produce a fits file with the psf-subtracted image
                     # and a text file with the contrast curve
                     # TODO:
-                    job_pca(_obs, _logger, _coll)
+                    job_pca(_obs)
                     _logger.debug('put a pca job into the queue for {:s}'.format(_obs))
                     # increment number of tries
                     _coll.update_one(
@@ -854,33 +891,36 @@ if __name__ == '__main__':
                     if not status_ok:
                         logger.error('Checking failed for automatic pipeline: {:s}'.format(obs))
 
+                    ''' check Strehl data '''
+                    status_ok = check_strehl(_config=config, _logger=logger, _coll=coll,
+                                             _select=select, _date=date, _obs=obs)
+                    if not status_ok:
+                        logger.error('Checking failed for automatic pipeline: {:s}'.format(obs))
+
+                    # TODO: if it is not a planetary, observation, do the following:
+
                     ''' check Faint-pipelined data '''
+                    # TODO: if core and halo tell you it's faint, run faint pipeline:
                     status_ok = check_pipe_faint(_config=config, _logger=logger, _coll=coll,
                                                  _select=select, _date=date, _obs=obs)
                     if not status_ok:
                         logger.error('Checking failed for faint pipeline: {:s}'.format(obs))
 
                     ''' check (PCA-)pipelined data '''
+                    # TODO: also depending on Strehl data, run PCA pipeline either on
+                    # TODO: the lucky or the faint image
+                    # TODO: if a faint image is not ready (yet), will skip and do it next time
                     status_ok = check_pipe_pca(_config=config, _logger=logger, _coll=coll,
                                                _select=select, _date=date, _obs=obs)
                     if not status_ok:
                         logger.error('Checking failed for PCA pipeline: {:s}'.format(obs))
 
-                    ''' check Strehl data '''
-                    status_ok = check_strehl(_config=config, _logger=logger, _coll=coll,
-                                                     _select=select, _date=date, _obs=obs)
-                    if not status_ok:
-                        logger.error('Checking failed for automatic pipeline: {:s}'.format(obs))
+                    # TODO: if it is a planetary, run the planetary pipeline
 
                     ''' check seeing data '''
                     # TODO: [lower priority]
                     # for each date check if lists of processed and raw seeing files match
                     # rerun seeing.py for each date if necessary
-                    # update last_modified if necessary
-
-                    ''' check preview data '''
-                    # for each date for each source check if processed
-                    # collect jobs to execute on the way
                     # update last_modified if necessary
 
                 # TODO: mark distributed when all pipelines done or n_retries>3,
