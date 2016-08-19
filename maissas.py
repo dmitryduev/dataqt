@@ -1,8 +1,8 @@
+from __future__ import print_function
 """
     Strehl calculator for Robo-AO
     MS @ UofH
 """
-from __future__ import print_function
 import glob
 import os
 import warnings

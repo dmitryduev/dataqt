@@ -23,6 +23,7 @@ import re
 from collections import OrderedDict
 import numpy as np
 from copy import deepcopy
+import ast
 
 from skimage import exposure, img_as_float
 from matplotlib.patches import Rectangle
@@ -278,18 +279,29 @@ def empty_db_record():
                     'location': [],
                     'classified_as': None,
                     'fits_header': {},
-                    'last_modified': time_now_utc
-                },
-                'strehl': {
-                    'status': {
-                        'done': False,
-                        'retries': 0
+                    'strehl': {
+                        'status': {
+                            'done': False,
+                            'retries': 0
+                        },
+                        'ratio_percent': None,
+                        'core_arcsec': None,
+                        'halo_arcsec': None,
+                        'fwhm_arcsec': None,
+                        'flag': None,
+                        'last_modified': time_now_utc
                     },
-                    'ratio_percent': None,
-                    'core_arcsec': None,
-                    'halo_arcsec': None,
-                    'fwhm_arcsec': None,
-                    'flag': None,
+                    'pca': {
+                        'status': {
+                            'done': False,
+                            'preview': False,
+                            'retries': 0
+                        },
+                        'location': [],
+                        'lock_position': None,
+                        'contrast_curve': None,
+                        'last_modified': time_now_utc
+                    },
                     'last_modified': time_now_utc
                 },
                 'faint': {
@@ -299,18 +311,32 @@ def empty_db_record():
                         'retries': 0
                     },
                     'location': [],
+                    'strehl': {
+                        'status': {
+                            'done': False,
+                            'retries': 0
+                        },
+                        'ratio_percent': None,
+                        'core_arcsec': None,
+                        'halo_arcsec': None,
+                        'fwhm_arcsec': None,
+                        'flag': None,
+                        'last_modified': time_now_utc
+                    },
+                    'pca': {
+                        'status': {
+                            'done': False,
+                            'preview': False,
+                            'retries': 0
+                        },
+                        'location': [],
+                        'lock_position': None,
+                        'contrast_curve': None,
+                        'last_modified': time_now_utc
+                    },
                     'last_modified': time_now_utc
                 },
-                'pca': {
-                    'status': {
-                        'done': False,
-                        'preview': False,
-                        'retries': 0
-                    },
-                    'location': [],
-                    'contrast_curve': None,
-                    'last_modified': time_now_utc
-                }
+
             },
 
             'seeing': {
@@ -400,6 +426,15 @@ def get_config(_config_file='config.ini'):
     _config['path_seeing'] = config.get('Path', 'path_seeing')
     # website data dwelling place:
     _config['path_to_website_data'] = config.get('Path', 'path_to_website_data')
+
+    # path to model PSFs:
+    _config['path_model_psf'] = config.get('Path', 'path_model_psf')
+
+    # telescope data (voor, o.a., Strehl computation)
+    _tmp = ast.literal_eval(config.get('Strehl', 'Strehl_factor'))
+    for telescope in 'Palomar', 'KittPeak':
+        _config['telescope_data'][telescope] = ast.literal_eval(config.get('Strehl', telescope))
+        _config['telescope_data'][telescope]['Strehl_factor'] = _tmp[telescope]
 
     # pca pipeline
     _config['pca'] = dict()
@@ -638,7 +673,7 @@ def check_pipe_pca(_config, _logger, _coll, _select, _date, _obs):
     :return:
     """
     try:
-        # not pipelined yet after <3 retries?
+        # 'done' flag = False and <3 retries?
         if not _select['pipelined']['pca']['status']['done'] or \
                         _select['pipelined']['pca']['status']['retries'] < 3:
             # check if processed
@@ -885,35 +920,35 @@ if __name__ == '__main__':
                 # entry found in database, check if pipelined, update entry if necessary
                 else:
                     print('{:s} in database, checking...'.format(obs))
-                    ''' check Nick-pipelined data '''
+                    ''' check lucky-pipelined data '''
                     status_ok = check_pipe_automated(_config=config, _logger=logger, _coll=coll,
                                                      _select=select, _date=date, _obs=obs)
                     if not status_ok:
-                        logger.error('Checking failed for automatic pipeline: {:s}'.format(obs))
+                        logger.error('Checking failed for lucky pipeline: {:s}'.format(obs))
 
                     ''' check Strehl data '''
                     status_ok = check_strehl(_config=config, _logger=logger, _coll=coll,
                                              _select=select, _date=date, _obs=obs)
                     if not status_ok:
-                        logger.error('Checking failed for automatic pipeline: {:s}'.format(obs))
+                        logger.error('Checking failed for Strehl pipeline: {:s}'.format(obs))
 
                     # TODO: if it is not a planetary, observation, do the following:
+                    if True is False:
+                        ''' check faint-pipelined data '''
+                        # TODO: if core and halo tell you it's faint, run faint pipeline:
+                        status_ok = check_pipe_faint(_config=config, _logger=logger, _coll=coll,
+                                                     _select=select, _date=date, _obs=obs)
+                        if not status_ok:
+                            logger.error('Checking failed for faint pipeline: {:s}'.format(obs))
 
-                    ''' check Faint-pipelined data '''
-                    # TODO: if core and halo tell you it's faint, run faint pipeline:
-                    status_ok = check_pipe_faint(_config=config, _logger=logger, _coll=coll,
-                                                 _select=select, _date=date, _obs=obs)
-                    if not status_ok:
-                        logger.error('Checking failed for faint pipeline: {:s}'.format(obs))
-
-                    ''' check (PCA-)pipelined data '''
-                    # TODO: also depending on Strehl data, run PCA pipeline either on
-                    # TODO: the lucky or the faint image
-                    # TODO: if a faint image is not ready (yet), will skip and do it next time
-                    status_ok = check_pipe_pca(_config=config, _logger=logger, _coll=coll,
-                                               _select=select, _date=date, _obs=obs)
-                    if not status_ok:
-                        logger.error('Checking failed for PCA pipeline: {:s}'.format(obs))
+                        ''' check PCA-pipelined data '''
+                        # TODO: also depending on Strehl data, run PCA pipeline either on
+                        # TODO: the lucky or the faint image
+                        # TODO: if a faint image is not ready (yet), will skip and do it next time
+                        status_ok = check_pipe_pca(_config=config, _logger=logger, _coll=coll,
+                                                   _select=select, _date=date, _obs=obs)
+                        if not status_ok:
+                            logger.error('Checking failed for PCA pipeline: {:s}'.format(obs))
 
                     # TODO: if it is a planetary, run the planetary pipeline
 
