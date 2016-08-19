@@ -24,6 +24,9 @@ from collections import OrderedDict
 import numpy as np
 from copy import deepcopy
 import ast
+from scipy.optimize import fmin
+from astropy.modeling import models, fitting
+import sewpy
 
 from skimage import exposure, img_as_float
 from matplotlib.patches import Rectangle
@@ -31,7 +34,7 @@ from matplotlib.offsetbox import AnchoredOffsetbox, AuxTransformBox, VPacker, Te
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from beckys import trim_frame, pca, bad_obs_check
+from beckys import pca
 
 # import numba
 from huey import RedisHuey
@@ -86,35 +89,36 @@ class AnchoredSizeBar(AnchoredOffsetbox):
 # @numba.jit
 def job_pca(_config, _date, _out_path, _x=None, _y=None, _drizzled=True):
     try:
-        # TODO: first run the Strehl calculator on the 100p
-        trimmed_frame = (trim_frame(_path=_config['path_pipe'], _fits_name='100p.fits',
-                                    _win=_config['win'], _method='sextractor',
-                                    _x=_x, _y=_y, _drizzled=_drizzled))
-
-        # Check of observation passes quality check:
-
-        try:
-            cy1, cx1 = np.unravel_index(trimmed_frame.argmax(), trimmed_frame.shape)
-            core, halo = bad_obs_check(trimmed_frame[cy1 - 30:cy1 + 30 + 1, cx1 - 30:cx1 + 30 + 1],
-                                       ps=plate_scale)
-            # f_handle = file('/Data2/becky/compile_data/core_and_halo.txt', 'a')
-            # np.savetxt(f_handle, np.array(['\n'+path_sou, core, halo]), newline=" ",fmt="%s")
-            # f_handle.close()
-        except:
-            core = 0.14
-            halo = 1.0
-
-        # run PCA
-        if core > 0.14 and halo < 1.0:
-            # run on lucky-pipelined image
-            output = pca(_trimmed_frame=trimmed_frame, _win=_config['pca']['win'], _sou_name=sou_name,
-                         _sou_dir=sou_dir, _out_path=_out_path,
-                         _library=psf_reference_library,
-                         _library_names_short=psf_reference_library_short_names,
-                         _fwhm=fwhm, _plsc=plsc, _sigma=sigma, _nrefs=nrefs, _klip=klip)
-        else:
-            # run on faint-pipelined image
-            pass
+        pass
+    #     # TODO: first run the Strehl calculator on the 100p
+    #     trimmed_frame = (trim_frame(_path=_config['path_pipe'], _fits_name='100p.fits',
+    #                                 _win=_config['win'], _method='sextractor',
+    #                                 _x=_x, _y=_y, _drizzled=_drizzled))
+    #
+    #     # Check of observation passes quality check:
+    #
+    #     try:
+    #         cy1, cx1 = np.unravel_index(trimmed_frame.argmax(), trimmed_frame.shape)
+    #         core, halo = bad_obs_check(trimmed_frame[cy1 - 30:cy1 + 30 + 1, cx1 - 30:cx1 + 30 + 1],
+    #                                    ps=plate_scale)
+    #         # f_handle = file('/Data2/becky/compile_data/core_and_halo.txt', 'a')
+    #         # np.savetxt(f_handle, np.array(['\n'+path_sou, core, halo]), newline=" ",fmt="%s")
+    #         # f_handle.close()
+    #     except:
+    #         core = 0.14
+    #         halo = 1.0
+    #
+    #     # run PCA
+    #     if core > 0.14 and halo < 1.0:
+    #         # run on lucky-pipelined image
+    #         output = pca(_trimmed_frame=trimmed_frame, _win=_config['pca']['win'], _sou_name=sou_name,
+    #                      _sou_dir=sou_dir, _out_path=_out_path,
+    #                      _library=psf_reference_library,
+    #                      _library_names_short=psf_reference_library_short_names,
+    #                      _fwhm=fwhm, _plsc=plsc, _sigma=sigma, _nrefs=nrefs, _klip=klip)
+    #     else:
+    #         # run on faint-pipelined image
+    #         pass
     except Exception as _e:
         print(_e)
         return False
@@ -124,14 +128,18 @@ def job_pca(_config, _date, _out_path, _x=None, _y=None, _drizzled=True):
 
 @huey.task()
 # @numba.jit
-def job_strehl(_obs):
+def job_strehl(_obs, _config):
     tic = time.time()
     a = 0
     for i in range(100):
         for j in range(100):
-            for k in range(1000):
+            for k in range(500):
                 a += 3**2
     print('It took {:.2f} s to finish the job on {:s}'.format(time.time() - tic, _obs))
+
+    # do the work
+
+    # dump results to disk
 
     return True
 
@@ -246,6 +254,283 @@ def generate_pca_images(_out_path, _sou_dir, _preview_img, _cc,
     return True
 
 
+def get_xy_from_frames_txt(_path):
+    """
+        Get median centroid position
+    :param _path:
+    :return:
+    """
+    with open(os.path.join(_path, 'frames.txt'), 'r') as _f:
+        f_lines = _f.readlines()
+    xy = np.array([map(float, l.split()[3:5]) for l in f_lines if l[0] != '#'])
+
+    return np.median(xy[:, 0]), np.median(xy[:, 1])
+
+
+# detect observatiosn which are bad because of being too faint
+# 1. make a radial profile, snip out the central 3 pixels
+#    (removing the ones which are affected by photon noise)
+# 2. measure the width of the remaining flux
+# 3. check for too small a width (=> no flux) or too large a width (=> crappy performance)
+def gaussian(p, x):
+    return p[0] + p[1] * (np.exp(-x * x / (2.0 * p[2] * p[2])))
+
+
+def moffat(p, x):
+    base = 0.0
+    scale = p[1]
+    fwhm = p[2]
+    beta = p[3]
+
+    if np.power(2.0, (1.0 / beta)) > 1.0:
+        alpha = fwhm / (2.0 * np.sqrt(np.power(2.0, (1.0 / beta)) - 1.0))
+        return base + scale * np.power(1.0 + ((x / alpha) ** 2), -beta)
+    else:
+        return 1.0
+
+
+def residuals(p, x, y):
+    res = 0.0
+    for a, b in zip(x, y):
+        res += np.fabs(b - moffat(p, a))
+
+    return res
+
+
+def bad_obs_check(p, return_halo=True, ps=0.0175797):
+    pix_rad = []
+    pix_vals = []
+    core_pix_rad = []
+    core_pix_vals = []
+
+    # Icy, Icx = numpy.unravel_index(p.argmax(), p.shape)
+
+    for x in range(p.shape[1] / 2 - 20, p.shape[1] / 2 + 20 + 1):
+        for y in range(p.shape[0] / 2 - 20, p.shape[0] / 2 + 20 + 1):
+            r = np.sqrt((x - p.shape[1] / 2) ** 2 + (y - p.shape[0] / 2) ** 2)
+            if r > 3:  # remove core
+                pix_rad.append(r)
+                pix_vals.append(p[y][x])
+            else:
+                core_pix_rad.append(r)
+                core_pix_vals.append(p[y][x])
+
+    try:
+        if return_halo:
+            p0 = [0.0, np.max(pix_vals), 20.0, 2.0]
+            p = fmin(residuals, p0, args=(pix_rad, pix_vals), maxiter=1000000, maxfun=1000000,
+                     ftol=1e-3, xtol=1e-3, disp=False)
+
+        p0 = [0.0, np.max(core_pix_vals), 5.0, 2.0]
+        core_p = fmin(residuals, p0, args=(core_pix_rad, core_pix_vals), maxiter=1000000, maxfun=1000000,
+                      ftol=1e-3, xtol=1e-3, disp=False)
+
+        # Palomar PS = 0.021, KP PS = 0.0175797
+        _core = core_p[2] * ps
+        if return_halo:
+            _halo = p[2] * ps
+            return _core, _halo
+        else:
+            return _core
+
+    except OverflowError:
+        _core = 0
+        _halo = 999
+
+        if return_halo:
+            return _core, _halo
+        else:
+            return _core
+
+
+def log_gauss_score(_x, _mu=1.27, _sigma=0.17):
+    """
+        _x: pixel for pixel in [1,2048] - source FWHM.
+            has a max of 1 around 35 pix, drops fast to the left, drops slower to the right
+    """
+    return np.exp(-(np.log(np.log(_x)) - _mu)**2 / (2*_sigma**2))  # / 2
+
+
+def gauss_score(_r, _mu=0, _sigma=512):
+    """
+        _r - distance from centre to source in pix
+    """
+    return np.exp(-(_r - _mu)**2 / (2*_sigma**2))  # / 2
+
+
+def rho(x, y, x_0=1024, y_0=1024):
+    return np.sqrt((x-x_0)**2 + (y-y_0)**2)
+
+
+def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=None, _drizzled=True):
+    """
+
+    :param _path: path
+    :param _fits_name: fits-file name
+    :param _win: window width
+    :param _method: from 'frames.txt', using 'sextractor', a simple 'max', or 'manual'
+    :param _x: source x position -- if known in advance
+    :param _y: source y position -- if known in advance
+    :param _drizzled: was it drizzled?
+
+    :return: cropped image
+    """
+    scidata = fits.open(os.path.join(_path, _fits_name))[0].data
+
+    if _method == 'sextractor':
+        # extract sources
+        sew = sewpy.SEW(params=["X_IMAGE", "Y_IMAGE", "XPEAK_IMAGE", "YPEAK_IMAGE",
+                                "A_IMAGE", "B_IMAGE", "FWHM_IMAGE", "FLAGS"],
+                                config={"DETECT_MINAREA": 10, "PHOT_APERTURES": "10", 'DETECT_THRESH': '5.0'},
+                                sexpath="sex")
+
+        out = sew(os.path.join(_path, _fits_name))
+        # sort by FWHM
+        out['table'].sort('FWHM_IMAGE')
+        # descending order
+        out['table'].reverse()
+
+        # print(out['table'])  # This is an astropy table.
+
+        # get first 10 and score them:
+        scores = []
+        # maximum width of a fix Gaussian. Real sources usually have larger 'errors'
+        gauss_error_max = [np.max([sou['A_IMAGE'] for sou in out['table'][0:10]]),
+                           np.max([sou['B_IMAGE'] for sou in out['table'][0:10]])]
+        for sou in out['table'][0:10]:
+            if sou['FWHM_IMAGE'] > 1:
+                score = (log_gauss_score(sou['FWHM_IMAGE']) +
+                         gauss_score(rho(sou['X_IMAGE'], sou['Y_IMAGE'])) +
+                         np.mean([sou['A_IMAGE'] / gauss_error_max[0],
+                                  sou['B_IMAGE'] / gauss_error_max[1]])) / 3.0
+            else:
+                score = 0  # it could so happen that reported FWHM is 0
+            scores.append(score)
+
+        # print('scores: ', scores)
+
+        N_sou = len(out['table'])
+        # do not crop large planets and crowded fields
+        if N_sou != 0 and N_sou < 30:
+            # sou_xy = [out['table']['X_IMAGE'][0], out['table']['Y_IMAGE'][0]]
+            best_score = np.argmax(scores) if len(scores) > 0 else 0
+            # sou_size = np.max((int(out['table']['FWHM_IMAGE'][best_score] * 3), 90))
+            # print(out['table']['XPEAK_IMAGE'][best_score], out['table']['YPEAK_IMAGE'][best_score])
+            # print(get_xy_from_frames_txt(_path))
+            scidata_cropped = scidata[out['table']['YPEAK_IMAGE'][best_score] - _win:
+                                      out['table']['YPEAK_IMAGE'][best_score] + _win + 1,
+                                      out['table']['XPEAK_IMAGE'][best_score] - _win:
+                                      out['table']['XPEAK_IMAGE'][best_score] + _win + 1]
+        else:
+            # use a simple max instead:
+            x, y = np.unravel_index(scidata.argmax(), scidata.shape)
+            scidata_cropped = scidata[x - _win: x + _win + 1,
+                                      y - _win: y + _win + 1]
+    elif _method == 'max':
+        x, y = np.unravel_index(scidata.argmax(), scidata.shape)
+        scidata_cropped = scidata[x - _win: x + _win + 1,
+                                  y - _win: y + _win + 1]
+    elif _method == 'frames.txt':
+        x, y = get_xy_from_frames_txt(_path)
+        if _drizzled:
+            x *= 2.0
+            y *= 2.0
+        scidata_cropped = scidata[y - _win: y + _win + 1,
+                          x - _win: x + _win + 1]
+    elif _method == 'manual' and _x is not None and _y is not None:
+        x, y = _x, _y
+        scidata_cropped = scidata[x - _win: x + _win + 1,
+                                  y - _win: y + _win + 1]
+    else:
+        raise Exception('unrecognized trimming method.')
+
+    return scidata_cropped
+
+
+def makebox(array, halfwidth, peak1, peak2):
+    boxside1a = peak1 - halfwidth
+    boxside1b = peak1 + halfwidth
+    boxside2a = peak2 - halfwidth
+    boxside2b = peak2 + halfwidth
+
+    box = array[boxside1a:boxside1b, boxside2a:boxside2b]
+    box_fraction = np.sum(box) / np.sum(array)
+    # print('box has: {:.2f}% of light'.format(box_fraction * 100))
+
+    return box, box_fraction
+
+
+def Strehl_calculator(image_data, _Strehl_factor, _plate_scale, _boxsize):
+
+    """ Calculates the Strehl ratio of an image
+    Inputs:
+        - image_data: image data
+        - Strehl_factor: from model PSF
+        - boxsize: from model PSF
+        - plate_scale: plate scale of telescope in arcseconds/pixel
+    Output:
+        Strehl ratio (as a decimal)
+
+        """
+
+    ##################################################
+    # normalize real image PSF by the flux in some radius
+    ##################################################
+
+    ##################################################
+    #  Choose radius with 95-99% light in model PSF ##
+    ##################################################
+
+    # find peak image flux to center box around
+    peak_ind = np.where(image_data == np.max(image_data))
+    peak1, peak2 = peak_ind[0][0], peak_ind[1][0]
+    # print("max intensity =", np.max(image_data), "located at:", peak1, ",", peak2, "pixels")
+
+    # find array within desired radius
+    box_roboao, box_roboao_fraction = makebox(image_data, round(_boxsize / 2.), peak1, peak2)
+    # print("size of box", np.shape(box_roboao))
+
+    # sum the fluxes within the desired radius
+    total_box_flux = np.sum(box_roboao)
+    # print("total flux in box", total_box_flux)
+
+    # normalize real image PSF by the flux in some radius:
+    image_norm = image_data / total_box_flux
+
+    ########################
+    # divide normalized peak image flux by strehl factor
+    ########################
+
+    image_norm_peak = np.max(image_norm)
+    # print("normalized peak", image_norm_peak)
+
+    #####################################################
+    # ############# CALCULATE STREHL RATIO ##############
+    #####################################################
+    Strehl_ratio = image_norm_peak / _Strehl_factor
+    # print('\n----------------------------------')
+    # print("Strehl ratio", Strehl_ratio * 100, '%')
+    # print("----------------------------------")
+
+    y, x = np.mgrid[:len(box_roboao), :len(box_roboao)]
+    max_inds = np.where(box_roboao == np.max(box_roboao))
+
+    g_init = models.Gaussian2D(amplitude=1., x_mean=max_inds[1][0], y_mean=max_inds[0][0],
+                               x_stddev=1., y_stddev=1.)
+    fit_g = fitting.LevMarLSQFitter()
+    g = fit_g(g_init, x, y, box_roboao)
+
+    sig_x = g.x_stddev[0]
+    sig_y = g.y_stddev[0]
+
+    FWHM = 2.3548 * np.mean([sig_x, sig_y])
+    fwhm_arcsec = FWHM * _plate_scale
+
+    # print('image FWHM: {:.5f}\"\n'.format(fwhm_arcsec))
+
+    return Strehl_ratio, fwhm_arcsec
+
+
 def empty_db_record():
     time_now_utc = utc_now()
     return {
@@ -284,6 +569,7 @@ def empty_db_record():
                             'done': False,
                             'retries': 0
                         },
+                        'lock_position': None,
                         'ratio_percent': None,
                         'core_arcsec': None,
                         'halo_arcsec': None,
@@ -316,6 +602,7 @@ def empty_db_record():
                             'done': False,
                             'retries': 0
                         },
+                        'lock_position': None,
                         'ratio_percent': None,
                         'core_arcsec': None,
                         'halo_arcsec': None,
@@ -432,6 +719,7 @@ def get_config(_config_file='config.ini'):
 
     # telescope data (voor, o.a., Strehl computation)
     _tmp = ast.literal_eval(config.get('Strehl', 'Strehl_factor'))
+    _config['telescope_data'] = dict()
     for telescope in 'Palomar', 'KittPeak':
         _config['telescope_data'][telescope] = ast.literal_eval(config.get('Strehl', telescope))
         _config['telescope_data'][telescope]['Strehl_factor'] = _tmp[telescope]
@@ -473,7 +761,7 @@ def get_config(_config_file='config.ini'):
     return _config
 
 
-def connect_to_db(_config, _logger):
+def connect_to_db(_config, _logger=None):
     """ Connect to the mongodb database
 
     :return:
@@ -481,46 +769,54 @@ def connect_to_db(_config, _logger):
     try:
         client = MongoClient(host=_config['mongo_host'], port=_config['mongo_port'])
         _db = client[_config['mongo_db']]
-        _logger.debug('Successfully connected to the Robo-AO database at {:s}:{:d}'.
-                      format(_config['mongo_host'], _config['mongo_port']))
+        if _logger is not None:
+            _logger.debug('Successfully connected to the Robo-AO database at {:s}:{:d}'.
+                          format(_config['mongo_host'], _config['mongo_port']))
     except Exception as _e:
         _db = None
-        _logger.error(_e)
-        _logger.error('Failed to connect to the Robo-AO database at {:s}:{:d}'.
-                      format(_config['mongo_host'], _config['mongo_port']))
+        if _logger is not None:
+            _logger.error(_e)
+            _logger.error('Failed to connect to the Robo-AO database at {:s}:{:d}'.
+                          format(_config['mongo_host'], _config['mongo_port']))
     try:
         _db.authenticate(_config['mongo_user'], _config['mongo_pwd'])
-        _logger.debug('Successfully authenticated with the Robo-AO database at {:s}:{:d}'.
-                      format(_config['mongo_host'], _config['mongo_port']))
+        if _logger is not None:
+            _logger.debug('Successfully authenticated with the Robo-AO database at {:s}:{:d}'.
+                          format(_config['mongo_host'], _config['mongo_port']))
     except Exception as _e:
         _db = None
-        _logger.error(_e)
-        _logger.error('Authentication failed for the Robo-AO database at {:s}:{:d}'.
-                      format(_config['mongo_host'], _config['mongo_port']))
+        if _logger is not None:
+            _logger.error(_e)
+            _logger.error('Authentication failed for the Robo-AO database at {:s}:{:d}'.
+                          format(_config['mongo_host'], _config['mongo_port']))
     try:
         _coll = _db[_config['mongo_collection_obs']]
         # cursor = coll.find()
         # for doc in cursor:
         #     print(doc)
-        _logger.debug('Using collection {:s} with obs data in the database'.
-                      format(_config['mongo_collection_obs']))
+        if _logger is not None:
+            _logger.debug('Using collection {:s} with obs data in the database'.
+                          format(_config['mongo_collection_obs']))
     except Exception as _e:
         _coll = None
-        _logger.error(_e)
-        _logger.error('Failed to use a collection {:s} with obs data in the database'.
-                      format(_config['mongo_collection_obs']))
+        if _logger is not None:
+            _logger.error(_e)
+            _logger.error('Failed to use a collection {:s} with obs data in the database'.
+                          format(_config['mongo_collection_obs']))
     try:
         _coll_usr = _db[_config['mongo_collection_pwd']]
         # cursor = coll.find()
         # for doc in cursor:
         #     print(doc)
-        _logger.debug('Using collection {:s} with user access credentials in the database'.
-                      format(_config['mongo_collection_pwd']))
+        if _logger is not None:
+            _logger.debug('Using collection {:s} with user access credentials in the database'.
+                          format(_config['mongo_collection_pwd']))
     except Exception as _e:
         _coll_usr = None
-        _logger.error(_e)
-        _logger.error('Failed to use a collection {:s} with user access credentials in the database'.
-                      format(_config['mongo_collection_pwd']))
+        if _logger is not None:
+            _logger.error(_e)
+            _logger.error('Failed to use a collection {:s} with user access credentials in the database'.
+                          format(_config['mongo_collection_pwd']))
     try:
         # build dictionary program num -> pi name
         cursor = _coll_usr.find()
@@ -535,7 +831,8 @@ def connect_to_db(_config, _logger):
                 # print(program_pi)
     except Exception as _e:
         _program_pi = None
-        logger.error(_e)
+        if _logger is not None:
+            _logger.error(_e)
 
     return _db, _coll, _program_pi
 
@@ -600,6 +897,9 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
                     )
                     _logger.debug('Updated automated pipeline entry for {:s}'.format(_obs))
                     # TODO: make preview images
+                    # TODO: calculate Strehl
+                    res = job_strehl(_obs)
+                    # TODO: run PCA
                 except Exception as _e:
                     print(_e)
                     _logger.error(_e)
@@ -630,6 +930,8 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
                         )
                         _logger.debug('Updated automated pipeline entry for {:s}'.format(_obs))
                         # TODO: remake preview images
+                        # TODO: recalculate Strehl
+                        # TODO: rerun PCA
                 except Exception as _e:
                     print(_e)
                     _logger.error(_e)
@@ -650,9 +952,9 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
 
     :return:
     """
+    # TODO
     if not _select['pipelined']['faint']['status']['done'] or \
                     _select['pipelined']['faint']['status']['retries'] < 3:
-        # TODO: put job into the huey execution queue
         return False
 
     return True
@@ -772,7 +1074,7 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs):
     """
     if not _select['pipelined']['strehl']['status']['done'] or \
                     _select['pipelined']['strehl']['status']['retries'] < 3:
-        job_strehl(_obs, _logger, _coll)
+        job_strehl(_obs, _config)
         print('put a Strehl job into the queue')
         return False
 
@@ -926,11 +1228,11 @@ if __name__ == '__main__':
                     if not status_ok:
                         logger.error('Checking failed for lucky pipeline: {:s}'.format(obs))
 
-                    ''' check Strehl data '''
-                    status_ok = check_strehl(_config=config, _logger=logger, _coll=coll,
-                                             _select=select, _date=date, _obs=obs)
-                    if not status_ok:
-                        logger.error('Checking failed for Strehl pipeline: {:s}'.format(obs))
+                    # ''' check Strehl data '''
+                    # status_ok = check_strehl(_config=config, _logger=logger, _coll=coll,
+                    #                          _select=select, _date=date, _obs=obs)
+                    # if not status_ok:
+                    #     logger.error('Checking failed for Strehl pipeline: {:s}'.format(obs))
 
                     # TODO: if it is not a planetary, observation, do the following:
                     if True is False:
