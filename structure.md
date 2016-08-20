@@ -19,11 +19,15 @@
           |___tentitavely_put_lucky_output_here_
       |__faint/
           |__preview/
+             |__...
           |__strehl/
+             |__...
           |__pca/
+             |__...
           |__programID_objectName_camera_filter_mark_yyyymmdd_HHMMSS.SSSSSS_faint.fits
       |__planetary/
           |__preview/
+             |__...
           |__programID_objectName_camera_filter_mark_yyyymmdd_HHMMSS.SSSSSS_planetary.fits
       |__programID_objectName_camera_filter_mark_yyyymmdd_HHMMSS.SSSSSS.bz2
    |__.../
