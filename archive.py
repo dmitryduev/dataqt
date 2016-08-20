@@ -167,15 +167,15 @@ def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_fact
     # print(core, halo, SR*100, FWHM)
 
     # dump results to disk
-    if not os.path.exists(os.path.join(_path_out, _obs)):
-        os.mkdir(os.path.join(_path_out, _obs))
+    # recursively makedir if necessary
+    mkdirp(_path_out)
 
     # save box around selected object:
     hdu = fits.PrimaryHDU(box)
-    hdu.writeto(os.path.join(_path_out, _obs, '{:s}_box.fits'.format(_obs)), clobber=True)
+    hdu.writeto(os.path.join(_path_out, '{:s}_box.fits'.format(_obs)), clobber=True)
 
     # save the Strehl data to txt-file:
-    with open(os.path.join(_path_out, _obs, '{:s}_strehl.txt'.format(_obs)), 'w') as _f:
+    with open(os.path.join(_path_out, '{:s}_strehl.txt'.format(_obs)), 'w') as _f:
         _f.write('# lock_x[px] lock_y[px] core["] halo["] SR[%] FWHM["] flag\n')
         output_entry = '{:d} {:d} {:.5f} {:.5f} {:.5f} {:.5f} {:s}\n'.\
             format(x, y, core, halo, SR * 100, FWHM, flag)
@@ -212,6 +212,22 @@ def naptime(nap_time_start, nap_time_stop):
     """
     now_local = datetime.datetime.now()
     # TODO: finish!
+
+
+def mkdirp(_path):
+    """
+        mimic mkdir -p in python2
+    :param _path:
+    :return:
+    """
+    p, stack = _path, []
+    while not os.path.exists(p):
+        _tmp = os.path.split(p)
+        p = _tmp[0]
+        stack.insert(0, _tmp[1])
+    for _dir in stack:
+        p = os.path.join(p, _dir)
+        os.mkdir(p)
 
 
 def load_fits(fin):
@@ -788,14 +804,8 @@ def get_config(_config_file='config.ini'):
     _config['path_raw'] = config.get('Path', 'path_raw')
     # path to lucky-pipeline data:
     _config['path_pipe'] = config.get('Path', 'path_pipe')
-    # path to pca-pipeline data:
-    _config['path_pca'] = config.get('Path', 'path_pca')
-    # path to Strehl data:
-    _config['path_strehl'] = config.get('Path', 'path_strehl')
-    # path to seeing plots:
-    _config['path_seeing'] = config.get('Path', 'path_seeing')
-    # website data dwelling place:
-    _config['path_to_website_data'] = config.get('Path', 'path_to_website_data')
+    # path to data archive:
+    _config['path_archive'] = config.get('Path', 'path_archive')
 
     # telescope data (voor, o.a., Strehl computation)
     _tmp = ast.literal_eval(config.get('Strehl', 'Strehl_factor'))
@@ -989,7 +999,8 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
                 # TODO: make preview images
                 # calculate Strehl:
                 check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
-                # TODO: run PCA
+                # TODO: run PCA (if Strehl is ready)
+                # check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
             except Exception as _e:
                 print(_e)
                 _logger.error(_e)
@@ -1120,13 +1131,8 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
                 # this also considers the pathological case when an obs ended up in several classes
                 path_obs = path_obs_list[0]
 
-                path_out = os.path.join(_config['path_strehl'], _pipe, _date)
-                if not os.path.exists(_config['path_strehl']):
-                    os.mkdir(_config['path_strehl'])
-                if not os.path.exists(os.path.join(_config['path_strehl'], _pipe)):
-                    os.mkdir(os.path.join(_config['path_strehl'], _pipe))
-                if not os.path.exists(path_out):
-                    os.mkdir(path_out)
+                # this follows the definition from structure.md
+                path_out = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'strehl')
 
                 try:
                     # set stuff up:
@@ -1150,9 +1156,9 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
 
     # under path_strehl, there are folders for different pipelines,
     # then come dates, then simply obs names
-    path_strehl = os.path.join(_config['path_strehl'], _pipe, _date, _obs)
+    path_strehl = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'strehl')
 
-    # path exists? (has been created by job_strehl)
+    # path exists? (if yes - it must have been created by job_strehl)
     if os.path.exists(path_strehl):
         try:
             # check folder modified date:
@@ -1187,6 +1193,26 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
             traceback.print_exc()
             _logger.error(_e)
             return False
+    # path does not exist? make sure it's not marked 'done'
+    elif _select['pipelined']['automated']['strehl']['status']['done']:
+        # update database entry if incorrectly marked 'done'
+        # (could not find the respective directory)
+        _coll.update_one(
+            {'_id': _obs},
+            {
+                '$set': {
+                    'pipelined.{:s}.strehl.status.done'.format(_pipe): False,
+                    'pipelined.{:s}.strehl.lock_position'.format(_pipe): None,
+                    'pipelined.{:s}.strehl.ratio_percent'.format(_pipe): None,
+                    'pipelined.{:s}.strehl.core_arcsec'.format(_pipe): None,
+                    'pipelined.{:s}.strehl.halo_arcsec'.format(_pipe): None,
+                    'pipelined.{:s}.strehl.fwhm_arcsec'.format(_pipe): None,
+                    'pipelined.{:s}.strehl.flag'.format(_pipe): None,
+                    'pipelined.{:s}.strehl.last_modified'.format(_pipe): utc_now()
+                }
+            }
+        )
+        _logger.info('Corrected strehl entry for {:s}'.format(_obs))
 
     return True
 
@@ -1434,16 +1460,11 @@ if __name__ == '__main__':
                 else:
                     print('{:s} in database, checking...'.format(obs))
                     ''' check lucky-pipelined data '''
+                    # Strehl and PCA are checked from within check_pipe_automated
                     status_ok = check_pipe_automated(_config=config, _logger=logger, _coll=coll,
                                                      _select=select, _date=date, _obs=obs)
                     if not status_ok:
                         logger.error('Checking failed for lucky pipeline: {:s}'.format(obs))
-
-                    # ''' check Strehl data '''
-                    # status_ok = check_strehl(_config=config, _logger=logger, _coll=coll,
-                    #                          _select=select, _date=date, _obs=obs)
-                    # if not status_ok:
-                    #     logger.error('Checking failed for Strehl pipeline: {:s}'.format(obs))
 
                     # TODO: if it is not a planetary, observation, do the following:
                     if True is False:
@@ -1463,7 +1484,7 @@ if __name__ == '__main__':
                         if not status_ok:
                             logger.error('Checking failed for PCA pipeline: {:s}'.format(obs))
 
-                    # TODO: if it is a planetary, run the planetary pipeline
+                    # TODO: if it is a planetary observation, run the planetary pipeline
 
                     ''' check seeing data '''
                     # TODO: [lower priority]

@@ -32,5 +32,6 @@
    |  |__programID_objectName_camera_filter_mark_yyyymmdd_HHMMSS.SSSSSS.bz2
    |__.../
    |__seeing/
+   |__calib/
 |__.../
 ```
