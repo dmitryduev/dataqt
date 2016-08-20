@@ -129,6 +129,17 @@ def job_pca(_config, _date, _out_path, _x=None, _y=None, _drizzled=True):
 
 @huey.task()
 def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_factor):
+    """
+        The task that calculates Strehl ratio
+
+    :param _path_in:
+    :param _fits_name:
+    :param _obs:
+    :param _path_out:
+    :param _plate_scale:
+    :param _Strehl_factor:
+    :return:
+    """
 
     # do the work
     try:
@@ -210,6 +221,12 @@ def load_fits(fin):
 
 
 def load_strehl(fin):
+    """
+        Load Strehl data from a text-file
+        For format, see any of the *_strehl.txt files
+    :param fin:
+    :return:
+    """
     with open(fin) as _f:
         f_lines = _f.readlines()
     _tmp = f_lines[1].split()
@@ -325,7 +342,7 @@ def get_xy_from_frames_txt(_path):
     return np.median(xy[:, 0]), np.median(xy[:, 1])
 
 
-# detect observatiosn which are bad because of being too faint
+# detect observations, which are bad because of being too faint
 # 1. make a radial profile, snip out the central 3 pixels
 #    (removing the ones which are affected by photon noise)
 # 2. measure the width of the remaining flux
@@ -422,6 +439,8 @@ def rho(x, y, x_0=1024, y_0=1024):
 
 def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=None, _drizzled=True):
     """
+        Crop image around a star, which is either detected by one of the _methods
+        or SExtracted and rated
 
     :param _path: path
     :param _fits_name: fits-file name
@@ -439,8 +458,8 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
         # extract sources
         sew = sewpy.SEW(params=["X_IMAGE", "Y_IMAGE", "XPEAK_IMAGE", "YPEAK_IMAGE",
                                 "A_IMAGE", "B_IMAGE", "FWHM_IMAGE", "FLAGS"],
-                                config={"DETECT_MINAREA": 10, "PHOT_APERTURES": "10", 'DETECT_THRESH': '5.0'},
-                                sexpath="sex")
+                        config={"DETECT_MINAREA": 10, "PHOT_APERTURES": "10", 'DETECT_THRESH': '5.0'},
+                        sexpath="sex")
 
         out = sew(os.path.join(_path, _fits_name))
         # sort by FWHM
@@ -452,7 +471,7 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
 
         # get first 10 and score them:
         scores = []
-        # maximum width of a fix Gaussian. Real sources usually have larger 'errors'
+        # maximum error of a Gaussian fit. Real sources usually have larger 'errors'
         gauss_error_max = [np.max([sou['A_IMAGE'] for sou in out['table'][0:10]]),
                            np.max([sou['B_IMAGE'] for sou in out['table'][0:10]])]
         for sou in out['table'][0:10]:
@@ -590,6 +609,10 @@ def Strehl_calculator(image_data, _Strehl_factor, _plate_scale, _boxsize):
 
 
 def empty_db_record():
+    """
+        A dummy database record
+    :return:
+    """
     time_now_utc = utc_now()
     return {
             '_id': None,
@@ -774,9 +797,6 @@ def get_config(_config_file='config.ini'):
     # website data dwelling place:
     _config['path_to_website_data'] = config.get('Path', 'path_to_website_data')
 
-    # path to model PSFs:
-    _config['path_model_psf'] = config.get('Path', 'path_model_psf')
-
     # telescope data (voor, o.a., Strehl computation)
     _tmp = ast.literal_eval(config.get('Strehl', 'Strehl_factor'))
     _config['telescope_data'] = dict()
@@ -917,7 +937,7 @@ def get_fits_header(fits_file):
 
 def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
     """
-        Check if observation has been automatically pipelined
+        Check if observation has been automatically lucky-pipelined
     :param _config: config data
     :param _logger: logger instance
     :param _coll: collection in the database
@@ -927,6 +947,7 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
 
     :return:
     """
+    # not marked as done in the database?
     if not _select['pipelined']['automated']['status']['done']:
         # check if actually processed
         path_obs_list = [[os.path.join(_config['path_pipe'], _date, tag, _obs), tag] for
@@ -966,7 +987,7 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
                 )
                 _logger.debug('Updated automated pipeline entry for {:s}'.format(_obs))
                 # TODO: make preview images
-                # TODO: calculate Strehl
+                # calculate Strehl:
                 check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
                 # TODO: run PCA
             except Exception as _e:
