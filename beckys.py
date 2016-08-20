@@ -224,10 +224,10 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
             # sou_size = np.max((int(out['table']['FWHM_IMAGE'][best_score] * 3), 90))
             # print(out['table']['XPEAK_IMAGE'][best_score], out['table']['YPEAK_IMAGE'][best_score])
             # print(get_xy_from_frames_txt(_path))
-            scidata_cropped = scidata[out['table']['YPEAK_IMAGE'][best_score] - _win:
-                                      out['table']['YPEAK_IMAGE'][best_score] + _win + 1,
-                                      out['table']['XPEAK_IMAGE'][best_score] - _win:
-                                      out['table']['XPEAK_IMAGE'][best_score] + _win + 1]
+            x = out['table']['YPEAK_IMAGE'][best_score]
+            y = out['table']['XPEAK_IMAGE'][best_score]
+            scidata_cropped = scidata[x - _win: x + _win + 1,
+                                      y - _win: y + _win + 1]
         else:
             # use a simple max instead:
             x, y = np.unravel_index(scidata.argmax(), scidata.shape)
@@ -238,12 +238,12 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
         scidata_cropped = scidata[x - _win: x + _win + 1,
                                   y - _win: y + _win + 1]
     elif _method == 'frames.txt':
-        x, y = get_xy_from_frames_txt(_path)
+        y, x = get_xy_from_frames_txt(_path)
         if _drizzled:
             x *= 2.0
             y *= 2.0
-        scidata_cropped = scidata[y - _win: y + _win + 1,
-                          x - _win: x + _win + 1]
+        scidata_cropped = scidata[x - _win: x + _win + 1,
+                                  y - _win: y + _win + 1]
     elif _method == 'manual' and _x is not None and _y is not None:
         x, y = _x, _y
         scidata_cropped = scidata[x - _win: x + _win + 1,
@@ -251,7 +251,7 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
     else:
         raise Exception('unrecognized trimming method.')
 
-    return scidata_cropped
+    return scidata_cropped, x, y
 
 
 def pca_helper(_args):
@@ -576,9 +576,9 @@ if __name__ == '__main__':
 
                     ''' go off with processing: '''
                     # trimmed image:
-                    trimmed_frame = (trim_frame(_path=path_sou, _fits_name='100p.fits',
-                                                _win=win, _method='sextractor',
-                                                _x=None, _y=None, _drizzled=True))
+                    trimmed_frame, _, _ = (trim_frame(_path=path_sou, _fits_name='100p.fits',
+                                                      _win=win, _method='sextractor',
+                                                      _x=None, _y=None, _drizzled=True))
 
                     # Check of observation passes quality check:
 

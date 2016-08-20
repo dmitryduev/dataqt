@@ -11,6 +11,7 @@ from __future__ import print_function
 import ConfigParser
 import argparse
 import inspect
+import traceback
 import os
 import logging
 import datetime
@@ -127,8 +128,54 @@ def job_pca(_config, _date, _out_path, _x=None, _y=None, _drizzled=True):
 
 
 @huey.task()
+def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_factor):
+
+    # do the work
+    try:
+        img, x, y = trim_frame(_path_in, _fits_name=_fits_name,
+                               _win=100, _method='sextractor',
+                               _x=None, _y=None, _drizzled=True)
+        core, halo = bad_obs_check(img, ps=_plate_scale)
+
+        boxsize = int(round(3. / _plate_scale))
+        SR, FWHM, box = Strehl_calculator(img, _Strehl_factor[0], _plate_scale, boxsize)
+
+    except Exception as _e:
+        print(_obs, _e)
+        # traceback.print_exc()
+        # x, y = 0, 0
+        # core, halo = 0, 999
+        # SR, FWHM = 0, 0
+        return False
+
+    if core >= 0.14 and halo <= 1.0:
+        flag = 'OK'
+    else:
+        flag = 'BAD?'
+
+    # print(core, halo, SR*100, FWHM)
+
+    # dump results to disk
+    if not os.path.exists(os.path.join(_path_out, _obs)):
+        os.mkdir(os.path.join(_path_out, _obs))
+
+    # save box around selected object:
+    hdu = fits.PrimaryHDU(box)
+    hdu.writeto(os.path.join(_path_out, _obs, '{:s}_box.fits'.format(_obs)), clobber=True)
+
+    # save the Strehl data to txt-file:
+    with open(os.path.join(_path_out, _obs, '{:s}_strehl.txt'.format(_obs)), 'w') as _f:
+        _f.write('# lock_x[px] lock_y[px] core["] halo["] SR[%] FWHM["] flag\n')
+        output_entry = '{:d} {:d} {:.5f} {:.5f} {:.5f} {:.5f} {:s}\n'.\
+            format(x, y, core, halo, SR * 100, FWHM, flag)
+        _f.write(output_entry)
+
+    return True
+
+
+@huey.task()
 # @numba.jit
-def job_strehl(_obs, _config):
+def job_bogus(_obs):
     tic = time.time()
     a = 0
     for i in range(100):
@@ -136,10 +183,6 @@ def job_strehl(_obs, _config):
             for k in range(500):
                 a += 3**2
     print('It took {:.2f} s to finish the job on {:s}'.format(time.time() - tic, _obs))
-
-    # do the work
-
-    # dump results to disk
 
     return True
 
@@ -164,6 +207,21 @@ def load_fits(fin):
     with fits.open(fin) as _f:
         scidata = _f[0].data
     return scidata
+
+
+def load_strehl(fin):
+    with open(fin) as _f:
+        f_lines = _f.readlines()
+    _tmp = f_lines[1].split()
+    _x = int(_tmp[0])
+    _y = int(_tmp[1])
+    _core = float(_tmp[2])
+    _halo = float(_tmp[3])
+    _SR = float(_tmp[4])
+    _FWHM = float(_tmp[5])
+    _flag = _tmp[6]
+
+    return _x, _y, _core, _halo, _SR, _FWHM, _flag
 
 
 def scale_image(image, correction='local'):
@@ -417,10 +475,10 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
             # sou_size = np.max((int(out['table']['FWHM_IMAGE'][best_score] * 3), 90))
             # print(out['table']['XPEAK_IMAGE'][best_score], out['table']['YPEAK_IMAGE'][best_score])
             # print(get_xy_from_frames_txt(_path))
-            scidata_cropped = scidata[out['table']['YPEAK_IMAGE'][best_score] - _win:
-                                      out['table']['YPEAK_IMAGE'][best_score] + _win + 1,
-                                      out['table']['XPEAK_IMAGE'][best_score] - _win:
-                                      out['table']['XPEAK_IMAGE'][best_score] + _win + 1]
+            x = out['table']['YPEAK_IMAGE'][best_score]
+            y = out['table']['XPEAK_IMAGE'][best_score]
+            scidata_cropped = scidata[x - _win: x + _win + 1,
+                                      y - _win: y + _win + 1]
         else:
             # use a simple max instead:
             x, y = np.unravel_index(scidata.argmax(), scidata.shape)
@@ -431,12 +489,12 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
         scidata_cropped = scidata[x - _win: x + _win + 1,
                                   y - _win: y + _win + 1]
     elif _method == 'frames.txt':
-        x, y = get_xy_from_frames_txt(_path)
+        y, x = get_xy_from_frames_txt(_path)
         if _drizzled:
             x *= 2.0
             y *= 2.0
-        scidata_cropped = scidata[y - _win: y + _win + 1,
-                          x - _win: x + _win + 1]
+        scidata_cropped = scidata[x - _win: x + _win + 1,
+                                  y - _win: y + _win + 1]
     elif _method == 'manual' and _x is not None and _y is not None:
         x, y = _x, _y
         scidata_cropped = scidata[x - _win: x + _win + 1,
@@ -444,7 +502,7 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
     else:
         raise Exception('unrecognized trimming method.')
 
-    return scidata_cropped
+    return scidata_cropped, x, y
 
 
 def makebox(array, halfwidth, peak1, peak2):
@@ -528,7 +586,7 @@ def Strehl_calculator(image_data, _Strehl_factor, _plate_scale, _boxsize):
 
     # print('image FWHM: {:.5f}\"\n'.format(fwhm_arcsec))
 
-    return Strehl_ratio, fwhm_arcsec
+    return Strehl_ratio, fwhm_arcsec, box_roboao
 
 
 def empty_db_record():
@@ -705,10 +763,12 @@ def get_config(_config_file='config.ini'):
     _config['program_num_planets'] = int(config.get('Programs', 'planets'))
     # path to raw data:
     _config['path_raw'] = config.get('Path', 'path_raw')
-    # path to (standard) pipeline data:
+    # path to lucky-pipeline data:
     _config['path_pipe'] = config.get('Path', 'path_pipe')
-    # path to Becky-pipeline data:
+    # path to pca-pipeline data:
     _config['path_pca'] = config.get('Path', 'path_pca')
+    # path to Strehl data:
+    _config['path_strehl'] = config.get('Path', 'path_strehl')
     # path to seeing plots:
     _config['path_seeing'] = config.get('Path', 'path_seeing')
     # website data dwelling place:
@@ -757,6 +817,8 @@ def get_config(_config_file='config.ini'):
     # consider data from:
     _config['archiving_start_date'] = datetime.datetime.strptime(
                             config.get('Auxiliary', 'archiving_start_date'), '%Y/%m/%d')
+    # how many times to try to rerun pipelines:
+    _config['max_pipelining_retries'] = config.get('Auxiliary', 'max_pipelining_retries')
 
     return _config
 
@@ -866,15 +928,73 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
     :return:
     """
     if not _select['pipelined']['automated']['status']['done']:
-        # check if processed
-        for tag in ('high_flux', 'faint', 'zero_flux', 'failed'):
-            path_obs = os.path.join(_config['path_pipe'], _date, tag, _obs)
-            if os.path.exists(path_obs):
-                try:
-                    # check folder modified date:
-                    time_tag = datetime.datetime.utcfromtimestamp(
-                        os.stat(path_obs).st_mtime)
+        # check if actually processed
+        path_obs_list = [[os.path.join(_config['path_pipe'], _date, tag, _obs), tag] for
+                         tag in ('high_flux', 'faint', 'zero_flux', 'failed') if
+                         os.path.exists(os.path.join(_config['path_pipe'], _date, tag, _obs))]
+        # yes?
+        if len(path_obs_list) == 1:
+            # this also considers the pathological case when an obs ended up in several classes
+            path_obs = path_obs_list[0][0]
+            tag = path_obs_list[0][1]
 
+            # then update database entry and do Strehl and PCA
+            try:
+                # check folder modified date:
+                time_tag = datetime.datetime.utcfromtimestamp(
+                    os.stat(path_obs).st_mtime)
+
+                fits100p = os.path.join(path_obs, '100p.fits')
+                header = get_fits_header(fits100p) if tag != 'failed' else {}
+
+                _coll.update_one(
+                    {'_id': _obs},
+                    {
+                        '$set': {
+                            'pipelined.automated.status.done': True,
+                            'pipelined.automated.classified_as': tag,
+                            'pipelined.automated.last_modified': time_tag,
+                            'pipelined.automated.fits_header': header
+                        },
+                        '$push': {
+                            'pipelined.automated.location': ['{:s}:{:s}'.format(
+                                                _config['analysis_machine_external_host'],
+                                                _config['analysis_machine_external_port']),
+                                                _config['path_pipe']],
+                        }
+                    }
+                )
+                _logger.debug('Updated automated pipeline entry for {:s}'.format(_obs))
+                # TODO: make preview images
+                # TODO: calculate Strehl
+                check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
+                # TODO: run PCA
+            except Exception as _e:
+                print(_e)
+                _logger.error(_e)
+                return False
+        elif len(path_obs_list) == 0:
+            _logger.debug('{:s} not yet processed'.format(_obs))
+        elif len(path_obs_list) > 1:
+            _logger.debug('{:s} ended up in several lucky classes, check on it.'.format(_obs))
+
+    # marked as done? check Strehl and PCA + check modified time tag for updates
+    else:
+        # check if actually processed
+        path_obs_list = [[os.path.join(_config['path_pipe'], _date, tag, _obs), tag] for
+                         tag in ('high_flux', 'faint', 'zero_flux', 'failed') if
+                         os.path.exists(os.path.join(_config['path_pipe'], _date, tag, _obs))]
+        # yes?
+        if len(path_obs_list) == 1:
+            # this also considers the pathological case when an obs ended up in several classes
+            path_obs = path_obs_list[0][0]
+            tag = path_obs_list[0][1]
+            try:
+                # check folder modified date:
+                time_tag = datetime.datetime.utcfromtimestamp(
+                    os.stat(path_obs).st_mtime)
+                # changed? update database entry + make sure to rerun Strehl and PCA
+                if _select['pipelined']['automated']['last_modified'] != time_tag:
                     fits100p = os.path.join(path_obs, '100p.fits')
                     header = get_fits_header(fits100p) if tag != 'failed' else {}
 
@@ -882,60 +1002,46 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
                         {'_id': _obs},
                         {
                             '$set': {
-                                'pipelined.automated.status.done': True,
                                 'pipelined.automated.classified_as': tag,
                                 'pipelined.automated.last_modified': time_tag,
-                                'pipelined.automated.fits_header': header
-                            },
-                            '$push': {
-                                'pipelined.automated.location': ['{:s}:{:s}'.format(
-                                                    _config['analysis_machine_external_host'],
-                                                    _config['analysis_machine_external_port']),
-                                                    _config['path_pipe']],
+                                'pipelined.automated.fits_header': header,
+                                'pipelined.automated.status.preview': False,
+                                'pipelined.automated.strehl.status.done': False,
+                                'pipelined.automated.pca.status.done': False
                             }
                         }
                     )
                     _logger.debug('Updated automated pipeline entry for {:s}'.format(_obs))
-                    # TODO: make preview images
-                    # TODO: calculate Strehl
-                    res = job_strehl(_obs)
-                    # TODO: run PCA
-                except Exception as _e:
-                    print(_e)
-                    _logger.error(_e)
-                    return False
-    # done? check modified time tag for updates:
-    else:
-        for tag in ('high_flux', 'faint', 'zero_flux', 'failed'):
-            path_obs = os.path.join(_config['path_pipe'], _date, tag, _obs)
-            if os.path.exists(path_obs):
-                try:
-                    # check folder modified date:
-                    time_tag = datetime.datetime.utcfromtimestamp(
-                        os.stat(path_obs).st_mtime)
-                    # changed?
-                    if _select['pipelined']['automated']['last_modified'] != time_tag:
-                        fits100p = os.path.join(path_obs, '100p.fits')
-                        header = get_fits_header(fits100p) if tag != 'failed' else {}
-
-                        _coll.update_one(
-                            {'_id': _obs},
-                            {
-                                '$set': {
-                                    'pipelined.automated.classified_as': tag,
-                                    'pipelined.automated.last_modified': time_tag,
-                                    'pipelined.automated.fits_header': header
-                                }
-                            }
-                        )
-                        _logger.debug('Updated automated pipeline entry for {:s}'.format(_obs))
-                        # TODO: remake preview images
-                        # TODO: recalculate Strehl
-                        # TODO: rerun PCA
-                except Exception as _e:
-                    print(_e)
-                    _logger.error(_e)
-                    return False
+                # check the following in any case:
+                # TODO: remake preview images
+                # TODO: recalculate Strehl
+                check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
+                # TODO: rerun PCA
+            except Exception as _e:
+                print(_e)
+                _logger.error(_e)
+                return False
+        elif len(path_obs_list) == 0:
+            _logger.debug(
+                '{:s} not yet processed (at least I could not find it), marking undone'.format(_obs))
+            _coll.update_one(
+                {'_id': _obs},
+                {
+                    '$set': {
+                        'pipelined.automated.status.done': False
+                    }
+                }
+            )
+        elif len(path_obs_list) > 1:
+            _logger.debug('{:s} ended up in several lucky classes, check on it.'.format(_obs))
+            _coll.update_one(
+                {'_id': _obs},
+                {
+                    '$set': {
+                        'pipelined.automated.status.done': False
+                    }
+                }
+            )
 
     return True
 
@@ -953,9 +1059,113 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
     :return:
     """
     # TODO
-    if not _select['pipelined']['faint']['status']['done'] or \
-                    _select['pipelined']['faint']['status']['retries'] < 3:
+    if not _select['pipelined']['faint']['status']['done'] and \
+            _select['pipelined']['faint']['status']['retries'] < _config['max_pipelining_retries']:
         return False
+
+    return True
+
+
+def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated'):
+    """
+        Check if Strehl has been calculated, and calculate if necessary
+    :param _config: config data
+    :param _logger: logger instance
+    :param _coll: collection in the database
+    :param _select: database entry
+    :param _date: date of obs
+    :param _obs: obs name
+    :param _pipe: which pipelined data to use? 'automated' or 'faint'?
+
+    :return:
+    """
+
+    # if 'done' is changed to False externally, the if clause is triggered,
+    # which in turn triggers a job placement into the queue to recalculate Strehl
+    # when invoked for the next time, the else clause will trigger,
+    # resulting in an update of the database entry (since the last_modified value
+    # will be different from the new folder modification date)
+
+    if not _select['pipelined'][_pipe]['strehl']['status']['done'] and \
+                   _select['pipelined'][_pipe]['strehl']['status']['retries'] < \
+                   _config['max_pipelining_retries']:
+        if _pipe == 'automated':
+            # check if actually processed
+            path_obs_list = [os.path.join(_config['path_pipe'], _date, tag, _obs) for
+                             tag in ('high_flux', 'faint', 'zero_flux', 'failed') if
+                             os.path.exists(os.path.join(_config['path_pipe'], _date, tag, _obs))]
+            # yes?
+            if len(path_obs_list) == 1:
+                # this also considers the pathological case when an obs ended up in several classes
+                path_obs = path_obs_list[0]
+
+                path_out = os.path.join(_config['path_strehl'], _pipe, _date)
+                if not os.path.exists(_config['path_strehl']):
+                    os.mkdir(_config['path_strehl'])
+                if not os.path.exists(os.path.join(_config['path_strehl'], _pipe)):
+                    os.mkdir(os.path.join(_config['path_strehl'], _pipe))
+                if not os.path.exists(path_out):
+                    os.mkdir(path_out)
+
+                try:
+                    # set stuff up:
+                    telescope = 'KittPeak' if datetime.datetime.strptime(_date, '%Y%m%d') > \
+                                              datetime.datetime(2015, 9, 1) else 'Palomar'
+                    Strehl_factor = _config['telescope_data'][telescope]['Strehl_factor'][_select['filter']]
+
+                    # lucky images are drizzled, use scale_red therefore
+                    plate_scale = _config['telescope_data'][telescope]['scale_red']
+
+                    # put a job into the queue
+                    job_strehl(_path_in=path_obs, _fits_name='100p.fits',
+                               _obs=_obs, _path_out=path_out,
+                               _plate_scale=plate_scale, _Strehl_factor=Strehl_factor)
+                    _logger.info('put a Strehl job into the queue for {:s}'.format(_obs))
+
+                except Exception as _e:
+                    traceback.print_exc()
+                    _logger.error(_e)
+                    return False
+
+    # under path_strehl, there are folders for different pipelines,
+    # then come dates, then simply obs names
+    path_strehl = os.path.join(_config['path_strehl'], _pipe, _date, _obs)
+
+    # path exists? (has been created by job_strehl)
+    if os.path.exists(path_strehl):
+        try:
+            # check folder modified date:
+            time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_strehl).st_mtime)
+            # changed? reload data from disk + update database entry
+            if _select['pipelined']['automated']['last_modified'] != time_tag:
+                # reload data from disk
+                f_strehl = os.path.join(path_strehl, '{:s}_strehl.txt'.format(_obs))
+                x, y, core, halo, SR, FWHM, flag = load_strehl(f_strehl)
+                # print(x, y, core, halo, SR, FWHM, flag)
+                # update database entry
+                _coll.update_one(
+                    {'_id': _obs},
+                    {
+                        '$set': {
+                            'pipelined.{:s}.strehl.status.done'.format(_pipe): True,
+                            'pipelined.{:s}.strehl.lock_position'.format(_pipe): [x, y],
+                            'pipelined.{:s}.strehl.ratio_percent'.format(_pipe): SR,
+                            'pipelined.{:s}.strehl.core_arcsec'.format(_pipe): core,
+                            'pipelined.{:s}.strehl.halo_arcsec'.format(_pipe): halo,
+                            'pipelined.{:s}.strehl.fwhm_arcsec'.format(_pipe): FWHM,
+                            'pipelined.{:s}.strehl.flag'.format(_pipe): flag,
+                            'pipelined.{:s}.strehl.last_modified'.format(_pipe): time_tag
+                        },
+                        '$inc': {
+                            'pipelined.{:s}.strehl.status.retries'.format(_pipe): 1
+                        }
+                    }
+                )
+                _logger.info('Updated strehl entry for {:s}'.format(_obs))
+        except Exception as _e:
+            traceback.print_exc()
+            _logger.error(_e)
+            return False
 
     return True
 
@@ -976,8 +1186,9 @@ def check_pipe_pca(_config, _logger, _coll, _select, _date, _obs):
     """
     try:
         # 'done' flag = False and <3 retries?
-        if not _select['pipelined']['pca']['status']['done'] or \
-                        _select['pipelined']['pca']['status']['retries'] < 3:
+        if not _select['pipelined']['pca']['status']['done'] and \
+                        _select['pipelined']['pca']['status']['retries'] < \
+                        _config['max_pipelining_retries']:
             # check if processed
             # name in accordance with the automated pipeline output,
             # but check the faint pipeline output folder too
@@ -1055,27 +1266,6 @@ def check_pipe_pca(_config, _logger, _coll, _select, _date, _obs):
     except Exception as _e:
         print(_e)
         logger.error(_e)
-        return False
-
-    return True
-
-
-def check_strehl(_config, _logger, _coll, _select, _date, _obs):
-    """
-        Check if observation has been processed
-    :param _config: config data
-    :param _logger: logger instance
-    :param _coll: collection in the database
-    :param _select: database entry
-    :param _date: date of obs
-    :param _obs: obs name
-
-    :return:
-    """
-    if not _select['pipelined']['strehl']['status']['done'] or \
-                    _select['pipelined']['strehl']['status']['retries'] < 3:
-        job_strehl(_obs, _config)
-        print('put a Strehl job into the queue')
         return False
 
     return True

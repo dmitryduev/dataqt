@@ -74,8 +74,9 @@ if __name__ == '__main__':
 
     ''' go off with processing: '''
     # trimmed image:
-    trimmed_frame = (trim_frame(_path=path_source, _fits_name='100p.fits',
-                                _win=win, _method='sextractor', _x=None, _y=None, _drizzled=True))
+    trimmed_frame, _, _ = (trim_frame(_path=path_source, _fits_name='100p.fits',
+                                      _win=win, _method='sextractor',
+                                      _x=None, _y=None, _drizzled=True))
 
     # run PCA
     output = pca(_trimmed_frame=trimmed_frame, _win=win, _sou_name=sou_name,
