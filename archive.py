@@ -167,8 +167,8 @@ def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_fact
     # print(core, halo, SR*100, FWHM)
 
     # dump results to disk
-    # recursively makedir if necessary
-    mkdirp(_path_out)
+    if not(os.path.exists(_path_out)):
+        os.makedirs(_path_out)
 
     # save box around selected object:
     hdu = fits.PrimaryHDU(box)
@@ -214,9 +214,9 @@ def naptime(nap_time_start, nap_time_stop):
     # TODO: finish!
 
 
-def mkdirp(_path):
+def mkdirs(_path):
     """
-        mimic mkdir -p in python2
+        mimic os.makedirs() why? why not?..
     :param _path:
     :return:
     """
@@ -282,6 +282,85 @@ def scale_image(image, correction='local'):
         return exposure.equalize_adapthist(scidata, clip_limit=0.03)
     else:
         raise Exception('Contrast correction option not recognized')
+
+
+def generate_pipe_preview(_path_out, _obs, preview_img, preview_img_cropped, SR=None, objects=None):
+    """
+    :param _path_out:
+    :param preview_img:
+    :param preview_img_cropped:
+    :param SR:
+    :param objects: np.array([[x_0,y_0], ..., [x_N,y_N]])
+    :return:
+    """
+    try:
+        plt.close('all')
+        fig = plt.figure()
+        fig.set_size_inches(4, 4, forward=False)
+        ax = plt.Axes(fig, [0., 0., 1., 1.])
+        ax.set_axis_off()
+        fig.add_axes(ax)
+        # plot detected objects:
+        if objects is not None:
+            ax.plot(objects[:, 0]-1, objects[:, 1]-1, 'o',
+                    markeredgewidth=1, markerfacecolor='None', markeredgecolor=plt.cm.Oranges(0.8))
+        # ax.imshow(preview_img, cmap='gray', origin='lower', interpolation='nearest')
+        ax.imshow(preview_img, cmap='gray', origin='lower', interpolation='nearest')
+        # ax.imshow(preview_img, cmap='gist_heat', origin='lower', interpolation='nearest')
+        # plt.axis('off')
+        plt.grid('off')
+
+        # save full figure
+        fname_full = '{:s}_full.png'.format(_obs)
+        if not (os.path.exists(_path_out)):
+            os.makedirs(_path_out)
+        plt.savefig(os.path.join(_path_out, fname_full), dpi=300)
+
+        ''' cropped image: '''
+        # save cropped image
+        plt.close('all')
+        fig = plt.figure()
+        fig.set_size_inches(3, 3, forward=False)
+        # ax = fig.add_subplot(111)
+        ax = plt.Axes(fig, [0., 0., 1., 1.])
+        ax.set_axis_off()
+        fig.add_axes(ax)
+        ax.imshow(preview_img_cropped, cmap='gray', origin='lower', interpolation='nearest')
+        # add scale bar:
+        # draw a horizontal bar with length of 0.1*x_size
+        # (ax.transData) with a label underneath.
+        bar_len = preview_img_cropped.shape[0] * 0.1
+        bar_len_str = '{:.1f}'.format(bar_len * 36 / 1024 / 2)
+        asb = AnchoredSizeBar(ax.transData,
+                              bar_len,
+                              bar_len_str[0] + r"$^{\prime\prime}\!\!\!.$" + bar_len_str[-1],
+                              loc=4, pad=0.3, borderpad=0.5, sep=10, frameon=False)
+        ax.add_artist(asb)
+        # add Strehl ratio
+        if SR is not None:
+            asb2 = AnchoredSizeBar(ax.transData,
+                                   0,
+                                   'Strehl: {:.2f}%'.format(float(SR)),
+                                   loc=2, pad=0.3, borderpad=0.4, sep=5, frameon=False)
+            ax.add_artist(asb2)
+            # asb3 = AnchoredSizeBar(ax.transData,
+            #                        0,
+            #                        'SR: {:.2f}%'.format(float(SR)),
+            #                        loc=3, pad=0.3, borderpad=0.5, sep=10, frameon=False)
+            # ax.add_artist(asb3)
+
+        # save cropped figure
+        fname_cropped = '{:s}_cropped.png'.format(_obs)
+        if not (os.path.exists(_path_out)):
+            os.makedirs(_path_out)
+        fig.savefig(os.path.join(_path_out, fname_cropped), dpi=300)
+
+    except Exception as _e:
+        traceback.print_exc()
+        print(_e)
+        return False
+
+    return True
 
 
 def generate_pca_images(_out_path, _sou_dir, _preview_img, _cc,
@@ -455,8 +534,8 @@ def rho(x, y, x_0=1024, y_0=1024):
 
 def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=None, _drizzled=True):
     """
-        Crop image around a star, which is either detected by one of the _methods
-        or SExtracted and rated
+        Crop image around a star, which is detected by one of the _methods
+        (e.g. SExtracted and rated)
 
     :param _path: path
     :param _fits_name: fits-file name
@@ -507,7 +586,9 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
         if N_sou != 0 and N_sou < 30:
             # sou_xy = [out['table']['X_IMAGE'][0], out['table']['Y_IMAGE'][0]]
             best_score = np.argmax(scores) if len(scores) > 0 else 0
-            # sou_size = np.max((int(out['table']['FWHM_IMAGE'][best_score] * 3), 90))
+            if _win is None:
+                sou_size = np.max((int(out['table']['FWHM_IMAGE'][best_score] * 3), 100))
+                _win = sou_size
             # print(out['table']['XPEAK_IMAGE'][best_score], out['table']['YPEAK_IMAGE'][best_score])
             # print(get_xy_from_frames_txt(_path))
             x = out['table']['YPEAK_IMAGE'][best_score]
@@ -515,15 +596,21 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
             scidata_cropped = scidata[x - _win: x + _win + 1,
                                       y - _win: y + _win + 1]
         else:
+            if _win is None:
+                _win = 100
             # use a simple max instead:
             x, y = np.unravel_index(scidata.argmax(), scidata.shape)
             scidata_cropped = scidata[x - _win: x + _win + 1,
                                       y - _win: y + _win + 1]
     elif _method == 'max':
+        if _win is None:
+            _win = 100
         x, y = np.unravel_index(scidata.argmax(), scidata.shape)
         scidata_cropped = scidata[x - _win: x + _win + 1,
                                   y - _win: y + _win + 1]
     elif _method == 'frames.txt':
+        if _win is None:
+            _win = 100
         y, x = get_xy_from_frames_txt(_path)
         if _drizzled:
             x *= 2.0
@@ -531,6 +618,8 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
         scidata_cropped = scidata[x - _win: x + _win + 1,
                                   y - _win: y + _win + 1]
     elif _method == 'manual' and _x is not None and _y is not None:
+        if _win is None:
+            _win = 100
         x, y = _x, _y
         scidata_cropped = scidata[x - _win: x + _win + 1,
                                   y - _win: y + _win + 1]
@@ -655,8 +744,12 @@ def empty_db_record():
             'pipelined': {
                 'automated': {
                     'status': {
+                        'done': False
+                    },
+                    'preview': {
                         'done': False,
-                        'preview': False
+                        'retries': 0,
+                        'last_modified': time_now_utc
                     },
                     'location': [],
                     'classified_as': None,
@@ -677,8 +770,12 @@ def empty_db_record():
                     'pca': {
                         'status': {
                             'done': False,
-                            'preview': False,
                             'retries': 0
+                        },
+                        'preview': {
+                            'done': False,
+                            'retries': 0,
+                            'last_modified': time_now_utc
                         },
                         'location': [],
                         'lock_position': None,
@@ -690,8 +787,12 @@ def empty_db_record():
                 'faint': {
                     'status': {
                         'done': False,
-                        'preview': False,
                         'retries': 0
+                    },
+                    'preview': {
+                        'done': False,
+                        'retries': 0,
+                        'last_modified': time_now_utc
                     },
                     'location': [],
                     'strehl': {
@@ -710,8 +811,12 @@ def empty_db_record():
                     'pca': {
                         'status': {
                             'done': False,
-                            'preview': False,
                             'retries': 0
+                        },
+                        'preview': {
+                            'done': False,
+                            'retries': 0,
+                            'last_modified': time_now_utc
                         },
                         'location': [],
                         'lock_position': None,
@@ -829,7 +934,7 @@ def get_config(_config_file='config.ini'):
     _config['pca']['nrefs'] = float(config.get('PCA', 'nrefs'))
     _config['pca']['klip'] = float(config.get('PCA', 'klip'))
 
-    _config['pca']['planets_prog_num'] = int(config.get('Programs', 'planets'))
+    _config['planets_prog_num'] = str(config.get('Programs', 'planets'))
 
     # database access:
     _config['mongo_host'] = config.get('Database', 'host')
@@ -996,11 +1101,13 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
                     }
                 )
                 _logger.debug('Updated automated pipeline entry for {:s}'.format(_obs))
-                # TODO: make preview images
                 # calculate Strehl:
                 check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
                 # TODO: run PCA (if Strehl is ready)
                 # check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
+                # TODO: make preview images
+                check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
+
             except Exception as _e:
                 print(_e)
                 _logger.error(_e)
@@ -1045,10 +1152,11 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
                     )
                     _logger.debug('Updated automated pipeline entry for {:s}'.format(_obs))
                 # check the following in any case:
-                # TODO: remake preview images
-                # TODO: recalculate Strehl
+                # (re)calculate Strehl
                 check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
-                # TODO: rerun PCA
+                # TODO: (re)run PCA
+                # TODO: (re)make preview images
+                check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
             except Exception as _e:
                 print(_e)
                 _logger.error(_e)
@@ -1113,7 +1221,7 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
     """
 
     # if 'done' is changed to False externally, the if clause is triggered,
-    # which in turn triggers a job placement into the queue to recalculate Strehl
+    # which in turn triggers a job placement into the queue to recalculate Strehl.
     # when invoked for the next time, the else clause will trigger,
     # resulting in an update of the database entry (since the last_modified value
     # will be different from the new folder modification date)
@@ -1122,40 +1230,46 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
                    _select['pipelined'][_pipe]['strehl']['status']['retries'] < \
                    _config['max_pipelining_retries']:
         if _pipe == 'automated':
-            # check if actually processed
+            # check if actually processed through pipeline
             path_obs_list = [os.path.join(_config['path_pipe'], _date, tag, _obs) for
                              tag in ('high_flux', 'faint', 'zero_flux', 'failed') if
                              os.path.exists(os.path.join(_config['path_pipe'], _date, tag, _obs))]
-            # yes?
-            if len(path_obs_list) == 1:
-                # this also considers the pathological case when an obs ended up in several classes
-                path_obs = path_obs_list[0]
+        elif _pipe == 'faint':
+            # raise NotImplemented()
+            path_obs_list = []
+        else:
+            # raise NotImplemented()
+            path_obs_list = []
 
-                # this follows the definition from structure.md
-                path_out = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'strehl')
+        # processed?
+        if len(path_obs_list) == 1:
+            # this also considers the pathological case when an obs ended up in several classes
+            path_obs = path_obs_list[0]
 
-                try:
-                    # set stuff up:
-                    telescope = 'KittPeak' if datetime.datetime.strptime(_date, '%Y%m%d') > \
-                                              datetime.datetime(2015, 9, 1) else 'Palomar'
-                    Strehl_factor = _config['telescope_data'][telescope]['Strehl_factor'][_select['filter']]
+            # this follows the definition from structure.md
+            path_out = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'strehl')
 
-                    # lucky images are drizzled, use scale_red therefore
-                    plate_scale = _config['telescope_data'][telescope]['scale_red']
+            try:
+                # set stuff up:
+                telescope = 'KittPeak' if datetime.datetime.strptime(_date, '%Y%m%d') > \
+                                          datetime.datetime(2015, 9, 1) else 'Palomar'
+                Strehl_factor = _config['telescope_data'][telescope]['Strehl_factor'][_select['filter']]
 
-                    # put a job into the queue
-                    job_strehl(_path_in=path_obs, _fits_name='100p.fits',
-                               _obs=_obs, _path_out=path_out,
-                               _plate_scale=plate_scale, _Strehl_factor=Strehl_factor)
-                    _logger.info('put a Strehl job into the queue for {:s}'.format(_obs))
+                # lucky images are drizzled, use scale_red therefore
+                plate_scale = _config['telescope_data'][telescope]['scale_red']
 
-                except Exception as _e:
-                    traceback.print_exc()
-                    _logger.error(_e)
-                    return False
+                # put a job into the queue
+                job_strehl(_path_in=path_obs, _fits_name='100p.fits',
+                           _obs=_obs, _path_out=path_out,
+                           _plate_scale=plate_scale, _Strehl_factor=Strehl_factor)
+                _logger.info('put a Strehl job into the queue for {:s}'.format(_obs))
 
-    # under path_strehl, there are folders for different pipelines,
-    # then come dates, then simply obs names
+            except Exception as _e:
+                traceback.print_exc()
+                _logger.error(_e)
+                return False
+
+    # following structure.md:
     path_strehl = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'strehl')
 
     # path exists? (if yes - it must have been created by job_strehl)
@@ -1163,7 +1277,7 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
         try:
             # check folder modified date:
             time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_strehl).st_mtime)
-            # changed? reload data from disk + update database entry
+            # changed? reload data from disk + update database entry + remake preview
             if _select['pipelined']['automated']['last_modified'] != time_tag:
                 # reload data from disk
                 f_strehl = os.path.join(path_strehl, '{:s}_strehl.txt'.format(_obs))
@@ -1189,12 +1303,15 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
                     }
                 )
                 _logger.info('Updated strehl entry for {:s}'.format(_obs))
+                # TODO: remake preview images
+                check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe=_pipe)
+                _logger.info('Remade preview images for {:s}'.format(_obs))
         except Exception as _e:
             traceback.print_exc()
             _logger.error(_e)
             return False
     # path does not exist? make sure it's not marked 'done'
-    elif _select['pipelined']['automated']['strehl']['status']['done']:
+    elif _select['pipelined'][_pipe]['strehl']['status']['done']:
         # update database entry if incorrectly marked 'done'
         # (could not find the respective directory)
         _coll.update_one(
@@ -1213,6 +1330,123 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
             }
         )
         _logger.info('Corrected strehl entry for {:s}'.format(_obs))
+        # a job will be placed into the queue at the next invocation of check_strehl
+
+    return True
+
+
+# noinspection PyUnboundLocalVariable,PyUnboundLocalVariable
+def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automated'):
+    """
+        Check if Strehl has been calculated, and calculate if necessary
+    :param _config: config data
+    :param _logger: logger instance
+    :param _coll: collection in the database
+    :param _select: database entry
+    :param _date: date of obs
+    :param _obs: obs name
+    :param _pipe: which pipelined data to use? 'automated' or 'faint'?
+
+    :return:
+    """
+
+    try:
+        # preview_done = False, done = True, tried not too many times
+        if not _select['pipelined'][_pipe]['preview']['done'] and \
+                _select['pipelined'][_pipe]['status']['done'] and \
+                _select['pipelined'][_pipe]['preview']['retries'] < _config['max_pipelining_retries']:
+            if _pipe == 'automated':
+                # check if actually processed through pipeline
+                path_obs_list = [os.path.join(_config['path_pipe'], _date, tag, _obs) for
+                                 tag in ('high_flux', 'faint', 'zero_flux', 'failed') if
+                                 os.path.exists(os.path.join(_config['path_pipe'], _date, tag, _obs))]
+            elif _pipe == 'faint':
+                raise NotImplemented()
+                # path_obs_list = []
+            else:
+                raise NotImplemented()
+                # path_obs_list = []
+
+            # processed?
+            if len(path_obs_list) == 1:
+                # this also considers the pathological case when an obs ended up in several classes
+                path_obs = path_obs_list[0]
+
+                # what's in a fits name?
+                if _pipe == 'automated':
+                    f_fits = os.path.join(path_obs, '100p.fits')
+                elif _pipe == 'faint':
+                    raise NotImplemented()
+                else:
+                    raise NotImplemented()
+
+                # this follows the definition from structure.md
+                path_out = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'preview')
+
+                # noinspection PyUnboundLocalVariable
+                try:
+                    # load first image frame from the fits file
+                    preview_img = load_fits(f_fits)
+                    # scale with local contrast optimization for preview:
+                    if _select['science_program']['program_id'] != _config['planets_prog_num']:
+                        preview_img = scale_image(preview_img, correction='local')
+                        # cropped image [_win=None to try to detect]
+                        preview_img_cropped, _, _ = trim_frame(_path=path_obs,
+                                                               _fits_name=os.path.split(f_fits)[1],
+                                                               _win=None, _method='sextractor',
+                                                               _x=None, _y=None, _drizzled=True)
+                    else:
+                        # don't crop planets
+                        preview_img_cropped = preview_img
+                    # Strehl ratio (if available, otherwise will be None)
+                    SR = _select['pipelined'][_pipe]['strehl']['ratio_percent']
+
+                    _status = generate_pipe_preview(path_out, _obs, preview_img, preview_img_cropped, SR)
+
+                    _coll.update_one(
+                        {'_id': _obs},
+                        {
+                            '$set': {
+                                'pipelined.{:s}.preview.done'.format(_pipe): _status,
+                                'pipelined.{:s}.preview.last_modified'.format(_pipe): utc_now()
+                            },
+                            '$inc': {
+                                'pipelined.{:s}.preview.retries'.format(_pipe): 1
+                            }
+                        }
+                    )
+                    if _status:
+                        _logger.info('Generated lucky pipeline entry [preview] for {:s}'.format(_obs))
+                    else:
+                        _logger.error('Failed to generate lucky pipeline preview images for {:s}'.format(_obs))
+
+                except Exception as _e:
+                    traceback.print_exc()
+                    _logger.error(_e)
+                    return False
+
+        # following structure.md:
+        path_preview = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'preview')
+
+        # path does not exist? make sure it's not marked 'done'
+        if not os.path.exists(path_preview) and \
+                _select['pipelined'][_pipe]['preview']['done']:
+            # update database entry if incorrectly marked 'done'
+            # (could not find the respective directory)
+            _coll.update_one(
+                {'_id': _obs},
+                {
+                    '$set': {
+                        'pipelined.{:s}.preview.done'.format(_pipe): False,
+                        'pipelined.{:s}.preview.last_modified'.format(_pipe): utc_now()
+                    }
+                }
+            )
+            _logger.info('Corrected {:s} pipeline preview entry for {:s}'.format(_pipe, _obs))
+
+    except Exception as _e:
+        _logger.error(_e)
+        return False
 
     return True
 
@@ -1251,7 +1485,7 @@ def check_pipe_pca(_config, _logger, _coll, _select, _date, _obs):
                     cc = np.loadtxt(f_cc)
 
                     # previews generated?
-                    if not _select['pipelined']['pca']['status']['review']:
+                    if not _select['pipelined']['pca']['status']['preview']:
                         # load first image frame from a fits file
                         f_fits = [f for f in os.listdir(path_obs) if '.fits' in f][0]
                         _fits = load_fits(f_fits)
