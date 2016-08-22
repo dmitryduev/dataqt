@@ -16,7 +16,7 @@
    |  |  |  |__programID_objectName_camera_filter_mark_yyyymmdd_HHMMSS.SSSSSS_contrast_curve.png
    |  |  |  |__programID_objectName_camera_filter_mark_yyyymmdd_HHMMSS.SSSSSS_contrast_curve.txt
    |  |  |  |__programID_objectName_camera_filter_mark_yyyymmdd_HHMMSS.SSSSSS_pca.fits
-   |  |  |___tentitavely_put_lucky_output_here_
+   |  |  |___tentitavely_put_lucky_output_here_?
    |  |__faint/
    |  |  |__preview/
    |  |  |  |__...

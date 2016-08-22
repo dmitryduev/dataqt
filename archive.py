@@ -91,35 +91,6 @@ class AnchoredSizeBar(AnchoredOffsetbox):
 def job_pca(_config, _date, _out_path, _x=None, _y=None, _drizzled=True):
     try:
         pass
-    #     # TODO: first run the Strehl calculator on the 100p
-    #     trimmed_frame = (trim_frame(_path=_config['path_pipe'], _fits_name='100p.fits',
-    #                                 _win=_config['win'], _method='sextractor',
-    #                                 _x=_x, _y=_y, _drizzled=_drizzled))
-    #
-    #     # Check of observation passes quality check:
-    #
-    #     try:
-    #         cy1, cx1 = np.unravel_index(trimmed_frame.argmax(), trimmed_frame.shape)
-    #         core, halo = bad_obs_check(trimmed_frame[cy1 - 30:cy1 + 30 + 1, cx1 - 30:cx1 + 30 + 1],
-    #                                    ps=plate_scale)
-    #         # f_handle = file('/Data2/becky/compile_data/core_and_halo.txt', 'a')
-    #         # np.savetxt(f_handle, np.array(['\n'+path_sou, core, halo]), newline=" ",fmt="%s")
-    #         # f_handle.close()
-    #     except:
-    #         core = 0.14
-    #         halo = 1.0
-    #
-    #     # run PCA
-    #     if core > 0.14 and halo < 1.0:
-    #         # run on lucky-pipelined image
-    #         output = pca(_trimmed_frame=trimmed_frame, _win=_config['pca']['win'], _sou_name=sou_name,
-    #                      _sou_dir=sou_dir, _out_path=_out_path,
-    #                      _library=psf_reference_library,
-    #                      _library_names_short=psf_reference_library_short_names,
-    #                      _fwhm=fwhm, _plsc=plsc, _sigma=sigma, _nrefs=nrefs, _klip=klip)
-    #     else:
-    #         # run on faint-pipelined image
-    #         pass
     except Exception as _e:
         print(_e)
         return False
@@ -128,7 +99,8 @@ def job_pca(_config, _date, _out_path, _x=None, _y=None, _drizzled=True):
 
 
 @huey.task()
-def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_factor):
+def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_factor,
+               _method='sextractor', _x=None, _y=None, _drizzled=True):
     """
         The task that calculates Strehl ratio
 
@@ -144,8 +116,8 @@ def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_fact
     # do the work
     try:
         img, x, y = trim_frame(_path_in, _fits_name=_fits_name,
-                               _win=100, _method='sextractor',
-                               _x=None, _y=None, _drizzled=True)
+                               _win=100, _method=_method,
+                               _x=_x, _y=_x, _drizzled=_drizzled)
         core, halo = bad_obs_check(img, ps=_plate_scale)
 
         boxsize = int(round(3. / _plate_scale))
@@ -364,7 +336,7 @@ def generate_pipe_preview(_path_out, _obs, preview_img, preview_img_cropped, SR=
 
 
 def generate_pca_images(_out_path, _sou_dir, _preview_img, _cc,
-                        _fow_x=36, _pix_x=1024, _drizzle=True):
+                        _fow_x=36, _pix_x=1024, _drizzled=True):
     """
             Generate preview images for the pca pipeline
 
@@ -374,7 +346,7 @@ def generate_pca_images(_out_path, _sou_dir, _preview_img, _cc,
         :param _cc:
         :param _fow_x: full FoW in arcseconds in the x direction
         :param _pix_x: original full frame size in pixels
-        :param _drizzle: drizzle on or off?
+        :param _drizzled: drizzle on or off?
 
         :return:
         """
@@ -392,8 +364,9 @@ def generate_pca_images(_out_path, _sou_dir, _preview_img, _cc,
         # draw a horizontal bar with length of 0.1*x_size
         # (ax.transData) with a label underneath.
         bar_len = _preview_img.shape[0] * 0.1
-        bar_len_str = '{:.1f}'.format(bar_len * _fow_x / _pix_x / 2) if _drizzle \
-            else '{:.1f}'.format(bar_len * _fow_x / _pix_x)
+        # account for possible drizzling
+        mltplr = 2 if _drizzled else 1
+        bar_len_str = '{:.1f}'.format(bar_len * _fow_x / _pix_x / mltplr)
         asb = AnchoredSizeBar(ax.transData,
                               bar_len,
                               bar_len_str[0] + r"$^{\prime\prime}\!\!\!.$" + bar_len_str[-1],
@@ -1104,8 +1077,8 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
                 # calculate Strehl:
                 check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
                 # TODO: run PCA (if Strehl is ready)
-                # check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
-                # TODO: make preview images
+                check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
+                # make preview images
                 check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
 
             except Exception as _e:
@@ -1155,7 +1128,8 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
                 # (re)calculate Strehl
                 check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
                 # TODO: (re)run PCA
-                # TODO: (re)make preview images
+                check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
+                # (re)make preview images
                 check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
             except Exception as _e:
                 print(_e)
@@ -1335,7 +1309,6 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
     return True
 
 
-# noinspection PyUnboundLocalVariable,PyUnboundLocalVariable
 def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automated'):
     """
         Check if Strehl has been calculated, and calculate if necessary
@@ -1451,6 +1424,135 @@ def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automate
     return True
 
 
+def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated'):
+    """
+        Check if pca has been run; run/update stuff if necessary
+    :param _config: config data
+    :param _logger: logger instance
+    :param _coll: collection in the database
+    :param _select: database entry
+    :param _date: date of obs
+    :param _obs: obs name
+    :param _pipe: which pipelined data to use? 'automated' or 'faint'?
+
+    :return:
+    """
+
+    # if 'done' is changed to False externally, the if clause is triggered,
+    # which in turn triggers a job placement into the queue to rerun pca.
+    # when invoked for the next time, the else clause will trigger,
+    # resulting in an update of the database entry (since the last_modified value
+    # will be different from the new folder modification date)
+
+    if not _select['pipelined'][_pipe]['strehl']['status']['done'] and \
+                   _select['pipelined'][_pipe]['strehl']['status']['retries'] < \
+                   _config['max_pipelining_retries']:
+        if _pipe == 'automated':
+            # check if actually processed through pipeline
+            path_obs_list = [os.path.join(_config['path_pipe'], _date, tag, _obs) for
+                             tag in ('high_flux', 'faint', 'zero_flux', 'failed') if
+                             os.path.exists(os.path.join(_config['path_pipe'], _date, tag, _obs))]
+        elif _pipe == 'faint':
+            # raise NotImplemented()
+            path_obs_list = []
+        else:
+            # raise NotImplemented()
+            path_obs_list = []
+
+        # processed?
+        if len(path_obs_list) == 1:
+            # this also considers the pathological case when an obs ended up in several classes
+            path_obs = path_obs_list[0]
+
+            # this follows the definition from structure.md
+            path_out = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'strehl')
+
+            try:
+                # set stuff up:
+                telescope = 'KittPeak' if datetime.datetime.strptime(_date, '%Y%m%d') > \
+                                          datetime.datetime(2015, 9, 1) else 'Palomar'
+                Strehl_factor = _config['telescope_data'][telescope]['Strehl_factor'][_select['filter']]
+
+                # lucky images are drizzled, use scale_red therefore
+                plate_scale = _config['telescope_data'][telescope]['scale_red']
+
+                # put a job into the queue
+                job_strehl(_path_in=path_obs, _fits_name='100p.fits',
+                           _obs=_obs, _path_out=path_out,
+                           _plate_scale=plate_scale, _Strehl_factor=Strehl_factor)
+                _logger.info('put a Strehl job into the queue for {:s}'.format(_obs))
+
+            except Exception as _e:
+                traceback.print_exc()
+                _logger.error(_e)
+                return False
+
+    # following structure.md:
+    path_strehl = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'strehl')
+
+    # path exists? (if yes - it must have been created by job_strehl)
+    if os.path.exists(path_strehl):
+        try:
+            # check folder modified date:
+            time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_strehl).st_mtime)
+            # changed? reload data from disk + update database entry + remake preview
+            if _select['pipelined']['automated']['last_modified'] != time_tag:
+                # reload data from disk
+                f_strehl = os.path.join(path_strehl, '{:s}_strehl.txt'.format(_obs))
+                x, y, core, halo, SR, FWHM, flag = load_strehl(f_strehl)
+                # print(x, y, core, halo, SR, FWHM, flag)
+                # update database entry
+                _coll.update_one(
+                    {'_id': _obs},
+                    {
+                        '$set': {
+                            'pipelined.{:s}.strehl.status.done'.format(_pipe): True,
+                            'pipelined.{:s}.strehl.lock_position'.format(_pipe): [x, y],
+                            'pipelined.{:s}.strehl.ratio_percent'.format(_pipe): SR,
+                            'pipelined.{:s}.strehl.core_arcsec'.format(_pipe): core,
+                            'pipelined.{:s}.strehl.halo_arcsec'.format(_pipe): halo,
+                            'pipelined.{:s}.strehl.fwhm_arcsec'.format(_pipe): FWHM,
+                            'pipelined.{:s}.strehl.flag'.format(_pipe): flag,
+                            'pipelined.{:s}.strehl.last_modified'.format(_pipe): time_tag
+                        },
+                        '$inc': {
+                            'pipelined.{:s}.strehl.status.retries'.format(_pipe): 1
+                        }
+                    }
+                )
+                _logger.info('Updated strehl entry for {:s}'.format(_obs))
+                # TODO: remake preview images
+                check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe=_pipe)
+                _logger.info('Remade preview images for {:s}'.format(_obs))
+        except Exception as _e:
+            traceback.print_exc()
+            _logger.error(_e)
+            return False
+    # path does not exist? make sure it's not marked 'done'
+    elif _select['pipelined'][_pipe]['strehl']['status']['done']:
+        # update database entry if incorrectly marked 'done'
+        # (could not find the respective directory)
+        _coll.update_one(
+            {'_id': _obs},
+            {
+                '$set': {
+                    'pipelined.{:s}.strehl.status.done'.format(_pipe): False,
+                    'pipelined.{:s}.strehl.lock_position'.format(_pipe): None,
+                    'pipelined.{:s}.strehl.ratio_percent'.format(_pipe): None,
+                    'pipelined.{:s}.strehl.core_arcsec'.format(_pipe): None,
+                    'pipelined.{:s}.strehl.halo_arcsec'.format(_pipe): None,
+                    'pipelined.{:s}.strehl.fwhm_arcsec'.format(_pipe): None,
+                    'pipelined.{:s}.strehl.flag'.format(_pipe): None,
+                    'pipelined.{:s}.strehl.last_modified'.format(_pipe): utc_now()
+                }
+            }
+        )
+        _logger.info('Corrected strehl entry for {:s}'.format(_obs))
+        # a job will be placed into the queue at the next invocation of check_strehl
+
+    return True
+
+
 def check_pipe_pca(_config, _logger, _coll, _select, _date, _obs):
     """
         Check if observation has been processed
@@ -1494,7 +1596,7 @@ def check_pipe_pca(_config, _logger, _coll, _select, _date, _obs):
 
                         _status = generate_pca_images(_out_path=_config['path_pca'],
                                                       _sou_dir=_obs, _preview_img=preview_img,
-                                                      _cc=cc, _fow_x=36, _pix_x=1024, _drizzle=True)
+                                                      _cc=cc, _fow_x=36, _pix_x=1024, _drizzled=True)
 
                         if _status:
                             _coll.update_one(
