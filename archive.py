@@ -39,7 +39,8 @@ from beckys import pca
 
 # import numba
 from huey import RedisHuey
-huey = RedisHuey('roboao.archive', result_store=True)
+from redis.exceptions import ConnectionError
+huey = RedisHuey(name='roboao.archive', host='127.0.0.1', port='6379', result_store=True)
 
 # set up plotting
 sns.set_style('whitegrid')
@@ -159,6 +160,11 @@ def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_fact
 @huey.task()
 # @numba.jit
 def job_bogus(_obs):
+    """
+        I've been using this to test the redis queue
+    :param _obs:
+    :return:
+    """
     tic = time.time()
     a = 0
     for i in range(100):
@@ -256,7 +262,8 @@ def scale_image(image, correction='local'):
         raise Exception('Contrast correction option not recognized')
 
 
-def generate_pipe_preview(_path_out, _obs, preview_img, preview_img_cropped, SR=None, objects=None):
+def generate_pipe_preview(_path_out, _obs, preview_img, preview_img_cropped,
+                          SR=None, _x=None, _y=None, objects=None):
     """
     :param _path_out:
     :param preview_img:
@@ -266,6 +273,7 @@ def generate_pipe_preview(_path_out, _obs, preview_img, preview_img_cropped, SR=
     :return:
     """
     try:
+        ''' full image '''
         plt.close('all')
         fig = plt.figure()
         fig.set_size_inches(4, 4, forward=False)
@@ -278,6 +286,12 @@ def generate_pipe_preview(_path_out, _obs, preview_img, preview_img_cropped, SR=
                     markeredgewidth=1, markerfacecolor='None', markeredgecolor=plt.cm.Oranges(0.8))
         # ax.imshow(preview_img, cmap='gray', origin='lower', interpolation='nearest')
         ax.imshow(preview_img, cmap='gray', origin='lower', interpolation='nearest')
+        # plot a box around the cropped object
+        if _x is not None and _y is not None:
+            _h = int(preview_img_cropped.shape[0])
+            _w = int(preview_img_cropped.shape[1])
+            ax.add_patch(Rectangle((_y-_w/2, _x-_h/2), _w, _h,
+                                   fill=False, edgecolor='f3f3f3', linestyle='dotted'))
         # ax.imshow(preview_img, cmap='gist_heat', origin='lower', interpolation='nearest')
         # plt.axis('off')
         plt.grid('off')
@@ -1035,8 +1049,7 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
 
     :return:
     """
-    # not marked as done in the database?
-    if not _select['pipelined']['automated']['status']['done']:
+    try:
         # check if actually processed
         path_obs_list = [[os.path.join(_config['path_pipe'], _date, tag, _obs), tag] for
                          tag in ('high_flux', 'faint', 'zero_flux', 'failed') if
@@ -1045,17 +1058,21 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
         if len(path_obs_list) == 1:
             # this also considers the pathological case when an obs ended up in several classes
             path_obs = path_obs_list[0][0]
+            # lucky pipeline classified it as:
             tag = path_obs_list[0][1]
 
-            # then update database entry and do Strehl and PCA
-            try:
-                # check folder modified date:
-                time_tag = datetime.datetime.utcfromtimestamp(
-                    os.stat(path_obs).st_mtime)
+            # check folder modified date:
+            time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_obs).st_mtime)
 
+            # make sure db reflects reality: not yet in db or had been modified
+            if not _select['pipelined']['automated']['status']['done'] or \
+                            _select['pipelined']['automated']['last_modified'] != time_tag:
+
+                # get fits header:
                 fits100p = os.path.join(path_obs, '100p.fits')
                 header = get_fits_header(fits100p) if tag != 'failed' else {}
 
+                # update db entry. reset status flags to (re)run Strehl/PCA/preview
                 _coll.update_one(
                     {'_id': _obs},
                     {
@@ -1063,99 +1080,66 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
                             'pipelined.automated.status.done': True,
                             'pipelined.automated.classified_as': tag,
                             'pipelined.automated.last_modified': time_tag,
-                            'pipelined.automated.fits_header': header
-                        },
-                        '$push': {
+                            'pipelined.automated.fits_header': header,
                             'pipelined.automated.location': ['{:s}:{:s}'.format(
-                                                _config['analysis_machine_external_host'],
-                                                _config['analysis_machine_external_port']),
-                                                _config['path_pipe']],
+                                _config['analysis_machine_external_host'],
+                                _config['analysis_machine_external_port']),
+                                _config['path_pipe']],
+                            'pipelined.automated.preview.done': False,
+                            'pipelined.automated.strehl.status.done': False,
+                            'pipelined.automated.pca.status.done': False
                         }
                     }
                 )
                 _logger.debug('Updated automated pipeline entry for {:s}'.format(_obs))
-                # calculate Strehl:
-                check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
-                # TODO: run PCA (if Strehl is ready)
-                check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
-                # make preview images
-                check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
 
-            except Exception as _e:
-                print(_e)
-                _logger.error(_e)
-                return False
-        elif len(path_obs_list) == 0:
-            _logger.debug('{:s} not yet processed'.format(_obs))
-        elif len(path_obs_list) > 1:
-            _logger.debug('{:s} ended up in several lucky classes, check on it.'.format(_obs))
+                # reload entry from db:
+                _select = _coll.find_one({'_id': _obs})
 
-    # marked as done? check Strehl and PCA + check modified time tag for updates
-    else:
-        # check if actually processed
-        path_obs_list = [[os.path.join(_config['path_pipe'], _date, tag, _obs), tag] for
-                         tag in ('high_flux', 'faint', 'zero_flux', 'failed') if
-                         os.path.exists(os.path.join(_config['path_pipe'], _date, tag, _obs))]
-        # yes?
-        if len(path_obs_list) == 1:
-            # this also considers the pathological case when an obs ended up in several classes
-            path_obs = path_obs_list[0][0]
-            tag = path_obs_list[0][1]
-            try:
-                # check folder modified date:
-                time_tag = datetime.datetime.utcfromtimestamp(
-                    os.stat(path_obs).st_mtime)
-                # changed? update database entry + make sure to rerun Strehl and PCA
-                if _select['pipelined']['automated']['last_modified'] != time_tag:
-                    fits100p = os.path.join(path_obs, '100p.fits')
-                    header = get_fits_header(fits100p) if tag != 'failed' else {}
+            # check on Strehl:
+            check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
+            # TODO: check on PCA (if Strehl is ready)
+            # Strehl done and ok? then proceed:
+            if _select['pipelined']['automated']['strehl']['status']['done'] and \
+                            _select['pipelined']['automated']['strehl']['core_arcsec'] > 0.14 and \
+                            _select['pipelined']['automated']['strehl']['halo_arcsec'] < 1.0:
+                # check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
+                pass
+            # make preview images
+            check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
+            # once(/if) Strehl is ready, it'll rerun preview generation to SR on the image
 
-                    _coll.update_one(
-                        {'_id': _obs},
-                        {
-                            '$set': {
-                                'pipelined.automated.classified_as': tag,
-                                'pipelined.automated.last_modified': time_tag,
-                                'pipelined.automated.fits_header': header,
-                                'pipelined.automated.status.preview': False,
-                                'pipelined.automated.strehl.status.done': False,
-                                'pipelined.automated.pca.status.done': False
-                            }
-                        }
-                    )
-                    _logger.debug('Updated automated pipeline entry for {:s}'.format(_obs))
-                # check the following in any case:
-                # (re)calculate Strehl
-                check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
-                # TODO: (re)run PCA
-                check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
-                # (re)make preview images
-                check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
-            except Exception as _e:
-                print(_e)
-                _logger.error(_e)
-                return False
+        # not processed?
         elif len(path_obs_list) == 0:
             _logger.debug(
                 '{:s} not yet processed (at least I could not find it), marking undone'.format(_obs))
-            _coll.update_one(
-                {'_id': _obs},
-                {
-                    '$set': {
-                        'pipelined.automated.status.done': False
+            # make sure it's not marked 'done'
+            if _select['pipelined']['automated']['status']['done']:
+                _coll.update_one(
+                    {'_id': _obs},
+                    {
+                        '$set': {
+                            'pipelined.automated.status.done': False
+                        }
                     }
-                }
-            )
+                )
         elif len(path_obs_list) > 1:
             _logger.debug('{:s} ended up in several lucky classes, check on it.'.format(_obs))
-            _coll.update_one(
-                {'_id': _obs},
-                {
-                    '$set': {
-                        'pipelined.automated.status.done': False
+            # make sure it's not marked 'done'
+            if _select['pipelined']['automated']['status']['done']:
+                _coll.update_one(
+                    {'_id': _obs},
+                    {
+                        '$set': {
+                            'pipelined.automated.status.done': False
+                        }
                     }
-                }
-            )
+                )
+
+    except Exception as _e:
+        print(_e)
+        _logger.error(_e)
+        return False
 
     return True
 
@@ -1193,67 +1177,17 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
 
     :return:
     """
+    try:
+        # following structure.md:
+        path_strehl = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'strehl')
 
-    # if 'done' is changed to False externally, the if clause is triggered,
-    # which in turn triggers a job placement into the queue to recalculate Strehl.
-    # when invoked for the next time, the else clause will trigger,
-    # resulting in an update of the database entry (since the last_modified value
-    # will be different from the new folder modification date)
-
-    if not _select['pipelined'][_pipe]['strehl']['status']['done'] and \
-                   _select['pipelined'][_pipe]['strehl']['status']['retries'] < \
-                   _config['max_pipelining_retries']:
-        if _pipe == 'automated':
-            # check if actually processed through pipeline
-            path_obs_list = [os.path.join(_config['path_pipe'], _date, tag, _obs) for
-                             tag in ('high_flux', 'faint', 'zero_flux', 'failed') if
-                             os.path.exists(os.path.join(_config['path_pipe'], _date, tag, _obs))]
-        elif _pipe == 'faint':
-            # raise NotImplemented()
-            path_obs_list = []
-        else:
-            # raise NotImplemented()
-            path_obs_list = []
-
-        # processed?
-        if len(path_obs_list) == 1:
-            # this also considers the pathological case when an obs ended up in several classes
-            path_obs = path_obs_list[0]
-
-            # this follows the definition from structure.md
-            path_out = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'strehl')
-
-            try:
-                # set stuff up:
-                telescope = 'KittPeak' if datetime.datetime.strptime(_date, '%Y%m%d') > \
-                                          datetime.datetime(2015, 9, 1) else 'Palomar'
-                Strehl_factor = _config['telescope_data'][telescope]['Strehl_factor'][_select['filter']]
-
-                # lucky images are drizzled, use scale_red therefore
-                plate_scale = _config['telescope_data'][telescope]['scale_red']
-
-                # put a job into the queue
-                job_strehl(_path_in=path_obs, _fits_name='100p.fits',
-                           _obs=_obs, _path_out=path_out,
-                           _plate_scale=plate_scale, _Strehl_factor=Strehl_factor)
-                _logger.info('put a Strehl job into the queue for {:s}'.format(_obs))
-
-            except Exception as _e:
-                traceback.print_exc()
-                _logger.error(_e)
-                return False
-
-    # following structure.md:
-    path_strehl = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'strehl')
-
-    # path exists? (if yes - it must have been created by job_strehl)
-    if os.path.exists(path_strehl):
-        try:
+        # path exists? (if yes - it must have been created by job_strehl)
+        if os.path.exists(path_strehl):
             # check folder modified date:
             time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_strehl).st_mtime)
-            # changed? reload data from disk + update database entry + remake preview
-            if _select['pipelined']['automated']['last_modified'] != time_tag:
-                # reload data from disk
+            # new/changed? (re)load data from disk + update database entry + (re)make preview
+            if _select['pipelined'][_pipe]['strehl']['last_modified'] != time_tag:
+                # load data from disk
                 f_strehl = os.path.join(path_strehl, '{:s}_strehl.txt'.format(_obs))
                 x, y, core, halo, SR, FWHM, flag = load_strehl(f_strehl)
                 # print(x, y, core, halo, SR, FWHM, flag)
@@ -1270,48 +1204,103 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
                             'pipelined.{:s}.strehl.fwhm_arcsec'.format(_pipe): FWHM,
                             'pipelined.{:s}.strehl.flag'.format(_pipe): flag,
                             'pipelined.{:s}.strehl.last_modified'.format(_pipe): time_tag
-                        },
+                        }
+                    }
+                )
+                # reload entry from db:
+                _select = _coll.find_one({'_id': _obs})
+                _logger.info('Updated strehl entry for {:s}'.format(_obs))
+                # remake preview images
+                check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe=_pipe)
+                _logger.info('Remade preview images for {:s}'.format(_obs))
+
+        # path does not exist? make sure it's not marked 'done'
+        elif _select['pipelined'][_pipe]['strehl']['status']['done']:
+            # update database entry if incorrectly marked 'done'
+            # (could not find the respective directory)
+            _coll.update_one(
+                {'_id': _obs},
+                {
+                    '$set': {
+                        'pipelined.{:s}.strehl.status.done'.format(_pipe): False,
+                        'pipelined.{:s}.strehl.lock_position'.format(_pipe): None,
+                        'pipelined.{:s}.strehl.ratio_percent'.format(_pipe): None,
+                        'pipelined.{:s}.strehl.core_arcsec'.format(_pipe): None,
+                        'pipelined.{:s}.strehl.halo_arcsec'.format(_pipe): None,
+                        'pipelined.{:s}.strehl.fwhm_arcsec'.format(_pipe): None,
+                        'pipelined.{:s}.strehl.flag'.format(_pipe): None,
+                        'pipelined.{:s}.strehl.last_modified'.format(_pipe): utc_now()
+                    }
+                }
+            )
+            # reload entry from db:
+            _select = _coll.find_one({'_id': _obs})
+            _logger.info('Corrected strehl entry for {:s}'.format(_obs))
+            # a job will be placed into the queue at the next invocation of check_strehl
+
+        # if 'done' is changed to False (ex- or internally), the if clause is triggered,
+        # which in turn triggers a job placement into the queue to recalculate Strehl.
+        # when invoked for the next time, the previous portion of the code will make sure
+        # to update the database entry (since the last_modified value
+        # will be different from the new folder modification date)
+
+        if not _select['pipelined'][_pipe]['strehl']['status']['done'] and \
+                       _select['pipelined'][_pipe]['strehl']['status']['retries'] < \
+                       _config['max_pipelining_retries']:
+            if _pipe == 'automated':
+                # check if actually processed through pipeline
+                path_obs_list = [os.path.join(_config['path_pipe'], _date, tag, _obs) for
+                                 tag in ('high_flux', 'faint', 'zero_flux', 'failed') if
+                                 os.path.exists(os.path.join(_config['path_pipe'], _date, tag, _obs))]
+            elif _pipe == 'faint':
+                raise NotImplementedError
+                # path_obs_list = []
+            else:
+                raise NotImplementedError
+                # path_obs_list = []
+
+            # pipelined?
+            if len(path_obs_list) == 1:
+                # this also considers the pathological case when an obs ended up in several classes
+                path_obs = path_obs_list[0]
+
+                # this follows the definition from structure.md
+                path_out = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'strehl')
+
+                # set stuff up:
+                telescope = 'KittPeak' if datetime.datetime.strptime(_date, '%Y%m%d') > \
+                                          datetime.datetime(2015, 9, 1) else 'Palomar'
+                Strehl_factor = _config['telescope_data'][telescope]['Strehl_factor'][_select['filter']]
+
+                # lucky images are drizzled, use scale_red therefore
+                plate_scale = _config['telescope_data'][telescope]['scale_red']
+
+                # put a job into the queue
+                job_strehl(_path_in=path_obs, _fits_name='100p.fits',
+                           _obs=_obs, _path_out=path_out,
+                           _plate_scale=plate_scale, _Strehl_factor=Strehl_factor)
+                # update database entry
+                _coll.update_one(
+                    {'_id': _obs},
+                    {
                         '$inc': {
                             'pipelined.{:s}.strehl.status.retries'.format(_pipe): 1
                         }
                     }
                 )
-                _logger.info('Updated strehl entry for {:s}'.format(_obs))
-                # TODO: remake preview images
-                check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe=_pipe)
-                _logger.info('Remade preview images for {:s}'.format(_obs))
-        except Exception as _e:
-            traceback.print_exc()
-            _logger.error(_e)
-            return False
-    # path does not exist? make sure it's not marked 'done'
-    elif _select['pipelined'][_pipe]['strehl']['status']['done']:
-        # update database entry if incorrectly marked 'done'
-        # (could not find the respective directory)
-        _coll.update_one(
-            {'_id': _obs},
-            {
-                '$set': {
-                    'pipelined.{:s}.strehl.status.done'.format(_pipe): False,
-                    'pipelined.{:s}.strehl.lock_position'.format(_pipe): None,
-                    'pipelined.{:s}.strehl.ratio_percent'.format(_pipe): None,
-                    'pipelined.{:s}.strehl.core_arcsec'.format(_pipe): None,
-                    'pipelined.{:s}.strehl.halo_arcsec'.format(_pipe): None,
-                    'pipelined.{:s}.strehl.fwhm_arcsec'.format(_pipe): None,
-                    'pipelined.{:s}.strehl.flag'.format(_pipe): None,
-                    'pipelined.{:s}.strehl.last_modified'.format(_pipe): utc_now()
-                }
-            }
-        )
-        _logger.info('Corrected strehl entry for {:s}'.format(_obs))
-        # a job will be placed into the queue at the next invocation of check_strehl
+                _logger.info('put a Strehl job into the queue for {:s}'.format(_obs))
+
+    except Exception as _e:
+        traceback.print_exc()
+        _logger.error(_e)
+        return False
 
     return True
 
 
 def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automated'):
     """
-        Check if Strehl has been calculated, and calculate if necessary
+        Make pipeline preview images
     :param _config: config data
     :param _logger: logger instance
     :param _coll: collection in the database
@@ -1356,7 +1345,6 @@ def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automate
                 # this follows the definition from structure.md
                 path_out = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'preview')
 
-                # noinspection PyUnboundLocalVariable
                 try:
                     # load first image frame from the fits file
                     preview_img = load_fits(f_fits)
@@ -1364,17 +1352,19 @@ def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automate
                     if _select['science_program']['program_id'] != _config['planets_prog_num']:
                         preview_img = scale_image(preview_img, correction='local')
                         # cropped image [_win=None to try to detect]
-                        preview_img_cropped, _, _ = trim_frame(_path=path_obs,
-                                                               _fits_name=os.path.split(f_fits)[1],
-                                                               _win=None, _method='sextractor',
-                                                               _x=None, _y=None, _drizzled=True)
+                        preview_img_cropped, _x, _y = trim_frame(_path=path_obs,
+                                                                 _fits_name=os.path.split(f_fits)[1],
+                                                                 _win=None, _method='sextractor',
+                                                                 _x=None, _y=None, _drizzled=True)
                     else:
                         # don't crop planets
                         preview_img_cropped = preview_img
+                        _x, _y = None, None
                     # Strehl ratio (if available, otherwise will be None)
                     SR = _select['pipelined'][_pipe]['strehl']['ratio_percent']
 
-                    _status = generate_pipe_preview(path_out, _obs, preview_img, preview_img_cropped, SR)
+                    _status = generate_pipe_preview(path_out, _obs, preview_img, preview_img_cropped,
+                                                    SR, _x=_x, _y=_y)
 
                     _coll.update_one(
                         {'_id': _obs},
@@ -1418,139 +1408,14 @@ def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automate
             _logger.info('Corrected {:s} pipeline preview entry for {:s}'.format(_pipe, _obs))
 
     except Exception as _e:
+        traceback.print_exc()
         _logger.error(_e)
         return False
 
     return True
 
 
-def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated'):
-    """
-        Check if pca has been run; run/update stuff if necessary
-    :param _config: config data
-    :param _logger: logger instance
-    :param _coll: collection in the database
-    :param _select: database entry
-    :param _date: date of obs
-    :param _obs: obs name
-    :param _pipe: which pipelined data to use? 'automated' or 'faint'?
 
-    :return:
-    """
-
-    # if 'done' is changed to False externally, the if clause is triggered,
-    # which in turn triggers a job placement into the queue to rerun pca.
-    # when invoked for the next time, the else clause will trigger,
-    # resulting in an update of the database entry (since the last_modified value
-    # will be different from the new folder modification date)
-
-    if not _select['pipelined'][_pipe]['strehl']['status']['done'] and \
-                   _select['pipelined'][_pipe]['strehl']['status']['retries'] < \
-                   _config['max_pipelining_retries']:
-        if _pipe == 'automated':
-            # check if actually processed through pipeline
-            path_obs_list = [os.path.join(_config['path_pipe'], _date, tag, _obs) for
-                             tag in ('high_flux', 'faint', 'zero_flux', 'failed') if
-                             os.path.exists(os.path.join(_config['path_pipe'], _date, tag, _obs))]
-        elif _pipe == 'faint':
-            # raise NotImplemented()
-            path_obs_list = []
-        else:
-            # raise NotImplemented()
-            path_obs_list = []
-
-        # processed?
-        if len(path_obs_list) == 1:
-            # this also considers the pathological case when an obs ended up in several classes
-            path_obs = path_obs_list[0]
-
-            # this follows the definition from structure.md
-            path_out = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'strehl')
-
-            try:
-                # set stuff up:
-                telescope = 'KittPeak' if datetime.datetime.strptime(_date, '%Y%m%d') > \
-                                          datetime.datetime(2015, 9, 1) else 'Palomar'
-                Strehl_factor = _config['telescope_data'][telescope]['Strehl_factor'][_select['filter']]
-
-                # lucky images are drizzled, use scale_red therefore
-                plate_scale = _config['telescope_data'][telescope]['scale_red']
-
-                # put a job into the queue
-                job_strehl(_path_in=path_obs, _fits_name='100p.fits',
-                           _obs=_obs, _path_out=path_out,
-                           _plate_scale=plate_scale, _Strehl_factor=Strehl_factor)
-                _logger.info('put a Strehl job into the queue for {:s}'.format(_obs))
-
-            except Exception as _e:
-                traceback.print_exc()
-                _logger.error(_e)
-                return False
-
-    # following structure.md:
-    path_strehl = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'strehl')
-
-    # path exists? (if yes - it must have been created by job_strehl)
-    if os.path.exists(path_strehl):
-        try:
-            # check folder modified date:
-            time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_strehl).st_mtime)
-            # changed? reload data from disk + update database entry + remake preview
-            if _select['pipelined']['automated']['last_modified'] != time_tag:
-                # reload data from disk
-                f_strehl = os.path.join(path_strehl, '{:s}_strehl.txt'.format(_obs))
-                x, y, core, halo, SR, FWHM, flag = load_strehl(f_strehl)
-                # print(x, y, core, halo, SR, FWHM, flag)
-                # update database entry
-                _coll.update_one(
-                    {'_id': _obs},
-                    {
-                        '$set': {
-                            'pipelined.{:s}.strehl.status.done'.format(_pipe): True,
-                            'pipelined.{:s}.strehl.lock_position'.format(_pipe): [x, y],
-                            'pipelined.{:s}.strehl.ratio_percent'.format(_pipe): SR,
-                            'pipelined.{:s}.strehl.core_arcsec'.format(_pipe): core,
-                            'pipelined.{:s}.strehl.halo_arcsec'.format(_pipe): halo,
-                            'pipelined.{:s}.strehl.fwhm_arcsec'.format(_pipe): FWHM,
-                            'pipelined.{:s}.strehl.flag'.format(_pipe): flag,
-                            'pipelined.{:s}.strehl.last_modified'.format(_pipe): time_tag
-                        },
-                        '$inc': {
-                            'pipelined.{:s}.strehl.status.retries'.format(_pipe): 1
-                        }
-                    }
-                )
-                _logger.info('Updated strehl entry for {:s}'.format(_obs))
-                # TODO: remake preview images
-                check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe=_pipe)
-                _logger.info('Remade preview images for {:s}'.format(_obs))
-        except Exception as _e:
-            traceback.print_exc()
-            _logger.error(_e)
-            return False
-    # path does not exist? make sure it's not marked 'done'
-    elif _select['pipelined'][_pipe]['strehl']['status']['done']:
-        # update database entry if incorrectly marked 'done'
-        # (could not find the respective directory)
-        _coll.update_one(
-            {'_id': _obs},
-            {
-                '$set': {
-                    'pipelined.{:s}.strehl.status.done'.format(_pipe): False,
-                    'pipelined.{:s}.strehl.lock_position'.format(_pipe): None,
-                    'pipelined.{:s}.strehl.ratio_percent'.format(_pipe): None,
-                    'pipelined.{:s}.strehl.core_arcsec'.format(_pipe): None,
-                    'pipelined.{:s}.strehl.halo_arcsec'.format(_pipe): None,
-                    'pipelined.{:s}.strehl.fwhm_arcsec'.format(_pipe): None,
-                    'pipelined.{:s}.strehl.flag'.format(_pipe): None,
-                    'pipelined.{:s}.strehl.last_modified'.format(_pipe): utc_now()
-                }
-            }
-        )
-        _logger.info('Corrected strehl entry for {:s}'.format(_obs))
-        # a job will be placed into the queue at the next invocation of check_strehl
-
-    return True
 
 
 def check_pipe_pca(_config, _logger, _coll, _select, _date, _obs):
@@ -1654,6 +1519,77 @@ def check_pipe_pca(_config, _logger, _coll, _select, _date, _obs):
     return True
 
 
+def parse_obs_name(_obs, _program_pi):
+    """
+        Parse Robo-AO observation name
+    :param _obs:
+    :param _program_pi: dict program_num -> PI
+    :return:
+    """
+    # parse name:
+    _tmp = _obs.split('_')
+    # program num. it will be a string in the future
+    _prog_num = str(_tmp[0])
+    # who's pi?
+    if _prog_num in _program_pi.keys():
+        _prog_pi = _program_pi[_prog_num]
+    else:
+        # play safe if pi's unknown:
+        _prog_pi = 'admin'
+    # stack name together if necessary (if contains underscores):
+    _sou_name = '_'.join(_tmp[1:-5])
+    # code of the filter used:
+    _filt = _tmp[-4:-3][0]
+    # date and time of obs:
+    _date_utc = datetime.datetime.strptime(_tmp[-2] + _tmp[-1], '%Y%m%d%H%M%S.%f')
+    # camera:
+    _camera = _tmp[-5:-4][0]
+    # marker:
+    _marker = _tmp[-3:-2][0]
+
+    return _prog_num, _prog_pi, _sou_name, _filt, _date_utc, _camera, _marker
+
+
+def init_db_entry(_obs, _sou_name, _prog_num, _prog_pi, _date_utc, _camera, _filt, _date_files):
+    """
+        Initialize a database entry
+    :param _obs:
+    :param _sou_name:
+    :param _prog_num:
+    :param _prog_pi:
+    :param _date_utc:
+    :param _camera:
+    :param _filt:
+    :param _date_files:
+    :return:
+    """
+
+    _entry = empty_db_record()
+    # populate:
+    _entry['_id'] = _obs
+    _entry['name'] = _sou_name
+    _entry['science_program']['program_id'] = _prog_num
+    _entry['science_program']['program_PI'] = _prog_pi
+    _entry['date_utc'] = _date_utc
+    if _date_utc > datetime.datetime(2015, 10, 1):
+        _entry['telescope'] = 'KPNO_2.1m'
+    else:
+        _entry['telescope'] = 'Palomar_P60'
+    _entry['camera'] = _camera
+    _entry['filter'] = _filt  # also get this from FITS header
+
+    # find raw fits files:
+    _raws = [_s for _s in _date_files if re.match(_obs, _s) is not None]
+    _entry['raw_data']['location'].append(['{:s}:{:s}'.format(
+        config['analysis_machine_external_host'],
+        config['analysis_machine_external_port']),
+        config['path_raw']])
+    _entry['raw_data']['data'] = _raws
+    _entry['raw_data']['last_modified'] = datetime.datetime.now(pytz.utc)
+
+    return _entry
+
+
 if __name__ == '__main__':
     """
         - create argument parser, parse command line arguments
@@ -1687,6 +1623,15 @@ if __name__ == '__main__':
         except Exception as e:
             logger.error(e)
             logger.error('Failed to read in the config file {:s}'.format(args.config_file))
+            sys.exit()
+
+        ''' check connection to redis server that processes pipeline tasks '''
+        try:
+            pubsub = huey.storage.listener()
+            logger.debug('Successfully connected to the redis server at 127.0.0.1:6379')
+        except ConnectionError as e:
+            logger.error(e)
+            logger.error('Redis server not responding')
             sys.exit()
 
         ''' Connect to the mongodb database '''
@@ -1728,37 +1673,20 @@ if __name__ == '__main__':
                         re.match('dark_', s) is None and
                         re.match('flat_', s) is None and
                         re.match('seeing_', s) is None]
-            print(date_obs)
+            # print(date_obs)
             # TODO: handle seeing files separately [lower priority]
             date_seeing = [re.split(pattern_end, s)[0] for s in date_files
                            if re.search(pattern_end, s) is not None and
                            re.match('seeing_', s) is not None]
-            print(date_seeing)
+            # print(date_seeing)
             # for each source name see if there's an entry in the database
             for obs in date_obs:
                 print('processing {:s}'.format(obs))
                 logger.debug('processing {:s}'.format(obs))
-                # parse name:
-                tmp = obs.split('_')
-                # print(tmp)
-                # program num
-                prog_num = str(tmp[0])
-                # who's pi?
-                if prog_num in program_pi.keys():
-                    prog_pi = program_pi[prog_num]
-                else:
-                    # play safe if pi's unknown:
-                    prog_pi = 'admin'
-                # stack name together if necessary (if contains underscores):
-                sou_name = '_'.join(tmp[1:-5])
-                # code of the filter used:
-                filt = tmp[-4:-3][0]
-                # date and time of obs:
-                date_utc = datetime.datetime.strptime(tmp[-2] + tmp[-1], '%Y%m%d%H%M%S.%f')
-                # camera:
-                camera = tmp[-5:-4][0]
-                # marker:
-                marker = tmp[-3:-2][0]
+
+                # parse observation name
+                prog_num, prog_pi, sou_name, \
+                    filt, date_utc, camera, marker = parse_obs_name(obs, program_pi)
 
                 # look up entry in the database:
                 select = coll.find_one({'_id': obs})
@@ -1766,67 +1694,54 @@ if __name__ == '__main__':
                 if select is None:
                     print('{:s} not in database, adding...'.format(obs))
                     logger.info('{:s} not in database, adding'.format(obs))
-                    entry = empty_db_record()
-                    # populate:
-                    entry['_id'] = obs
-                    entry['name'] = sou_name
-                    entry['science_program']['program_id'] = prog_num
-                    entry['science_program']['program_PI'] = prog_pi
-                    entry['date_utc'] = date_utc
-                    if date_utc > datetime.datetime(2015, 10, 1):
-                        entry['telescope'] = 'KPNO_2.1m'
-                    else:
-                        entry['telescope'] = 'Palomar_P60'
-                    entry['camera'] = camera
-                    entry['filter'] = filt  # also get this from FITS header
 
-                    # find raw fits files:
-                    raws = [s for s in date_files if re.match(obs, s) is not None]
-                    entry['raw_data']['location'].append(['{:s}:{:s}'.format(
-                                                    config['analysis_machine_external_host'],
-                                                    config['analysis_machine_external_port']),
-                                                    config['path_raw']])
-                    entry['raw_data']['data'] = raws
-                    entry['raw_data']['last_modified'] = datetime.datetime.now(pytz.utc)
-
-                    # insert into database
+                    # initialize db entry and populate it
+                    entry = init_db_entry(_obs=obs, _sou_name=sou_name,
+                                          _prog_num=prog_num, _prog_pi=prog_pi,
+                                          _date_utc=date_utc, _camera=camera,
+                                          _filt=filt, _date_files=date_files)
+                    # insert it into database
                     result = coll.insert_one(entry)
+                    # and select it:
+                    select = coll.find_one({'_id': obs})
 
                 # entry found in database, check if pipelined, update entry if necessary
                 else:
                     print('{:s} in database, checking...'.format(obs))
-                    ''' check lucky-pipelined data '''
-                    # Strehl and PCA are checked from within check_pipe_automated
-                    status_ok = check_pipe_automated(_config=config, _logger=logger, _coll=coll,
-                                                     _select=select, _date=date, _obs=obs)
+
+                # proceed immediately
+                ''' check lucky-pipelined data '''
+                # Strehl and PCA are checked from within check_pipe_automated
+                status_ok = check_pipe_automated(_config=config, _logger=logger, _coll=coll,
+                                                 _select=select, _date=date, _obs=obs)
+                if not status_ok:
+                    logger.error('Checking failed for lucky pipeline: {:s}'.format(obs))
+
+                # TODO: if it is not a planetary, observation, do the following:
+                if True is False:
+                    ''' check faint-pipelined data '''
+                    # TODO: if core and halo tell you it's faint, run faint pipeline:
+                    status_ok = check_pipe_faint(_config=config, _logger=logger, _coll=coll,
+                                                 _select=select, _date=date, _obs=obs)
                     if not status_ok:
-                        logger.error('Checking failed for lucky pipeline: {:s}'.format(obs))
+                        logger.error('Checking failed for faint pipeline: {:s}'.format(obs))
 
-                    # TODO: if it is not a planetary, observation, do the following:
-                    if True is False:
-                        ''' check faint-pipelined data '''
-                        # TODO: if core and halo tell you it's faint, run faint pipeline:
-                        status_ok = check_pipe_faint(_config=config, _logger=logger, _coll=coll,
-                                                     _select=select, _date=date, _obs=obs)
-                        if not status_ok:
-                            logger.error('Checking failed for faint pipeline: {:s}'.format(obs))
+                    ''' check PCA-pipelined data '''
+                    # TODO: also depending on Strehl data, run PCA pipeline either on
+                    # TODO: the lucky or the faint image
+                    # TODO: if a faint image is not ready (yet), will skip and do it next time
+                    status_ok = check_pipe_pca(_config=config, _logger=logger, _coll=coll,
+                                               _select=select, _date=date, _obs=obs)
+                    if not status_ok:
+                        logger.error('Checking failed for PCA pipeline: {:s}'.format(obs))
 
-                        ''' check PCA-pipelined data '''
-                        # TODO: also depending on Strehl data, run PCA pipeline either on
-                        # TODO: the lucky or the faint image
-                        # TODO: if a faint image is not ready (yet), will skip and do it next time
-                        status_ok = check_pipe_pca(_config=config, _logger=logger, _coll=coll,
-                                                   _select=select, _date=date, _obs=obs)
-                        if not status_ok:
-                            logger.error('Checking failed for PCA pipeline: {:s}'.format(obs))
+                # TODO: if it is a planetary observation, run the planetary pipeline
 
-                    # TODO: if it is a planetary observation, run the planetary pipeline
-
-                    ''' check seeing data '''
-                    # TODO: [lower priority]
-                    # for each date check if lists of processed and raw seeing files match
-                    # rerun seeing.py for each date if necessary
-                    # update last_modified if necessary
+                ''' check seeing data '''
+                # TODO: [lower priority]
+                # for each date check if lists of processed and raw seeing files match
+                # rerun seeing.py for each date if necessary
+                # update last_modified if necessary
 
                 # TODO: mark distributed when all pipelines done or n_retries>3,
                 # TODO: compress everything with bzip2, store and transfer over to Caltech
