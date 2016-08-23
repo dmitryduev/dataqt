@@ -28,14 +28,16 @@ import ast
 from scipy.optimize import fmin
 from astropy.modeling import models, fitting
 import sewpy
+import vip
+import photutils
+from scipy import stats
+import operator
 
 from skimage import exposure, img_as_float
 from matplotlib.patches import Rectangle
 from matplotlib.offsetbox import AnchoredOffsetbox, AuxTransformBox, VPacker, TextArea
 import matplotlib.pyplot as plt
 import seaborn as sns
-
-from beckys import pca
 
 # import numba
 from huey import RedisHuey
@@ -89,11 +91,112 @@ class AnchoredSizeBar(AnchoredOffsetbox):
 
 @huey.task()
 # @numba.jit
-def job_pca(_config, _date, _out_path, _x=None, _y=None, _drizzled=True):
+def job_pca(_config, _path_in, _fits_name, _obs, _path_out,
+            _plate_scale, _method='sextractor', _x=None, _y=None, _drizzled=True):
     try:
-        pass
+        with fits.open(_config['pca']['path_psf_reference_library']) as _lib:
+            _library = _lib[0].data
+        _library_names_short = np.genfromtxt(_config['pca']['path_psf_reference_library_short_names'],
+                                             dtype='|S')
+
+        _win = _config['pca']['win']
+        _sigma = _config['pca']['sigma']
+        _nrefs = _config['pca']['nrefs']
+        _klip = _config['pca']['klip']
+
+        _trimmed_frame, x_lock, y_lock = trim_frame(_path_in, _fits_name=_fits_name,
+                                                    _win=_win, _method=_method,
+                                                    _x=_x, _y=_x, _drizzled=_drizzled)
+        # print(x_lock, y_lock)
+
+        # Filter the trimmed frame with IUWT filter, 2 coeffs
+        filtered_frame = (vip.var.cube_filter_iuwt(
+            np.reshape(_trimmed_frame, (1, np.shape(_trimmed_frame)[0],
+                                        np.shape(_trimmed_frame)[1])),
+            coeff=5, rel_coeff=2))
+
+        mean_y, mean_x, fwhm_y, fwhm_x, amplitude, theta = \
+            (vip.var.fit_2dgaussian(filtered_frame[0], crop=True, cropsize=50,
+                                    debug=False, full_output=True))
+        _fwhm = np.mean([fwhm_y, fwhm_x])
+
+        # Print the resolution element size
+        # print('Using resolution element size = ', _fwhm)
+        if _fwhm < 2:
+            _fwhm = 2.0
+            # print('Too small, changing to ', _fwhm)
+
+        # Center the filtered frame
+        centered_cube, shy, shx = \
+            (vip.calib.cube_recenter_gauss2d_fit(array=filtered_frame, pos_y=_win,
+                                                 pos_x=_win, fwhm=_fwhm,
+                                                 subi_size=6, nproc=1, full_output=True))
+
+        centered_frame = centered_cube[0]
+        if shy > 5 or shx > 5:
+            raise TypeError('Centering failed: pixel shifts too big')
+
+        # Do aperture photometry on the central star
+        center_aperture = photutils.CircularAperture(
+            (int(len(centered_frame) / 2), int(len(centered_frame) / 2)), _fwhm / 2.0)
+        center_flux = photutils.aperture_photometry(centered_frame, center_aperture)['aperture_sum'][0]
+
+        # Make PSF template for calculating PCA throughput
+        psf_template = (
+            centered_frame[len(centered_frame) / 2 - 3 * _fwhm:len(centered_frame) / 2 + 3 * _fwhm,
+            len(centered_frame) / 2 - 3 * _fwhm:len(centered_frame) / 2 + 3 * _fwhm])
+
+        # Choose reference frames via cross correlation
+        library_notmystar = _library[~np.in1d(_library_names_short, _obs)]
+        cross_corr = np.zeros(len(library_notmystar))
+        flattened_frame = np.ndarray.flatten(centered_frame)
+
+        for c in range(len(library_notmystar)):
+            cross_corr[c] = stats.pearsonr(flattened_frame,
+                                           np.ndarray.flatten(library_notmystar[c, :, :]))[0]
+
+        cross_corr_sorted, index_sorted = (np.array(zip(*sorted(zip(cross_corr, np.arange(len(cross_corr))),
+                                                                key=operator.itemgetter(0), reverse=True))))
+        index_sorted = np.int_(index_sorted)
+        library = library_notmystar[index_sorted[0:_nrefs], :, :]
+        # print('Library correlations = ', cross_corr_sorted[0:_nrefs])
+
+        # Do PCA
+        reshaped_frame = np.reshape(centered_frame, (1, centered_frame.shape[0], centered_frame.shape[1]))
+        pca_frame = vip.pca.pca(reshaped_frame, np.zeros(1), library, ncomp=_klip)
+
+        pca_file_name = os.path.join(_path_out, _obs + '_pca.fits')
+        # print(pca_file_name)
+
+        # dump results to disk
+        if not (os.path.exists(_path_out)):
+            os.makedirs(_path_out)
+
+        # save fits after PCA
+        hdu = fits.PrimaryHDU(pca_frame)
+        hdulist = fits.HDUList([hdu])
+        hdulist.writeto(pca_file_name, clobber=True)
+
+        # Make contrast curve
+        [con, cont, sep] = (vip.phot.contrcurve.contrast_curve(cube=reshaped_frame, angle_list=np.zeros(1),
+                                                               psf_template=psf_template,
+                                                               cube_ref=library, fwhm=_fwhm,
+                                                               pxscale=_plate_scale,
+                                                               starphot=center_flux, sigma=_sigma,
+                                                               ncomp=_klip, algo='pca-rdi-fullfr',
+                                                               debug=False,
+                                                               plot=False, nbranch=3, scaling=None,
+                                                               mask_center_px=_fwhm, fc_rad_sep=6))
+
+        # save txt for nightly median calc/plot
+        with open(os.path.join(_path_out, _obs + '_contrast_curve.txt'), 'w') as f:
+            f.write('# lock position: {:d} {:d}\n'.format(x_lock, y_lock))
+            for _s, dm in zip(sep, -2.5 * np.log10(cont)):
+                f.write('{:.3f} {:.3f}\n'.format(_s, dm))
+
     except Exception as _e:
         print(_e)
+        traceback.print_exc()
         return False
 
     return True
@@ -101,7 +204,7 @@ def job_pca(_config, _date, _out_path, _x=None, _y=None, _drizzled=True):
 
 @huey.task()
 def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_factor,
-               _method='sextractor', _x=None, _y=None, _drizzled=True):
+               _method='sextractor', _win=100, _x=None, _y=None, _drizzled=True):
     """
         The task that calculates Strehl ratio
 
@@ -117,7 +220,7 @@ def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_fact
     # do the work
     try:
         img, x, y = trim_frame(_path_in, _fits_name=_fits_name,
-                               _win=100, _method=_method,
+                               _win=_win, _method=_method,
                                _x=_x, _y=_x, _drizzled=_drizzled)
         core, halo = bad_obs_check(img, ps=_plate_scale)
 
@@ -161,7 +264,7 @@ def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_fact
 # @numba.jit
 def job_bogus(_obs):
     """
-        I've been using this to test the redis queue
+        I've been using this to test the redis queue + jit compilation
     :param _obs:
     :return:
     """
@@ -235,6 +338,27 @@ def load_strehl(fin):
     return _x, _y, _core, _halo, _SR, _FWHM, _flag
 
 
+def load_cc(fin):
+    """
+            Load contrast curve data from a text-file
+            Format: first line: lock position (x, y) on the original frame
+                    next lines: separation["] contrast[mag]
+        :param fin:
+        :return:
+        """
+    with open(fin) as _f:
+        f_lines = _f.readlines()
+
+    _tmp = f_lines[0].split()
+    x, y = int(_tmp[-2]), int(_tmp[-1])
+
+    cc = []
+    for l in f_lines[1:]:
+        cc.append(map(float, l.split()))
+
+    return x, y, cc
+
+
 def scale_image(image, correction='local'):
     """
 
@@ -263,12 +387,15 @@ def scale_image(image, correction='local'):
 
 
 def generate_pipe_preview(_path_out, _obs, preview_img, preview_img_cropped,
-                          SR=None, _x=None, _y=None, objects=None):
+                          SR=None, _fow_x=36, _pix_x=1024, _drizzled=True,
+                          _x=None, _y=None, objects=None):
     """
     :param _path_out:
     :param preview_img:
     :param preview_img_cropped:
     :param SR:
+    :param _x: cropped image will be centered around these _x
+    :param _y: and _y + a box will be drawn on full image around this position
     :param objects: np.array([[x_0,y_0], ..., [x_N,y_N]])
     :return:
     """
@@ -291,7 +418,7 @@ def generate_pipe_preview(_path_out, _obs, preview_img, preview_img_cropped,
             _h = int(preview_img_cropped.shape[0])
             _w = int(preview_img_cropped.shape[1])
             ax.add_patch(Rectangle((_y-_w/2, _x-_h/2), _w, _h,
-                                   fill=False, edgecolor='f3f3f3', linestyle='dotted'))
+                                   fill=False, edgecolor='#f3f3f3', linestyle='dotted'))
         # ax.imshow(preview_img, cmap='gist_heat', origin='lower', interpolation='nearest')
         # plt.axis('off')
         plt.grid('off')
@@ -316,7 +443,8 @@ def generate_pipe_preview(_path_out, _obs, preview_img, preview_img_cropped,
         # draw a horizontal bar with length of 0.1*x_size
         # (ax.transData) with a label underneath.
         bar_len = preview_img_cropped.shape[0] * 0.1
-        bar_len_str = '{:.1f}'.format(bar_len * 36 / 1024 / 2)
+        mltplr = 2 if _drizzled else 1
+        bar_len_str = '{:.1f}'.format(bar_len * _fow_x / _pix_x / mltplr)
         asb = AnchoredSizeBar(ax.transData,
                               bar_len,
                               bar_len_str[0] + r"$^{\prime\prime}\!\!\!.$" + bar_len_str[-1],
@@ -349,17 +477,17 @@ def generate_pipe_preview(_path_out, _obs, preview_img, preview_img_cropped,
     return True
 
 
-def generate_pca_images(_out_path, _sou_dir, _preview_img, _cc,
+def generate_pca_images(_path_out, _obs, _preview_img, _cc,
                         _fow_x=36, _pix_x=1024, _drizzled=True):
     """
             Generate preview images for the pca pipeline
 
         :param _out_path:
-        :param _sou_dir:
+        :param _obs:
         :param _preview_img:
-        :param _cc:
+        :param _cc: contrast curve
         :param _fow_x: full FoW in arcseconds in the x direction
-        :param _pix_x: original full frame size in pixels
+        :param _pix_x: original (raw) full frame size in pixels
         :param _drizzled: drizzle on or off?
 
         :return:
@@ -367,7 +495,7 @@ def generate_pca_images(_out_path, _sou_dir, _preview_img, _cc,
     try:
         ''' plot psf-subtracted image '''
         plt.close('all')
-        fig = plt.figure(_sou_dir)
+        fig = plt.figure(_obs)
         fig.set_size_inches(3, 3, forward=False)
         # ax = fig.add_subplot(111)
         ax = plt.Axes(fig, [0., 0., 1., 1.])
@@ -388,14 +516,21 @@ def generate_pca_images(_out_path, _sou_dir, _preview_img, _cc,
         ax.add_artist(asb)
 
         # save figure
-        fig.savefig(os.path.join(_out_path, _sou_dir + '_pca.png'), dpi=300)
+        fig.savefig(os.path.join(_path_out, _obs + '_pca.png'), dpi=300)
 
         ''' plot the contrast curve '''
+        # convert cc to numpy array if necessary:
+
+        if not isinstance(_cc, np.ndarray):
+            _cc = np.array(_cc)
+
         plt.close('all')
-        fig = plt.figure('Contrast curve for {:s}'.format(_sou_dir), figsize=(8, 3.5), dpi=200)
+        fig = plt.figure('Contrast curve for {:s}'.format(_obs), figsize=(8, 3.5), dpi=200)
         ax = fig.add_subplot(111)
-        ax.set_title(_sou_dir)  # , fontsize=14)
-        ax.plot(_cc[:, 0], -2.5 * np.log10(_cc[:, 1]), 'k-', linewidth=2.5)
+        ax.set_title(_obs)  # , fontsize=14)
+        # ax.plot(_cc[:, 0], -2.5 * np.log10(_cc[:, 1]), 'k-', linewidth=2.5)
+        # _cc[:, 1] is already in mag:
+        ax.plot(_cc[:, 0], _cc[:, 1], 'k-', linewidth=2.5)
         ax.set_xlim([0.2, 1.45])
         ax.set_xlabel('Separation [arcseconds]')  # , fontsize=18)
         ax.set_ylabel('Contrast [$\Delta$mag]')  # , fontsize=18)
@@ -403,9 +538,10 @@ def generate_pca_images(_out_path, _sou_dir, _preview_img, _cc,
         ax.set_ylim(ax.get_ylim()[::-1])
         ax.grid(linewidth=0.5)
         plt.tight_layout()
-        fig.savefig(os.path.join(_out_path, _sou_dir + '_contrast_curve.png'), dpi=200)
+        fig.savefig(os.path.join(_path_out, _obs + '_contrast_curve.png'), dpi=200)
     except Exception as _e:
         print(_e)
+        traceback.print_exc()
         return False
 
     return True
@@ -613,7 +749,7 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
     else:
         raise Exception('unrecognized trimming method.')
 
-    return scidata_cropped, x, y
+    return scidata_cropped, int(x), int(y)
 
 
 def makebox(array, halfwidth, peak1, peak2):
@@ -909,14 +1045,17 @@ def get_config(_config_file='config.ini'):
     # pca pipeline
     _config['pca'] = dict()
     # path to PSF library:
-    path_psf_reference_library = config.get('Path', 'path_psf_reference_library')
-    path_psf_reference_library_short_names = config.get('Path', 'path_psf_reference_library_short_names')
-    _config['pca']['psf_reference_library'] = fits.open(path_psf_reference_library)[0].data
-    _config['pca']['psf_reference_library_short_names'] = np.genfromtxt(path_psf_reference_library_short_names,
-                                                                 dtype='|S')
+    _config['pca']['path_psf_reference_library'] = config.get('Path', 'path_psf_reference_library')
+    _config['pca']['path_psf_reference_library_short_names'] = \
+        config.get('Path', 'path_psf_reference_library_short_names')
+    # have to do it inside job_pca - otherwise will have to send hundreds of Mb
+    # back and forth between redis queue and task consumer. luckily, it's pretty fast to do
+    # with fits.open(path_psf_reference_library) as _lib:
+    #     _config['pca']['psf_reference_library'] = _lib[0].data
+    # _config['pca']['psf_reference_library_short_names'] = np.genfromtxt(path_psf_reference_library_short_names,
+    #                                                              dtype='|S')
 
     _config['pca']['win'] = int(config.get('PCA', 'win'))
-    _config['pca']['plate_scale'] = float(config.get('PCA', 'plate_scale'))
     _config['pca']['sigma'] = float(config.get('PCA', 'sigma'))
     _config['pca']['nrefs'] = float(config.get('PCA', 'nrefs'))
     _config['pca']['klip'] = float(config.get('PCA', 'klip'))
@@ -1098,13 +1237,13 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
 
             # check on Strehl:
             check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
-            # TODO: check on PCA (if Strehl is ready)
+            # check on PCA
             # Strehl done and ok? then proceed:
+            # FIXME:  core and halo:
             if _select['pipelined']['automated']['strehl']['status']['done'] and \
-                            _select['pipelined']['automated']['strehl']['core_arcsec'] > 0.14 and \
-                            _select['pipelined']['automated']['strehl']['halo_arcsec'] < 1.0:
-                # check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
-                pass
+                            _select['pipelined']['automated']['strehl']['core_arcsec'] > 0.14e-5 and \
+                            _select['pipelined']['automated']['strehl']['halo_arcsec'] < 1.0e5:
+                check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
             # make preview images
             check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
             # once(/if) Strehl is ready, it'll rerun preview generation to SR on the image
@@ -1252,6 +1391,8 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
                 path_obs_list = [os.path.join(_config['path_pipe'], _date, tag, _obs) for
                                  tag in ('high_flux', 'faint', 'zero_flux', 'failed') if
                                  os.path.exists(os.path.join(_config['path_pipe'], _date, tag, _obs))]
+                _fits_name = '100p.fits'
+                _drizzled = True
             elif _pipe == 'faint':
                 raise NotImplementedError
                 # path_obs_list = []
@@ -1276,19 +1417,166 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
                 plate_scale = _config['telescope_data'][telescope]['scale_red']
 
                 # put a job into the queue
-                job_strehl(_path_in=path_obs, _fits_name='100p.fits',
+                job_strehl(_path_in=path_obs, _fits_name=_fits_name,
                            _obs=_obs, _path_out=path_out,
-                           _plate_scale=plate_scale, _Strehl_factor=Strehl_factor)
+                           _plate_scale=plate_scale, _Strehl_factor=Strehl_factor,
+                           _drizzled=_drizzled)
                 # update database entry
                 _coll.update_one(
                     {'_id': _obs},
                     {
+                        '$set': {
+                            'pipelined.{:s}.strehl.last_modified'.format(_pipe): utc_now()
+                        },
                         '$inc': {
                             'pipelined.{:s}.strehl.status.retries'.format(_pipe): 1
                         }
                     }
                 )
                 _logger.info('put a Strehl job into the queue for {:s}'.format(_obs))
+
+    except Exception as _e:
+        traceback.print_exc()
+        _logger.error(_e)
+        return False
+
+    return True
+
+
+def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated'):
+    """
+
+    :param _config: config data
+    :param _logger: logger instance
+    :param _coll: collection in the database
+    :param _select: database entry
+    :param _date: date of obs
+    :param _obs: obs name
+    :param _pipe: which pipelined data to use? 'automated' or 'faint'?
+
+    :return:
+    """
+    try:
+        # following structure.md:
+        path_pca = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'pca')
+
+        # path exists? (if yes - it must have been created by job_strehl)
+        if os.path.exists(path_pca):
+            # check folder modified date:
+            time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_pca).st_mtime)
+            # new/changed? (re)load data from disk + update database entry + (re)make preview
+            if _select['pipelined'][_pipe]['pca']['last_modified'] != time_tag:
+                # load data from disk
+                # load contrast curve
+                f_cc = [f for f in os.listdir(path_pca) if '_contrast_curve.txt' in f][0]
+                x, y, cc = load_cc(os.path.join(path_pca, f_cc))
+                # update database entry
+                _coll.update_one(
+                    {'_id': _obs},
+                    {
+                        '$set': {
+                            'pipelined.{:s}.pca.status.done'.format(_pipe): True,
+                            'pipelined.{:s}.pca.lock_position'.format(_pipe): [x, y],
+                            'pipelined.{:s}.pca.contrast_curve'.format(_pipe): cc,
+                            'pipelined.{:s}.pca.location'.format(_pipe): ['{:s}:{:s}'.format(
+                                _config['analysis_machine_external_host'],
+                                _config['analysis_machine_external_port']),
+                                _config['path_archive']],
+                            'pipelined.{:s}.pca.preview.done'.format(_pipe): False,
+                            'pipelined.{:s}.pca.preview.last_modified'.format(_pipe): utc_now(),
+                            'pipelined.{:s}.pca.last_modified'.format(_pipe): time_tag
+                        }
+                    }
+                )
+                # reload entry from db:
+                _select = _coll.find_one({'_id': _obs})
+                _logger.info('Updated pca entry for {:s}'.format(_obs))
+            # (re)make preview images
+            check_pca_preview(_config, _logger, _coll, _select, _date, _obs, _pipe=_pipe)
+
+        # path does not exist? make sure it's not marked 'done'
+        elif _select['pipelined'][_pipe]['pca']['status']['done']:
+            # update database entry if incorrectly marked 'done'
+            # (could not find the respective directory)
+            _coll.update_one(
+                {'_id': _obs},
+                {
+                    '$set': {
+                        'pipelined.{:s}.pca.status.done'.format(_pipe): False,
+                        'pipelined.{:s}.pca.lock_position'.format(_pipe): None,
+                        'pipelined.{:s}.pca.contrast_curve'.format(_pipe): None,
+                        'pipelined.{:s}.pca.location'.format(_pipe): None,
+                        'pipelined.{:s}.pca.preview.done'.format(_pipe): False,
+                        'pipelined.{:s}.pca.preview.last_modified'.format(_pipe): utc_now(),
+                        'pipelined.{:s}.pca.last_modified'.format(_pipe): utc_now()
+                    }
+                }
+            )
+            # reload entry from db:
+            _select = _coll.find_one({'_id': _obs})
+            _logger.info('Corrected PCA entry for {:s}'.format(_obs))
+            # a job will be placed into the queue at the next invocation of check_strehl
+
+        # if 'done' is changed to False (ex- or internally), the if clause is triggered,
+        # which in turn triggers a job placement into the queue to rerun PCA.
+        # when invoked for the next time, the previous portion of the code will make sure
+        # to update the database entry (since the last_modified value
+        # will be different from the new folder modification date)
+
+        if not _select['pipelined'][_pipe]['pca']['status']['done'] and \
+                       _select['pipelined'][_pipe]['pca']['status']['retries'] < \
+                       _config['max_pipelining_retries']:
+            if _pipe == 'automated':
+                # check if actually processed through pipeline
+                path_obs_list = [os.path.join(_config['path_pipe'], _date, tag, _obs) for
+                                 tag in ('high_flux', 'faint', 'zero_flux', 'failed') if
+                                 os.path.exists(os.path.join(_config['path_pipe'], _date, tag, _obs))]
+                _fits_name = '100p.fits'
+                _drizzled = True
+            elif _pipe == 'faint':
+                raise NotImplementedError
+                # path_obs_list = []
+            else:
+                raise NotImplementedError
+                # path_obs_list = []
+
+            # pipelined?
+            if len(path_obs_list) == 1:
+                # this also considers the pathological case when an obs ended up in several classes
+                path_obs = path_obs_list[0]
+
+                # this follows the definition from structure.md
+                path_out = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'pca')
+
+                # set stuff up:
+                telescope = 'KittPeak' if datetime.datetime.strptime(_date, '%Y%m%d') > \
+                                          datetime.datetime(2015, 9, 1) else 'Palomar'
+
+                # lucky images are drizzled, use scale_red therefore
+                if _pipe == 'automated':
+                    plate_scale = _config['telescope_data'][telescope]['scale_red']
+                elif _pipe == 'faint':
+                    plate_scale = _config['telescope_data'][telescope]['scale']
+                else:
+                    raise NotImplementedError
+
+                # put a job into the queue
+                job_pca(_config=_config, _path_in=path_obs, _fits_name=_fits_name, _obs=_obs,
+                        _path_out=path_out, _plate_scale=plate_scale,
+                        _method='sextractor', _x=None, _y=None, _drizzled=_drizzled)
+                # update database entry
+                _coll.update_one(
+                    {'_id': _obs},
+                    {
+                        '$set': {
+                            'pipelined.{:s}.pca.last_modified'.format(_pipe): utc_now()
+                        },
+                        '$inc': {
+                            'pipelined.{:s}.pca.status.retries'.format(_pipe): 1
+                        }
+                    }
+                )
+                _logger.info('put a PCA job into the queue for {:s}'.format(_obs))
 
     except Exception as _e:
         traceback.print_exc()
@@ -1363,8 +1651,12 @@ def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automate
                     # Strehl ratio (if available, otherwise will be None)
                     SR = _select['pipelined'][_pipe]['strehl']['ratio_percent']
 
+                    _pix_x = int(re.search(r'(:)(\d+)',
+                                   _select['pipelined'][_pipe]['fits_header']['DETSIZE'][0]).group(2))
+
                     _status = generate_pipe_preview(path_out, _obs, preview_img, preview_img_cropped,
-                                                    SR, _x=_x, _y=_y)
+                                                    SR, _fow_x=36, _pix_x=_pix_x, _drizzled=True,
+                                                    _x=_x, _y=_y)
 
                     _coll.update_one(
                         {'_id': _obs},
@@ -1415,105 +1707,89 @@ def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automate
     return True
 
 
-
-
-
-def check_pipe_pca(_config, _logger, _coll, _select, _date, _obs):
+def check_pca_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automated'):
     """
-        Check if observation has been processed
-        - when run for the first time, will put a task into the queue and retries++
-        - when run for the second time, will generate preview images and mark as done
+        Make PCA pipeline preview images
     :param _config: config data
     :param _logger: logger instance
     :param _coll: collection in the database
     :param _select: database entry
     :param _date: date of obs
-    :param _obs: obs full name
+    :param _obs: obs name
+    :param _pipe: which pipelined data to use? 'automated' or 'faint'?
 
     :return:
     """
+
     try:
-        # 'done' flag = False and <3 retries?
-        if not _select['pipelined']['pca']['status']['done'] and \
-                        _select['pipelined']['pca']['status']['retries'] < \
-                        _config['max_pipelining_retries']:
-            # check if processed
-            # name in accordance with the automated pipeline output,
-            # but check the faint pipeline output folder too
-            for tag in ('high_flux', 'faint'):
-                path_obs = os.path.join(_config['path_pca'], _date, tag, _obs)
-                # already processed?
-                if os.path.exists(path_obs):
-                    # check folder modified date:
-                    time_tag = datetime.datetime.utcfromtimestamp(
-                        os.stat(path_obs).st_mtime)
-                    # load contrast curve
-                    f_cc = [f for f in os.listdir(path_obs) if '_contrast_curve.txt' in f][0]
-                    cc = np.loadtxt(f_cc)
+        # preview_done = False, done = True, tried not too many times
+        if not _select['pipelined'][_pipe]['pca']['preview']['done'] and \
+                _select['pipelined'][_pipe]['pca']['status']['done'] and \
+                _select['pipelined'][_pipe]['pca']['preview']['retries'] \
+                        < _config['max_pipelining_retries']:
+            # following structure.md:
+            path_pca = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'pca')
 
-                    # previews generated?
-                    if not _select['pipelined']['pca']['status']['preview']:
-                        # load first image frame from a fits file
-                        f_fits = [f for f in os.listdir(path_obs) if '.fits' in f][0]
-                        _fits = load_fits(f_fits)
-                        # scale with local contrast optimization for preview:
-                        preview_img = scale_image(_fits, correction='local')
+            # processed?
+            if os.path.exists(path_pca):
 
-                        _status = generate_pca_images(_out_path=_config['path_pca'],
-                                                      _sou_dir=_obs, _preview_img=preview_img,
-                                                      _cc=cc, _fow_x=36, _pix_x=1024, _drizzled=True)
+                # what's in a fits name?
+                f_fits = os.path.join(path_pca, '{:s}_pca.fits'.format(obs))
 
-                        if _status:
-                            _coll.update_one(
-                                {'_id': _obs},
-                                {
-                                    '$set': {
-                                        'pipelined.pca.status.preview': True
-                                    }
-                                }
-                            )
-                            _logger.debug('Updated pca pipeline entry [status.review] for {:s}'.format(_obs))
-                        else:
-                            _logger.debug('Failed to generate pca pipeline preview images for {:s}'.format(_obs))
-                    # update database entry
-                    _coll.update_one(
-                        {'_id': _obs},
-                        {
-                            '$set': {
-                                'pipelined.pca.status.done': True,
-                                'pipelined.pca.contrast_curve': cc.tolist(),
-                                'pipelined.pca.last_modified': time_tag
-                            },
-                            '$push': {
-                                'pipelined.automated.location': ['{:s}:{:s}'.format(
-                                    _config['analysis_machine_external_host'],
-                                    _config['analysis_machine_external_port']),
-                                    _config['path_pca']]
-                            }
+                # load first image frame from the fits file
+                preview_img = load_fits(f_fits)
+                # scale with local contrast optimization for preview:
+                preview_img = scale_image(preview_img, correction='local')
+
+                # contrast_curve:
+                _cc = _select['pipelined'][_pipe]['pca']['contrast_curve']
+
+                _pix_x = int(re.search(r'(:)(\d+)',
+                                   _select['pipelined'][_pipe]['fits_header']['DETSIZE'][0]).group(2))
+
+                _status = generate_pca_images(_path_out=path_pca,
+                                              _obs=_obs, _preview_img=preview_img,
+                                              _cc=_cc, _fow_x=36, _pix_x=_pix_x, _drizzled=True)
+
+                _coll.update_one(
+                    {'_id': _obs},
+                    {
+                        '$set': {
+                            'pipelined.{:s}.pca.preview.done'.format(_pipe): _status,
+                            'pipelined.{:s}.pca.preview.last_modified'.format(_pipe): utc_now()
+                        },
+                        '$inc': {
+                            'pipelined.{:s}.pca.preview.retries'.format(_pipe): 1
                         }
-                    )
-                    _logger.debug('Updated pca pipeline entry for {:s}'.format(_obs))
-                # not processed yet? put a job into the queue then:
+                    }
+                )
+                if _status:
+                    _logger.info('Generated PCA pipeline entry [preview] for {:s}'.format(_obs))
                 else:
-                    # this will produce a fits file with the psf-subtracted image
-                    # and a text file with the contrast curve
-                    # TODO:
-                    job_pca(_obs)
-                    _logger.debug('put a pca job into the queue for {:s}'.format(_obs))
-                    # increment number of tries
-                    _coll.update_one(
-                        {'_id': _obs},
-                        {
-                            '$inc': {
-                                'pipelined.pca.status.retries': 1
-                            }
-                        }
-                    )
-                    _logger.debug('Updated pca pipeline entry [status.retries] for {:s}'.format(_obs))
+                    _logger.error('Failed to generate PCA pipeline preview images for {:s}'.format(_obs))
+
+        # following structure.md:
+        path_pca = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'pca')
+
+        # path does not exist? make sure it's not marked 'done'
+        if not os.path.exists(path_pca) and \
+                _select['pipelined'][_pipe]['pca']['preview']['done']:
+            # update database entry if incorrectly marked 'done'
+            # (could not find the respective directory)
+            _coll.update_one(
+                {'_id': _obs},
+                {
+                    '$set': {
+                        'pipelined.{:s}.pca.preview.done'.format(_pipe): False,
+                        'pipelined.{:s}.pca.preview.last_modified'.format(_pipe): utc_now()
+                    }
+                }
+            )
+            _logger.info('Corrected {:s} PCA pipeline preview entry for {:s}'.format(_pipe, _obs))
 
     except Exception as _e:
-        print(_e)
-        logger.error(_e)
+        traceback.print_exc()
+        _logger.error(_e)
         return False
 
     return True
@@ -1717,25 +1993,16 @@ if __name__ == '__main__':
                 if not status_ok:
                     logger.error('Checking failed for lucky pipeline: {:s}'.format(obs))
 
-                # TODO: if it is not a planetary, observation, do the following:
+                ''' check faint-pipelined data '''
                 if True is False:
-                    ''' check faint-pipelined data '''
                     # TODO: if core and halo tell you it's faint, run faint pipeline:
                     status_ok = check_pipe_faint(_config=config, _logger=logger, _coll=coll,
                                                  _select=select, _date=date, _obs=obs)
                     if not status_ok:
                         logger.error('Checking failed for faint pipeline: {:s}'.format(obs))
 
-                    ''' check PCA-pipelined data '''
-                    # TODO: also depending on Strehl data, run PCA pipeline either on
-                    # TODO: the lucky or the faint image
-                    # TODO: if a faint image is not ready (yet), will skip and do it next time
-                    status_ok = check_pipe_pca(_config=config, _logger=logger, _coll=coll,
-                                               _select=select, _date=date, _obs=obs)
-                    if not status_ok:
-                        logger.error('Checking failed for PCA pipeline: {:s}'.format(obs))
-
                 # TODO: if it is a planetary observation, run the planetary pipeline
+                ''' check planetary-pipelined data '''
 
                 ''' check seeing data '''
                 # TODO: [lower priority]
