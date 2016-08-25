@@ -204,7 +204,7 @@ def job_pca(_config, _path_in, _fits_name, _obs, _path_out,
 
 @huey.task()
 def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_factor,
-               _method='sextractor', _win=100, _x=None, _y=None, _drizzled=True):
+               _method='pipeline_settings.txt', _win=100, _x=None, _y=None, _drizzled=True):
     """
         The task that calculates Strehl ratio
 
@@ -214,6 +214,10 @@ def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_fact
     :param _path_out:
     :param _plate_scale:
     :param _Strehl_factor:
+    :param _method: which method to use with trim_frame(...) to get frame lock position
+                    by default, it's imported from lucky pipeline's pipeline_settings.txt
+                    don't trust it or it's not a lucky-processed image?
+                    then use 'sextractor'. (see trim_fram(**kvargs) for details and other options)
     :return:
     """
 
@@ -549,7 +553,7 @@ def generate_pca_images(_path_out, _obs, _preview_img, _cc,
 
 def get_xy_from_frames_txt(_path):
     """
-        Get median centroid position
+        Get median centroid position for a lucky-pipelined image
     :param _path:
     :return:
     """
@@ -558,6 +562,27 @@ def get_xy_from_frames_txt(_path):
     xy = np.array([map(float, l.split()[3:5]) for l in f_lines if l[0] != '#'])
 
     return np.median(xy[:, 0]), np.median(xy[:, 1])
+
+
+def get_xy_from_pipeline_settings_txt(_path, _first=True):
+    """
+        Get centroid position for a lucky-pipelined image
+    :param _path:
+    :param _first: output the x,y from the first run? if False, output from the last
+    :return:
+    """
+    with open(os.path.join(_path, 'pipeline_settings.txt'), 'r') as _f:
+        f_lines = _f.readlines()
+
+    for l in f_lines:
+        _tmp = re.search(r'\d\s+\d\s+\((\d+),(\d+)\),\((\d+),(\d+)\)\n', l)
+        if _tmp is not None:
+            _x = (int(_tmp.group(1)) + int(_tmp.group(3)))/2
+            _y = (int(_tmp.group(2)) + int(_tmp.group(4)))/2
+            if _first:
+                break
+
+    return _x, _y
 
 
 # detect observations, which are bad because of being too faint
@@ -663,12 +688,13 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
     :param _path: path
     :param _fits_name: fits-file name
     :param _win: window width
-    :param _method: from 'frames.txt', using 'sextractor', a simple 'max', or 'manual'
+    :param _method: from 'frames.txt' (if this is the output of the standard lucky pipeline),
+                    from 'pipeline_settings.txt', using 'sextractor', a simple 'max', or 'manual'
     :param _x: source x position -- if known in advance
     :param _y: source y position -- if known in advance
     :param _drizzled: was it drizzled?
 
-    :return: cropped image
+    :return: image, cropped around a lock position and the lock position itself
     """
     scidata = fits.open(os.path.join(_path, _fits_name))[0].data
 
@@ -709,6 +735,7 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
         if N_sou != 0 and N_sou < 30:
             # sou_xy = [out['table']['X_IMAGE'][0], out['table']['Y_IMAGE'][0]]
             best_score = np.argmax(scores) if len(scores) > 0 else 0
+            # window size not set? set it automatically based on source fwhm
             if _win is None:
                 sou_size = np.max((int(out['table']['FWHM_IMAGE'][best_score] * 3), 100))
                 _win = sou_size
@@ -735,6 +762,15 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
         if _win is None:
             _win = 100
         y, x = get_xy_from_frames_txt(_path)
+        if _drizzled:
+            x *= 2.0
+            y *= 2.0
+        scidata_cropped = scidata[x - _win: x + _win + 1,
+                                  y - _win: y + _win + 1]
+    elif _method == 'pipeline_settings.txt':
+        if _win is None:
+            _win = 100
+        y, x = get_xy_from_pipeline_settings_txt(_path)
         if _drizzled:
             x *= 2.0
             y *= 2.0
@@ -1350,8 +1386,8 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
                 _select = _coll.find_one({'_id': _obs})
                 _logger.info('Updated strehl entry for {:s}'.format(_obs))
                 # remake preview images
-                check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe=_pipe)
-                _logger.info('Remade preview images for {:s}'.format(_obs))
+                # check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe=_pipe)
+                # _logger.info('Remade preview images for {:s}'.format(_obs))
 
         # path does not exist? make sure it's not marked 'done'
         elif _select['pipelined'][_pipe]['strehl']['status']['done']:
@@ -1420,6 +1456,7 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
                 job_strehl(_path_in=path_obs, _fits_name=_fits_name,
                            _obs=_obs, _path_out=path_out,
                            _plate_scale=plate_scale, _Strehl_factor=Strehl_factor,
+                           _method='pipeline_settings.txt',
                            _drizzled=_drizzled)
                 # update database entry
                 _coll.update_one(
@@ -1602,9 +1639,17 @@ def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automate
 
     try:
         # preview_done = False, done = True, tried not too many times
-        if not _select['pipelined'][_pipe]['preview']['done'] and \
-                _select['pipelined'][_pipe]['status']['done'] and \
-                _select['pipelined'][_pipe]['preview']['retries'] < _config['max_pipelining_retries']:
+        # OR preview_done = True, done = True, but a new Strehl is available, tried not too many times
+        if (not _select['pipelined'][_pipe]['preview']['done'] and
+                _select['pipelined'][_pipe]['status']['done'] and
+                _select['pipelined'][_pipe]['preview']['retries']
+                    < _config['max_pipelining_retries'])\
+                or (_select['pipelined'][_pipe]['preview']['done'] and
+                    _select['pipelined'][_pipe]['preview']['done'] and
+                    _select['pipelined'][_pipe]['strehl']['last_modified'] >
+                    _select['pipelined'][_pipe]['preview']['last_modified'] and
+                    _select['pipelined'][_pipe]['preview']['retries']
+                            < _config['max_pipelining_retries']):
             if _pipe == 'automated':
                 # check if actually processed through pipeline
                 path_obs_list = [os.path.join(_config['path_pipe'], _date, tag, _obs) for

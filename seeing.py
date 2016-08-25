@@ -564,7 +564,7 @@ if __name__ == '__main__':
                 print('unbzipping {:s}'.format(seeing_img))
                 p0 = subprocess.Popen(['cp', os.path.join(path, seeing_img), path_tmp])
                 p0.wait()
-                p1 = subprocess.Popen(['bzip2', '-dk',
+                p1 = subprocess.Popen(['lbunzip2',
                                        '{:s}'.format(os.path.join(path_tmp, seeing_img))])
                 # p1 = subprocess.Popen(['tar', '-jxvf',
                 #                       '{:s}'.format(os.path.join(path, seeing_img)),
