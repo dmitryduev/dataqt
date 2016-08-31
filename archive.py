@@ -39,7 +39,7 @@ from matplotlib.offsetbox import AnchoredOffsetbox, AuxTransformBox, VPacker, Te
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# import numba
+# from numba import jit
 from huey import RedisHuey
 from redis.exceptions import ConnectionError
 huey = RedisHuey(name='roboao.archive', host='127.0.0.1', port='6379', result_store=True)
@@ -87,6 +87,14 @@ class AnchoredSizeBar(AnchoredOffsetbox):
                                    child=self._box,
                                    prop=prop,
                                    frameon=frameon)
+
+
+@huey.task()
+# @numba.jit
+def job_faint_pipeline(_config, _path_in, _fits_name, _obs, _path_out,
+                       _plate_scale, _method='sextractor',):
+
+    return False
 
 
 @huey.task()
@@ -197,9 +205,11 @@ def job_pca(_config, _path_in, _fits_name, _obs, _path_out,
     except Exception as _e:
         print(_e)
         traceback.print_exc()
-        return False
+        # return False
+        return {'job_type': 'pca', 'status': 'failed', 'obs': _obs}
 
-    return True
+    # return True
+    return {'job_type': 'pca', 'status': 'success', 'obs': _obs}
 
 
 @huey.task()
@@ -237,7 +247,8 @@ def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_fact
         # x, y = 0, 0
         # core, halo = 0, 999
         # SR, FWHM = 0, 0
-        return False
+        # return False
+        return {'job_type': 'strehl', 'status': 'failed', 'obs': _obs}
 
     if core >= 0.14 and halo <= 1.0:
         flag = 'OK'
@@ -246,22 +257,28 @@ def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_fact
 
     # print(core, halo, SR*100, FWHM)
 
-    # dump results to disk
-    if not(os.path.exists(_path_out)):
-        os.makedirs(_path_out)
+    try:
+        # dump results to disk
+        if not(os.path.exists(_path_out)):
+            os.makedirs(_path_out)
 
-    # save box around selected object:
-    hdu = fits.PrimaryHDU(box)
-    hdu.writeto(os.path.join(_path_out, '{:s}_box.fits'.format(_obs)), clobber=True)
+        # save box around selected object:
+        hdu = fits.PrimaryHDU(box)
+        hdu.writeto(os.path.join(_path_out, '{:s}_box.fits'.format(_obs)), clobber=True)
 
-    # save the Strehl data to txt-file:
-    with open(os.path.join(_path_out, '{:s}_strehl.txt'.format(_obs)), 'w') as _f:
-        _f.write('# lock_x[px] lock_y[px] core["] halo["] SR[%] FWHM["] flag\n')
-        output_entry = '{:d} {:d} {:.5f} {:.5f} {:.5f} {:.5f} {:s}\n'.\
-            format(x, y, core, halo, SR * 100, FWHM, flag)
-        _f.write(output_entry)
+        # save the Strehl data to txt-file:
+        with open(os.path.join(_path_out, '{:s}_strehl.txt'.format(_obs)), 'w') as _f:
+            _f.write('# lock_x[px] lock_y[px] core["] halo["] SR[%] FWHM["] flag\n')
+            output_entry = '{:d} {:d} {:.5f} {:.5f} {:.5f} {:.5f} {:s}\n'.\
+                format(x, y, core, halo, SR * 100, FWHM, flag)
+            _f.write(output_entry)
 
-    return True
+        # return True
+        return {'job_type': 'strehl', 'status': 'success', 'obs': _obs}
+
+    except Exception as _e:
+        print(_obs, _e)
+        return {'job_type': 'strehl', 'status': 'failed', 'obs': _obs}
 
 
 @huey.task()
@@ -801,6 +818,7 @@ def makebox(array, halfwidth, peak1, peak2):
     return box, box_fraction
 
 
+# @jit
 def Strehl_calculator(image_data, _Strehl_factor, _plate_scale, _boxsize):
 
     """ Calculates the Strehl ratio of an image
@@ -1070,6 +1088,8 @@ def get_config(_config_file='config.ini'):
     _config['path_pipe'] = config.get('Path', 'path_pipe')
     # path to data archive:
     _config['path_archive'] = config.get('Path', 'path_archive')
+    # path to temporary stuff:
+    _config['path_tmp'] = config.get('Path', 'path_tmp')
 
     # telescope data (voor, o.a., Strehl computation)
     _tmp = ast.literal_eval(config.get('Strehl', 'Strehl_factor'))
@@ -1313,7 +1333,7 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
 
     except Exception as _e:
         print(_e)
-        _logger.error(_e)
+        _logger.error('{:s}, automated pipeline: {:s}'.format(_obs, _e))
         return False
 
     return True
@@ -1330,10 +1350,79 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
     :param _obs: obs name
 
     :return:
+
     """
-    # TODO
-    if not _select['pipelined']['faint']['status']['done'] and \
-            _select['pipelined']['faint']['status']['retries'] < _config['max_pipelining_retries']:
+    try:
+        # run through lucky pipeline? computed Strehl? is it good? all positive - then proceed
+        if _select['pipelined']['automated']['status']['done'] and \
+                _select['pipelined']['automated']['strehl']['status']['done'] and \
+                _select['pipelined']['automated']['strehl']['core_arcsec'] > 0.14 and \
+                _select['pipelined']['automated']['strehl']['halo_arcsec'] < 1.0:
+            _logger.debug('{:s} suitable for faint pipeline'.format(_obs))
+
+            # following structure.md:
+            path_faint = os.path.join(_config['path_archive'], _date, _obs, 'faint')
+
+            # path exists? (if yes - it must have been created by job_faint_pipeline)
+            if os.path.exists(path_faint):
+                # check folder modified date:
+                time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_faint).st_mtime)
+                # new/changed? (re)load data from disk + update database entry + (re)make preview
+                if _select['pipelined']['faint']['last_modified'] != time_tag:
+                    # TODO: load data from disk (load shifts.txt)
+                    # TODO: update database entry
+                    # reload entry from db:
+                    _select = _coll.find_one({'_id': _obs})
+                    _logger.info('Updated faint pipeline entry for {:s}'.format(_obs))
+                # check on Strehl:
+                check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='faint')
+                # check on PCA
+                # Strehl done? then proceed:
+                if _select['pipelined']['faint']['strehl']['status']['done']:
+                    check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='faint')
+                # make preview images
+                check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='faint')
+                # once(/if) Strehl is ready, it'll rerun preview generation to SR on the image
+
+            # path does not exist? make sure it's not marked 'done'
+            elif _select['pipelined']['faint']['status']['done']:
+                # TODO: update database entry if incorrectly marked 'done'
+                # TODO: (could not find the respective directory)
+
+                # reload entry from db:
+                _select = _coll.find_one({'_id': _obs})
+                _logger.info('Corrected faint pipeline entry for {:s}'.format(_obs))
+                # a job will be placed into the queue at the next invocation of check_strehl
+
+            # if 'done' is changed to False (ex- or internally), the if clause is triggered,
+            # which in turn triggers a job placement into the queue to rerun PCA.
+            # when invoked for the next time, the previous portion of the code will make sure
+            # to update the database entry (since the last_modified value
+            # will be different from the new folder modification date)
+
+            if not _select['pipelined']['faint']['status']['done'] and \
+                           _select['pipelined']['faint']['status']['retries'] < \
+                           _config['max_pipelining_retries']:
+                # TODO: prepare stuff for job execution
+                # TODO: put a job into the queue
+                job_faint_pipeline()
+                # update database entry
+                _coll.update_one(
+                    {'_id': _obs},
+                    {
+                        '$set': {
+                            'pipelined.faint.last_modified': utc_now()
+                        },
+                        '$inc': {
+                            'pipelined.faint.status.retries': 1
+                        }
+                    }
+                )
+                _logger.info('put a faint pipeline job into the queue for {:s}'.format(_obs))
+
+    except Exception as _e:
+        print(_e)
+        _logger.error('{:s}, faint pipeline: {:s}'.format(_obs, _e))
         return False
 
     return True
@@ -1474,7 +1563,7 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
 
     except Exception as _e:
         traceback.print_exc()
-        _logger.error(_e)
+        _logger.error('{:s}, Strehl for {:s} pipeline: {:s}'.format(_obs, _pipe, _e))
         return False
 
     return True
@@ -1617,7 +1706,7 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated'):
 
     except Exception as _e:
         traceback.print_exc()
-        _logger.error(_e)
+        _logger.error('{:s}, PCA for {:s} pipeline: {:s}'.format(_obs, _pipe, _e))
         return False
 
     return True
@@ -1746,7 +1835,7 @@ def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automate
 
     except Exception as _e:
         traceback.print_exc()
-        _logger.error(_e)
+        _logger.error('{:s}, preview for {:s} pipeline: {:s}'.format(_obs, _pipe, _e))
         return False
 
     return True
@@ -1834,7 +1923,7 @@ def check_pca_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='auto
 
     except Exception as _e:
         traceback.print_exc()
-        _logger.error(_e)
+        _logger.error('{:s}, PCA preview for {:s} pipeline: {:s}'.format(_obs, _pipe, _e))
         return False
 
     return True
@@ -2039,12 +2128,10 @@ if __name__ == '__main__':
                     logger.error('Checking failed for lucky pipeline: {:s}'.format(obs))
 
                 ''' check faint-pipelined data '''
-                if True is False:
-                    # TODO: if core and halo tell you it's faint, run faint pipeline:
-                    status_ok = check_pipe_faint(_config=config, _logger=logger, _coll=coll,
-                                                 _select=select, _date=date, _obs=obs)
-                    if not status_ok:
-                        logger.error('Checking failed for faint pipeline: {:s}'.format(obs))
+                status_ok = check_pipe_faint(_config=config, _logger=logger, _coll=coll,
+                                             _select=select, _date=date, _obs=obs)
+                if not status_ok:
+                    logger.error('Checking failed for faint pipeline: {:s}'.format(obs))
 
                 # TODO: if it is a planetary observation, run the planetary pipeline
                 ''' check planetary-pipelined data '''

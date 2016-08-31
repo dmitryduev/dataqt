@@ -25,6 +25,8 @@
     pm2 start huey_consumer.py -- /Users/dmitryduev/web/dataqt/archive.huey -k process -w 4 -d 10 -n -q
 ```
 
+[It's a good idea to allocate ~half the number of the available cores]
+
 - The Redis server and the task consumer are paused or stopped during daily nap time
 [This might be unnecessary]
 ```
