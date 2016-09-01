@@ -96,10 +96,11 @@ class AnchoredSizeBar(AnchoredOffsetbox):
 
 @huey.task()
 # @numba.jit
-def job_faint_pipeline(_config, _date, _obs, _path_out):
+def job_faint_pipeline(_config, _raws_zipped, _date, _obs, _path_out):
     """
         The task that runs the faint pipeline
     :param _config:
+    :param _raws_zipped:
     :param _date:
     :param _obs:
     :param _path_out:
@@ -116,23 +117,23 @@ def job_faint_pipeline(_config, _date, _obs, _path_out):
         _path_calib = os.path.join(_config['path_pipe'], _date, 'calib')
 
         # zipped raw files:
-        raws_zipped = sorted([_f for _f in os.listdir(_path_in) if _obs in _f])[0:]
+        # raws_zipped = sorted([_f for _f in os.listdir(_path_in) if _obs in _f])[0:]
         # print(raws_zipped)
 
         # unbzip source file(s):
-        lbunzip2(_path_in=_path_in, _files=raws_zipped, _path_out=_path_tmp, _keep=True)
+        lbunzip2(_path_in=_path_in, _files=_raws_zipped, _path_out=_path_tmp, _keep=True)
 
         # unzipped file names:
-        raws = [os.path.splitext(_f)[0] for _f in raws_zipped]
+        raws = [os.path.splitext(_f)[0] for _f in _raws_zipped]
         # print('\n', raws)
 
         tag = [tag for tag in ('high_flux', 'faint', 'zero_flux', 'failed') if
-               os.path.exists(os.path.join(_path_lucky, date, tag, obs))][0]
+               os.path.exists(os.path.join(_path_lucky, _date, tag, _obs))][0]
 
         # get lock position and (square) window size
         if tag in ('high_flux', 'faint'):
             x_lock, y_lock = \
-                get_xy_from_pipeline_settings_txt(os.path.join(_path_lucky, date, tag, obs))
+                get_xy_from_pipeline_settings_txt(os.path.join(_path_lucky, _date, tag, _obs))
 
             win = int(np.min([_config['faint']['win'], x_lock, y_lock]))
         else:
@@ -529,7 +530,8 @@ def lbunzip2(_path_in, _files, _path_out, _keep=True, _v=False):
         file_out = os.path.join(_path_out, os.path.splitext(_file)[0])
         if os.path.exists(file_out):
             # print('uncompressed file {:s} already exists, skipping'.format(file_in))
-            bar.update(iterations=os.stat(file_in).st_size)
+            if _v:
+                bar.update(iterations=os.stat(file_in).st_size)
             continue
         # else go ahead
         # print('lbunzip2 <{:s} >{:s}'.format(file_in, file_out))
@@ -1106,6 +1108,18 @@ def get_xy_from_frames_txt(_path):
     return np.median(xy[:, 0]), np.median(xy[:, 1])
 
 
+def get_xy_from_shifts_txt(_path):
+    with open(os.path.join(_path, 'shifts.txt')) as _f:
+        f_lines = _f.readlines()
+    # skip empty lines (if accidentally present in the file)
+    f_lines = [_l for _l in f_lines if len(_l) > 1]
+
+    _tmp = f_lines[0].split()
+    x_lock, y_lock = int(_tmp[-2]), int(_tmp[-1])
+
+    return x_lock, y_lock
+
+
 def get_xy_from_pipeline_settings_txt(_path, _first=True):
     """
         Get centroid position for a lucky-pipelined image
@@ -1231,7 +1245,9 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
     :param _fits_name: fits-file name
     :param _win: window width
     :param _method: from 'frames.txt' (if this is the output of the standard lucky pipeline),
-                    from 'pipeline_settings.txt', using 'sextractor', a simple 'max', or 'manual'
+                    from 'pipeline_settings.txt' (if this is the output of the standard lucky pipeline),
+                    from 'shifts.txt' (if this is the output of the faint pipeline),
+                    using 'sextractor', a simple 'max', or 'manual'
     :param _x: source x position -- if known in advance
     :param _y: source y position -- if known in advance
     :param _drizzled: was it drizzled?
@@ -1298,6 +1314,15 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
         if _win is None:
             _win = 100
         x, y = np.unravel_index(scidata.argmax(), scidata.shape)
+        scidata_cropped = scidata[x - _win: x + _win + 1,
+                                  y - _win: y + _win + 1]
+    elif _method == 'shifts.txt':
+        if _win is None:
+            _win = 100
+        y, x = get_xy_from_shifts_txt(_path)
+        if _drizzled:
+            x *= 2.0
+            y *= 2.0
         scidata_cropped = scidata[x - _win: x + _win + 1,
                                   y - _win: y + _win + 1]
     elif _method == 'frames.txt':
@@ -1498,6 +1523,7 @@ def empty_db_record():
                     },
                     'location': [],
                     'lock_position': None,
+                    'fits_header': {},
                     'shifts': None,
                     'strehl': {
                         'status': {
@@ -1584,7 +1610,7 @@ def set_up_logging(_path='logs', _name='archive', _level=logging.DEBUG, _mode='w
     return _logger
 
 
-def get_config(_config_file='config.ini'):
+def get_config(_abs_path=None, _config_file='config.ini'):
     """ Get config data
 
     :return:
@@ -1592,9 +1618,9 @@ def get_config(_config_file='config.ini'):
     config = ConfigParser.RawConfigParser()
 
     if _config_file[0] not in ('/', '~'):
-        if os.path.isfile(os.path.join(abs_path, _config_file)):
-            config.read(os.path.join(abs_path, _config_file))
-            if len(config.read(os.path.join(abs_path, _config_file))) == 0:
+        if os.path.isfile(os.path.join(_abs_path, _config_file)):
+            config.read(os.path.join(_abs_path, _config_file))
+            if len(config.read(os.path.join(_abs_path, _config_file))) == 0:
                 raise Exception('Failed to load config file')
         else:
             raise IOError('Failed to find config file')
@@ -1808,6 +1834,8 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
                     {'_id': _obs},
                     {
                         '$set': {
+                            'exposure': float(header['EXPOSURE'][0]),
+                            'magnitude': float(header['MAGNITUD'][0]),
                             'pipelined.automated.status.done': True,
                             'pipelined.automated.classified_as': tag,
                             'pipelined.automated.last_modified': time_tag,
@@ -1909,6 +1937,10 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
                     f_shifts = [f for f in os.listdir(path_faint) if f == 'shifts.txt'][0]
                     # lock position + shifts (frame_number x y ex ey)
                     x, y, shifts = load_faint_shifts(os.path.join(path_faint, f_shifts))
+                    # get fits header:
+                    f_fits = os.path.join(path_faint, '{:s}_summed.fits'.format(_obs))
+                    header = get_fits_header(f_fits)
+
                     # TODO: update database entry
                     _coll.update_one(
                         {'_id': _obs},
@@ -1916,6 +1948,7 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
                             '$set': {
                                 'pipelined.faint.status.done': True,
                                 'pipelined.faint.last_modified': time_tag,
+                                'pipelined.faint.fits_header': header,
                                 'pipelined.automated.location': ['{:s}:{:s}'.format(
                                     _config['analysis_machine_external_host'],
                                     _config['analysis_machine_external_port']),
@@ -1978,8 +2011,10 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
                            _select['pipelined']['faint']['status']['retries'] < \
                            _config['max_pipelining_retries']:
                 # TODO: prepare stuff for job execution
+                _raws_zipped = _select['raw_data']['data']
                 # TODO: put a job into the queue
-                job_faint_pipeline(_config=_config, _date=_date, _obs=_obs, _path_out=path_faint)
+                job_faint_pipeline(_config=_config, _raws_zipped=_raws_zipped, _date=_date,
+                                   _obs=_obs, _path_out=path_faint)
                 # update database entry
                 _coll.update_one(
                     {'_id': _obs},
@@ -2092,9 +2127,14 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
                                  os.path.exists(os.path.join(_config['path_pipe'], _date, tag, _obs))]
                 _fits_name = '100p.fits'
                 _drizzled = True
+                _method = 'pipeline_settings.txt'
             elif _pipe == 'faint':
-                raise NotImplementedError
-                # path_obs_list = []
+                # check if actually processed through pipeline
+                _path_obs = os.path.join(_config['path_archive'], _date, _obs, 'faint')
+                path_obs_list = [_path_obs] if os.path.exists(_path_obs) else []
+                _fits_name = '{:s}_summed.fits'.format(_obs)
+                _drizzled = False
+                _method = 'shifts.txt'
             else:
                 raise NotImplementedError
                 # path_obs_list = []
@@ -2119,7 +2159,7 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
                 job_strehl(_path_in=path_obs, _fits_name=_fits_name,
                            _obs=_obs, _path_out=path_out,
                            _plate_scale=plate_scale, _Strehl_factor=Strehl_factor,
-                           _method='pipeline_settings.txt', _drizzled=_drizzled,
+                           _method=_method, _drizzled=_drizzled,
                            _core_min=_config['core_min'], _halo_max=_config['halo_max'])
                 # update database entry
                 _coll.update_one(
@@ -2233,9 +2273,14 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated'):
                                  os.path.exists(os.path.join(_config['path_pipe'], _date, tag, _obs))]
                 _fits_name = '100p.fits'
                 _drizzled = True
+                _method = 'pipeline_settings.txt'
             elif _pipe == 'faint':
-                raise NotImplementedError
-                # path_obs_list = []
+                # check if actually processed through pipeline
+                _path_obs = os.path.join(_config['path_archive'], _date, _obs, 'faint')
+                path_obs_list = [_path_obs] if os.path.exists(_path_obs) else []
+                _fits_name = '{:s}_summed.fits'.format(_obs)
+                _drizzled = False
+                _method = 'shifts.txt'
             else:
                 raise NotImplementedError
                 # path_obs_list = []
@@ -2263,7 +2308,7 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated'):
                 # put a job into the queue
                 job_pca(_config=_config, _path_in=path_obs, _fits_name=_fits_name, _obs=_obs,
                         _path_out=path_out, _plate_scale=plate_scale,
-                        _method='sextractor', _x=None, _y=None, _drizzled=_drizzled)
+                        _method=_method, _x=None, _y=None, _drizzled=_drizzled)
                 # update database entry
                 _coll.update_one(
                     {'_id': _obs},
@@ -2318,9 +2363,11 @@ def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automate
                 path_obs_list = [os.path.join(_config['path_pipe'], _date, tag, _obs) for
                                  tag in ('high_flux', 'faint', 'zero_flux', 'failed') if
                                  os.path.exists(os.path.join(_config['path_pipe'], _date, tag, _obs))]
+                _drizzled = True
             elif _pipe == 'faint':
-                raise NotImplemented()
-                # path_obs_list = []
+                _path_obs = os.path.join(_config['path_archive'], _date, _obs, 'faint')
+                path_obs_list = [_path_obs] if os.path.exists(_path_obs) else []
+                _drizzled = False
             else:
                 raise NotImplemented()
                 # path_obs_list = []
@@ -2333,8 +2380,10 @@ def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automate
                 # what's in a fits name?
                 if _pipe == 'automated':
                     f_fits = os.path.join(path_obs, '100p.fits')
+                    _method = 'pipeline_settings.txt'
                 elif _pipe == 'faint':
-                    raise NotImplemented()
+                    f_fits = os.path.join(path_obs, '{:s}_summed.fits'.format(_obs))
+                    _method = 'shifts.txt'
                 else:
                     raise NotImplemented()
 
@@ -2350,8 +2399,8 @@ def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automate
                         # cropped image [_win=None to try to detect]
                         preview_img_cropped, _x, _y = trim_frame(_path=path_obs,
                                                                  _fits_name=os.path.split(f_fits)[1],
-                                                                 _win=None, _method='sextractor',
-                                                                 _x=None, _y=None, _drizzled=True)
+                                                                 _win=None, _method=_method,
+                                                                 _x=None, _y=None, _drizzled=_drizzled)
                     else:
                         # don't crop planets
                         preview_img_cropped = preview_img
@@ -2363,7 +2412,7 @@ def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automate
                                    _select['pipelined'][_pipe]['fits_header']['DETSIZE'][0]).group(2))
 
                     _status = generate_pipe_preview(path_out, _obs, preview_img, preview_img_cropped,
-                                                    SR, _fow_x=36, _pix_x=_pix_x, _drizzled=True,
+                                                    SR, _fow_x=36, _pix_x=_pix_x, _drizzled=_drizzled,
                                                     _x=_x, _y=_y)
 
                     _coll.update_one(
@@ -2442,7 +2491,7 @@ def check_pca_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='auto
             if os.path.exists(path_pca):
 
                 # what's in a fits name?
-                f_fits = os.path.join(path_pca, '{:s}_pca.fits'.format(obs))
+                f_fits = os.path.join(path_pca, '{:s}_pca.fits'.format(_obs))
 
                 # load first image frame from the fits file
                 preview_img = load_fits(f_fits)
@@ -2497,7 +2546,51 @@ def check_pca_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='auto
 
     except Exception as _e:
         traceback.print_exc()
-        _logger.error('{:s}, PCA preview for {:s} pipeline: {:s}'.format(_obs, _pipe, _e))
+        _logger.error('{:s}, PCA preview for {:s} pipeline failed: {:s}'.format(_obs, _pipe, _e))
+        return False
+
+    return True
+
+
+def check_raws(_config, _logger, _coll, _select, _date, _obs, _date_files):
+    """
+        Check if raw data were updated/changed, reflect that in the database
+    :param _config:
+    :param _logger:
+    :param _coll:
+    :param _select:
+    :param _date:
+    :param _obs:
+    :param _date_files:
+    :return:
+    """
+    try:
+        # raw file names
+        _raws = [_s for _s in _date_files if re.match(_obs, _s) is not None]
+        # time tags. use the 'freshest' time tag for 'last_modified'
+        time_tags = [datetime.datetime.utcfromtimestamp(
+                        os.stat(os.path.join(_config['path_raw'], _date, _s)).st_mtime)
+                     for _s in _raws]
+        time_tag = max(time_tags)
+
+        # print(_obs, _select['raw_data']['last_modified'], time_tag)
+
+        # changed? update database entry then:
+        if _select['raw_data']['last_modified'] != time_tag:
+            _coll.update_one(
+                {'_id': _obs},
+                {
+                    '$set': {
+                        'raw_data.data': _raws,
+                        'raw_data.last_modified': time_tag
+                    }
+                }
+            )
+            _logger.info('Corrected raw_data entry for {:s}'.format(_obs))
+
+    except Exception as _e:
+        traceback.print_exc()
+        _logger.error('{:s}, checking raw files failed: {:s}'.format(_obs, _e))
         return False
 
     return True
@@ -2534,7 +2627,8 @@ def parse_obs_name(_obs, _program_pi):
     return _prog_num, _prog_pi, _sou_name, _filt, _date_utc, _camera, _marker
 
 
-def init_db_entry(_obs, _sou_name, _prog_num, _prog_pi, _date_utc, _camera, _filt, _date_files):
+def init_db_entry(_config, _path_obs, _date_files, _obs,
+                  _sou_name, _prog_num, _prog_pi, _date_utc, _camera, _filt):
     """
         Initialize a database entry
     :param _obs:
@@ -2565,11 +2659,20 @@ def init_db_entry(_obs, _sou_name, _prog_num, _prog_pi, _date_utc, _camera, _fil
     # find raw fits files:
     _raws = [_s for _s in _date_files if re.match(_obs, _s) is not None]
     _entry['raw_data']['location'].append(['{:s}:{:s}'.format(
-        config['analysis_machine_external_host'],
-        config['analysis_machine_external_port']),
-        config['path_raw']])
+        _config['analysis_machine_external_host'],
+        _config['analysis_machine_external_port']),
+        _config['path_raw']])
     _entry['raw_data']['data'] = _raws
-    _entry['raw_data']['last_modified'] = datetime.datetime.now(pytz.utc)
+    # use the 'freshest' timetag for 'last_modified'
+    time_tags = [datetime.datetime.utcfromtimestamp(os.stat(os.path.join(_path_obs, _s)).st_mtime)
+                 for _s in _raws]
+    # print(time_tags)
+    _entry['raw_data']['last_modified'] = max(time_tags)
+
+    # get fits header:
+    # header = get_fits_header(os.path.join(_path_obs, _raws[0]))
+    # _entry['exposure'] = float(header['EXPOSURE'][0])
+    # _entry['magnitude'] = float(header['MAGNITUD'][0])
 
     return _entry
 
@@ -2602,7 +2705,7 @@ if __name__ == '__main__':
 
         ''' load config data '''
         try:
-            config = get_config(_config_file=args.config_file)
+            config = get_config(_abs_path=abs_path, _config_file=args.config_file)
             logger.debug('Successfully read in the config file {:s}'.format(args.config_file))
         except Exception as e:
             logger.error(e)
@@ -2680,10 +2783,13 @@ if __name__ == '__main__':
                     logger.info('{:s} not in database, adding'.format(obs))
 
                     # initialize db entry and populate it
-                    entry = init_db_entry(_obs=obs, _sou_name=sou_name,
+                    entry = init_db_entry(_config=config,
+                                          _path_obs=os.path.join(config['path_raw'], date),
+                                          _date_files=date_files,
+                                          _obs=obs, _sou_name=sou_name,
                                           _prog_num=prog_num, _prog_pi=prog_pi,
                                           _date_utc=date_utc, _camera=camera,
-                                          _filt=filt, _date_files=date_files)
+                                          _filt=filt)
                     # insert it into database
                     result = coll.insert_one(entry)
                     # and select it:
@@ -2693,7 +2799,12 @@ if __name__ == '__main__':
                 else:
                     print('{:s} in database, checking...'.format(obs))
 
-                # proceed immediately
+                ''' check raw data '''
+                status_ok = check_raws(_config=config, _logger=logger, _coll=coll,
+                                       _select=select, _date=date, _obs=obs, _date_files=date_files)
+                if not status_ok:
+                    logger.error('Checking failed for raw data: {:s}'.format(obs))
+
                 ''' check lucky-pipelined data '''
                 # Strehl and PCA are checked from within check_pipe_automated
                 status_ok = check_pipe_automated(_config=config, _logger=logger, _coll=coll,
