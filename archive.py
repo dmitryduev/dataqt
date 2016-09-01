@@ -32,6 +32,11 @@ import vip
 import photutils
 from scipy import stats
 import operator
+import pyprind
+import subprocess
+from scipy.stats import sigmaclip
+from scipy.ndimage import gaussian_filter
+import image_registration
 
 from skimage import exposure, img_as_float
 from matplotlib.patches import Rectangle
@@ -39,7 +44,7 @@ from matplotlib.offsetbox import AnchoredOffsetbox, AuxTransformBox, VPacker, Te
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# from numba import jit
+from numba import jit
 from huey import RedisHuey
 from redis.exceptions import ConnectionError
 huey = RedisHuey(name='roboao.archive', host='127.0.0.1', port='6379', result_store=True)
@@ -91,16 +96,95 @@ class AnchoredSizeBar(AnchoredOffsetbox):
 
 @huey.task()
 # @numba.jit
-def job_faint_pipeline(_config, _path_in, _fits_name, _obs, _path_out,
-                       _plate_scale, _method='sextractor',):
+def job_faint_pipeline(_config, _date, _obs, _path_out):
+    """
+        The task that runs the faint pipeline
+    :param _config:
+    :param _date:
+    :param _obs:
+    :param _path_out:
+    :return:
+    """
+    try:
+        # path to store unzipped raw files
+        _path_tmp = _config['path_tmp']
+        # path to raw files:
+        _path_in = os.path.join(_config['path_raw'], _date)
+        # path to lucky-pipelined data:
+        _path_lucky = os.path.join(_config['path_pipe'], _date)
+        # path to calibration data produced by lucky pipeline:
+        _path_calib = os.path.join(_config['path_pipe'], _date, 'calib')
 
-    return False
+        # zipped raw files:
+        raws_zipped = sorted([_f for _f in os.listdir(_path_in) if _obs in _f])[0:]
+        # print(raws_zipped)
+
+        # unbzip source file(s):
+        lbunzip2(_path_in=_path_in, _files=raws_zipped, _path_out=_path_tmp, _keep=True)
+
+        # unzipped file names:
+        raws = [os.path.splitext(_f)[0] for _f in raws_zipped]
+        # print('\n', raws)
+
+        tag = [tag for tag in ('high_flux', 'faint', 'zero_flux', 'failed') if
+               os.path.exists(os.path.join(_path_lucky, date, tag, obs))][0]
+
+        # get lock position and (square) window size
+        if tag in ('high_flux', 'faint'):
+            x_lock, y_lock = \
+                get_xy_from_pipeline_settings_txt(os.path.join(_path_lucky, date, tag, obs))
+
+            win = int(np.min([_config['faint']['win'], x_lock, y_lock]))
+        else:
+            # zero flux or failed? try the whole (square) image (or the largest square subset of it)
+            with fits.open(os.path.join(_path_tmp, raws[0])) as tmp_fits:
+                # print(hdulist[0].header)
+                tmp_header = tmp_fits[0].header
+                x_lock = tmp_header.get('NAXIS1') // 2
+                y_lock = tmp_header.get('NAXIS2') // 2
+            # window must be square:
+            win = int(np.min([x_lock, y_lock]))
+        # print('Initial lock position: ', x_lock, y_lock)
+
+        # parse observation name
+        _, _, _, _filt, _, _, _ = parse_obs_name(_obs, {})
+
+        _mode = get_mode(os.path.join(_path_tmp, raws[0]))
+
+        reduce_faint_object_noram(_path_in=_path_tmp, _files=raws,
+                                  _path_calib=_path_calib, _path_out=_path_out,
+                                  _obs=_obs, _mode=_mode, _filt=_filt, _win=win, cy0=y_lock, cx0=x_lock,
+                                  _nthreads=_config['faint']['n_threads'],
+                                  _remove_tmp=True, _v=True, _interactive_plot=False)
+
+    except Exception as _e:
+        print(_e)
+        traceback.print_exc()
+        # return False
+        return {'job_type': 'faint', 'status': 'failed', 'obs': _obs}
+
+    # return True
+    return {'job_type': 'faint', 'status': 'success', 'obs': _obs}
 
 
 @huey.task()
 # @numba.jit
 def job_pca(_config, _path_in, _fits_name, _obs, _path_out,
             _plate_scale, _method='sextractor', _x=None, _y=None, _drizzled=True):
+    """
+        The task that runs the PCA pipeline
+    :param _config:
+    :param _path_in:
+    :param _fits_name:
+    :param _obs:
+    :param _path_out:
+    :param _plate_scale:
+    :param _method:
+    :param _x:
+    :param _y:
+    :param _drizzled:
+    :return:
+    """
     try:
         with fits.open(_config['pca']['path_psf_reference_library']) as _lib:
             _library = _lib[0].data
@@ -214,7 +298,8 @@ def job_pca(_config, _path_in, _fits_name, _obs, _path_out,
 
 @huey.task()
 def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_factor,
-               _method='pipeline_settings.txt', _win=100, _x=None, _y=None, _drizzled=True):
+               _method='pipeline_settings.txt', _win=100, _x=None, _y=None, _drizzled=True,
+               _core_min=0.14, _halo_max=1.0):
     """
         The task that calculates Strehl ratio
 
@@ -250,7 +335,7 @@ def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_fact
         # return False
         return {'job_type': 'strehl', 'status': 'failed', 'obs': _obs}
 
-    if core >= 0.14 and halo <= 1.0:
+    if core >= _core_min and halo <= _halo_max:
         flag = 'OK'
     else:
         flag = 'BAD?'
@@ -347,6 +432,9 @@ def load_strehl(fin):
     """
     with open(fin) as _f:
         f_lines = _f.readlines()
+    # skip empty lines (if accidentally present in the file)
+    f_lines = [_l for _l in f_lines if len(_l) > 1]
+
     _tmp = f_lines[1].split()
     _x = int(_tmp[0])
     _y = int(_tmp[1])
@@ -369,15 +457,452 @@ def load_cc(fin):
         """
     with open(fin) as _f:
         f_lines = _f.readlines()
+    # skip empty lines (if accidentally present in the file)
+    f_lines = [_l for _l in f_lines if len(_l) > 1]
 
     _tmp = f_lines[0].split()
-    x, y = int(_tmp[-2]), int(_tmp[-1])
+    x_lock, y_lock = int(_tmp[-2]), int(_tmp[-1])
 
     cc = []
     for l in f_lines[1:]:
         cc.append(map(float, l.split()))
 
-    return x, y, cc
+    return x_lock, y_lock, cc
+
+
+def load_faint_shifts(fin):
+    """
+        Load shifts.txt produced by the faint pipeline
+        Format: first line: lock position (x, y) on the original frame
+                second line: format descriptor
+                next lines: frame_number x_shift[pix] y_shift[pix] ex_shift[pix] ey_shift[pix]
+    :param fin:
+    :return:
+    """
+    with open(fin) as _f:
+        f_lines = _f.readlines()
+    # skip empty lines (if accidentally present in the file)
+    f_lines = [_l for _l in f_lines if len(_l) > 1]
+
+    _tmp = f_lines[0].split()
+    x_lock, y_lock = int(_tmp[-2]), int(_tmp[-1])
+
+    shifts = []
+    for l in f_lines[2:]:
+        _tmp = l.split()
+        shifts.append([int(_tmp[0])] + map(float, _tmp[1:]))
+
+    return x_lock, y_lock, shifts
+
+
+def lbunzip2(_path_in, _files, _path_out, _keep=True, _v=False):
+
+    """
+        A wrapper around lbunzip2 - a parallel version of bunzip2
+    :param _path_in: folder with the files to be unzipped
+    :param _files: string or list of strings with file names to be uncompressed
+    :param _path_out: folder to place the output
+    :param _keep: keep the original?
+    :return:
+    """
+
+    try:
+        p0 = subprocess.Popen(['lbunzip2'])
+        p0.wait()
+    except Exception as _e:
+        print(_e)
+        print('lbzip2 not installed in the system. go ahead and install it!')
+        return False
+
+    if isinstance(_files, str):
+        _files_list = [_files]
+    else:
+        _files_list = _files
+
+    files_size = sum([os.stat(os.path.join(_path_in, fs)).st_size for fs in _files_list])
+    # print(files_size)
+
+    if _v:
+        bar = pyprind.ProgBar(files_size, stream=1, title='Unzipping files', monitor=True)
+    for _file in _files_list:
+        file_in = os.path.join(_path_in, _file)
+        file_out = os.path.join(_path_out, os.path.splitext(_file)[0])
+        if os.path.exists(file_out):
+            # print('uncompressed file {:s} already exists, skipping'.format(file_in))
+            bar.update(iterations=os.stat(file_in).st_size)
+            continue
+        # else go ahead
+        # print('lbunzip2 <{:s} >{:s}'.format(file_in, file_out))
+        with open(file_in, 'r') as _f_in, open(file_out, 'w') as _f_out:
+            _p = subprocess.Popen('lbunzip2'.split(), stdin=subprocess.PIPE,
+                                 stdout=_f_out)
+            _p.communicate(input=_f_in.read())
+            # wait for it to finish
+            _p.wait()
+        # remove the original if requested:
+        if not _keep:
+            _p = subprocess.Popen(['rm', '-f', '{:s}'.format(os.path.join(_path_in, _file))])
+            # wait for it to finish
+            _p.wait()
+            # pass
+        if _v:
+            bar.update(iterations=os.stat(file_in).st_size)
+
+    return True
+
+
+def get_mode(_fits):
+    header = get_fits_header(_fits)
+    return str(header['MODE_NUM'][0])
+
+
+def load_darks_and_flats(_path_calib, _mode, _filt):
+    """
+        Load darks and flats
+    :param _path_calib:
+    :param _mode:
+    :param _filt:
+    :return:
+    """
+    dark_image = os.path.join(_path_calib, 'dark_{:s}.fits'.format(str(_mode)))
+    flat_image = os.path.join(_path_calib, 'flat_{:s}.fits'.format(_filt))
+
+    if not os.path.exists(dark_image) or not os.path.exists(flat_image):
+        return None, None
+    else:
+        with fits.open(dark_image) as dark, fits.open(flat_image) as flat:
+            # replace NaNs if necessary
+            return np.nan_to_num(dark[0].data), np.nan_to_num(flat[0].data)
+
+
+@jit
+def calibrate_frame(im, _dark, _flat, _iter=3):
+    im_BKGD = deepcopy(im)
+    for j in range(int(_iter)):  # do 3 iterations of sigma-clipping
+        temp = sigmaclip(im_BKGD, 3.0, 3.0)
+        im_BKGD = temp[0]  # return arr is 1st element
+    sum_BKGD = np.mean(im_BKGD)  # average CCD BKGD
+    im -= sum_BKGD
+    im -= _dark
+    im /= _flat
+
+    return im
+
+
+@jit
+def shift2d(fftn, ifftn, data, deltax, deltay, xfreq_0, yfreq_0,
+            return_abs=False, return_real=True):
+    """
+    2D version: obsolete - use ND version instead
+    (though it's probably easier to parse the source of this one)
+
+    FFT-based sub-pixel image shift.
+    Will turn NaNs into zeros
+
+    Shift Theorem:
+
+    .. math::
+        FT[f(t-t_0)](x) = e^{-2 \pi i x t_0} F(x)
+
+
+    Parameters
+    ----------
+    data : np.ndarray
+        2D image
+    """
+
+    xfreq = deltax * xfreq_0
+    yfreq = deltay * yfreq_0
+    freq_grid = xfreq + yfreq
+
+    kernel = np.exp(-1j*2*np.pi*freq_grid)
+
+    result = ifftn( fftn(data) * kernel )
+
+    if return_real:
+        return np.real(result)
+    elif return_abs:
+        return np.abs(result)
+    else:
+        return result
+
+
+def export_fits(path, _data, _header=None):
+    """
+        Save fits file overwriting if exists
+    :param path:
+    :param _data:
+    :param _header:
+    :return:
+    """
+    if _header is not None:
+        hdu = fits.PrimaryHDU(_data, header=_header)
+    else:
+        hdu = fits.PrimaryHDU(_data)
+    hdulist = fits.HDUList([hdu])
+    hdulist.writeto(path, clobber=True)
+
+
+def image_center(_path, _fits_name, _x0=None, _y0=None, _win=None):
+
+    # extract sources
+    sew = sewpy.SEW(params=["X_IMAGE", "Y_IMAGE", "XPEAK_IMAGE", "YPEAK_IMAGE",
+                            "A_IMAGE", "B_IMAGE", "FWHM_IMAGE", "FLAGS"],
+                    config={"DETECT_MINAREA": 10, "PHOT_APERTURES": "10", 'DETECT_THRESH': '5.0'},
+                    sexpath="sex")
+
+    out = sew(os.path.join(_path, _fits_name))
+    # sort by FWHM
+    out['table'].sort('FWHM_IMAGE')
+    # descending order
+    out['table'].reverse()
+
+    # print(out['table'])  # This is an astropy table.
+
+    # get first 10 and score them:
+    scores = []
+    # search everywhere in the image?
+    if _x0 is None and _y0 is None and _win is None:
+        # maximum error of a Gaussian fit. Real sources usually have larger 'errors'
+        gauss_error_max = [np.max([sou['A_IMAGE'] for sou in out['table'][0:10]]),
+                           np.max([sou['B_IMAGE'] for sou in out['table'][0:10]])]
+        for sou in out['table'][0:10]:
+            if sou['FWHM_IMAGE'] > 1:
+                score = (log_gauss_score(sou['FWHM_IMAGE']) +
+                         gauss_score(rho(sou['X_IMAGE'], sou['Y_IMAGE'])) +
+                         np.mean([sou['A_IMAGE'] / gauss_error_max[0],
+                                  sou['B_IMAGE'] / gauss_error_max[1]])) / 3.0
+            else:
+                score = 0  # it could so happen that reported FWHM is 0
+            scores.append(score)
+    # search around (_x0, _y0) in a window of width _win
+    else:
+        for sou in out['table'][0:10]:
+            _r = rho(sou['X_IMAGE'], sou['Y_IMAGE'], x_0=_x0, y_0=_y0)
+            if sou['FWHM_IMAGE'] > 1 and _r < _win:
+                score = gauss_score(_r)
+            else:
+                score = 0  # it could so happen that reported FWHM is 0
+            scores.append(score)
+
+    # there was something to score? get the best score then
+    if len(scores) > 0:
+        best_score = np.argmax(scores)
+        x_center = out['table']['YPEAK_IMAGE'][best_score]
+        y_center = out['table']['XPEAK_IMAGE'][best_score]
+    # somehow no sources detected? but _x0 and _y0 set? return the latter then
+    elif _x0 is not None and _y0 is not None:
+        x_center, y_center = _x0, _y0
+    # no sources detected and _x0 and _y0 not set? return the simple maximum:
+    else:
+        scidata = fits.open(os.path.join(_path, _fits_name))[0].data
+        x_center, y_center = np.unravel_index(scidata.argmax(), scidata.shape)
+
+    return x_center, y_center
+
+
+def reduce_faint_object_noram(_path_in, _files, _path_calib, _path_out, _obs,
+                              _mode, _filt, _win, cy0, cx0,
+                              _nthreads=1, _remove_tmp=True, _v=False, _interactive_plot=False):
+    """
+
+    :param _path_in: path to directory where to look for _files
+    :param _files: names of unzipped fits-files
+    :param _path_calib: path to lucky-pipe calibration data
+    :param _path_out: where to place the pipeline output
+    :param _obs: obs base name
+    :param _mode: detector mode used in observation
+    :param _filt: filter used
+    :param _win: window size in pixels
+    :param cy0: cut a window [+-_win] around this position to
+    :param cx0: do image registration
+    :param _nthreads: number of threads to use in image registration
+    :param _remove_tmp: remove unzipped fits-files if successfully finished processing?
+    :param _v: verbose? [display progress bars and print statements]
+    :param _interactive_plot: show interactively updated plot?
+    :return:
+    """
+
+    if isinstance(_files, str):
+        _files_list = [_files]
+    else:
+        _files_list = _files
+
+    files_sizes = [os.stat(os.path.join(_path_in, fs)).st_size for fs in _files_list]
+
+    # get total number of frames to allocate
+    # bar = pyprind.ProgBar(sum(files_sizes), stream=1, title='Getting total number of frames')
+    # number of frames in each fits file
+    n_frames_files = []
+    for jj, _file in enumerate(_files_list):
+        with fits.open(os.path.join(_path_in, _file)) as _hdulist:
+            if jj == 0:
+                # get image size (this would be (1024, 1024) for the Andor camera)
+                image_size = _hdulist[0].shape
+            n_frames_files.append(len(_hdulist))
+            # bar.update(iterations=files_sizes[jj])
+    # total number of frames
+    numFrames = sum(n_frames_files)
+
+    # Stack to seeing-limited image
+    if _v:
+        bar = pyprind.ProgBar(sum(files_sizes), stream=1, title='Stacking to seeing-limited image')
+    summed_seeing_limited_frame = np.zeros((image_size[0], image_size[1]), dtype=np.float)
+    for jj, _file in enumerate(_files_list):
+        # print(jj)
+        with fits.open(os.path.join(_path_in, _file)) as _hdulist:
+            # frames_before = sum(n_frames_files[:jj])
+            for ii, _ in enumerate(_hdulist):
+                summed_seeing_limited_frame += _hdulist[ii].data
+                # print(ii + frames_before, '\n', _data[ii, :, :])
+        if _v:
+            bar.update(iterations=files_sizes[jj])
+
+    # load darks and flats
+    if _v:
+        print('Loading darks and flats')
+    dark, flat = load_darks_and_flats(_path_calib, _mode, _filt)
+    if dark is None or flat is None:
+        raise Exception('Could not open darks and flats')
+
+    if _v:
+        print('Total number of frames to be registered: {:d}'.format(numFrames))
+
+    # Sum of all (properly shifted) frames (with not too large a shift and chi**2)
+    summed_frame = np.zeros_like(summed_seeing_limited_frame, dtype=np.float)
+
+    # Pick a frame to align to
+    # try the seeing-limited sum of all frames:
+    im1 = deepcopy(summed_seeing_limited_frame)
+
+    if _interactive_plot:
+        plt.axes([0., 0., 1., 1.])
+        plt.ion()
+        plt.grid('off')
+        plt.axis('off')
+        plt.show()
+
+    im1 = calibrate_frame(im1, dark, flat, _iter=3)
+    im1 = gaussian_filter(im1, sigma=5)  # 5, 10
+    im1 = im1[cy0 - _win: cy0 + _win, cx0 - _win: cx0 + _win]
+
+    # frame_num x y ex ey:
+    shifts = np.zeros((numFrames, 5))
+
+    # set up frequency grid for shift2d
+    ny, nx = image_size
+    xfreq_0 = np.fft.fftfreq(nx)[np.newaxis, :]
+    yfreq_0 = np.fft.fftfreq(ny)[:, np.newaxis]
+
+    fftn, ifftn = image_registration.fft_tools.fast_ffts.get_ffts(nthreads=_nthreads,
+                                                                  use_numpy_fft=False)
+
+    if _v:
+        bar = pyprind.ProgBar(numFrames, stream=1, title='Registering frames')
+
+    fn = 0
+    for jj, _file in enumerate(_files_list):
+        with fits.open(os.path.join(_path_in, _file)) as _hdulist:
+            # frames_before = sum(n_frames_files[:jj])
+            for ii, _ in enumerate(_hdulist):
+                img = np.array(_hdulist[ii].data, dtype=np.float)  # do proper casting
+
+                # tic = _time()
+                img = calibrate_frame(img, dark, flat, _iter=3)
+                # print(_time()-tic)
+
+                # tic = _time()
+                img_comp = gaussian_filter(img, sigma=5)
+                img_comp = img_comp[cy0 - _win: cy0 + _win, cx0 - _win: cx0 + _win]
+                # print(_time() - tic)
+
+                # tic = _time()
+                # chi2_shift -> chi2_shift_iterzoom
+                dy2, dx2, edy2, edx2 = image_registration.chi2_shift(im1, img_comp, nthreads=_nthreads,
+                                                                     upsample_factor='auto', zeromean=True)
+                # print(dx2, dy2, edx2, edy2)
+                # print(_time() - tic)
+                # tic = _time()
+                # note the order of dx and dy in shift2d vs shiftnd!!!
+                # img = image_registration.fft_tools.shiftnd(img, (-dx2, -dy2),
+                #                                            nthreads=_nthreads, use_numpy_fft=False)
+                img = shift2d(fftn, ifftn, img, -dy2, -dx2, xfreq_0, yfreq_0)
+                # print(_time() - tic, '\n')
+
+                # if np.sqrt(dx2 ** 2 + dy2 ** 2) > 0.8 * _win \
+                #     or np.sqrt(edx2 ** 2 + edy2 ** 2) > 0.5:
+                if np.sqrt(dx2 ** 2 + dy2 ** 2) > 0.8 * _win:
+                    # skip frames with too large a shift
+                    pass
+                    # print(' # {:d} shift was too big: '.format(i),
+                    #       np.sqrt(shifts[i, 1] ** 2 + shifts[i, 2] ** 2), shifts[i, 1], shifts[i, 2])
+                else:
+                    # otherwise store the shift values and add to the 'integrated' image
+                    shifts[fn, :] = [fn, -dx2, -dy2, edx2, edy2]
+                    summed_frame += img
+
+                if _interactive_plot:
+                    plt.imshow(summed_frame, cmap='gray', origin='lower', interpolation='nearest')
+                    plt.draw()
+                    plt.pause(0.001)
+
+                if _v:
+                    bar.update()
+
+                # increment frame number
+                fn += 1
+
+    if _interactive_plot:
+        raw_input('press any key to close plot')
+
+    if _v:
+        print('Largest move was {:.2f} pixels for frame {:d}'.
+              format(np.max(np.sqrt(shifts[:, 1] ** 2 + shifts[:, 2] ** 2)),
+                np.argmax(np.sqrt(shifts[:, 1] ** 2 + shifts[:, 2] ** 2))))
+
+    # output
+    if not os.path.exists(os.path.join(_path_out, _obs)):
+        os.makedirs(os.path.join(_path_out, _obs))
+
+    # get original fits header for output
+    with fits.open(os.path.join(_path_in, _files[0])) as _hdulist:
+        # header:
+        header = _hdulist[0].header
+
+    export_fits(os.path.join(_path_out, _obs, _obs + '_simple_sum.fits'),
+                summed_seeing_limited_frame, header)
+
+    export_fits(os.path.join(_path_out, _obs, _obs + '_summed.fits'),
+                summed_frame, header)
+
+    cyf, cxf = image_center(_path=os.path.join(_path_out, _obs), _fits_name=_obs + '_summed.fits',
+                            _x0=cx0, _y0=cy0, _win=_win)
+    print('Output lock position:', cxf, cyf)
+    with open(os.path.join(_path_out, _obs, 'shifts.txt'), 'w') as _f:
+        _f.write('# lock position: {:d} {:d}\n'.format(cxf, cyf))
+        _f.write('# frame_number x_shift[pix] y_shift[pix] ex_shift[pix] ey_shift[pix]\n')
+        for _i, _x, _y, _ex, _ey in shifts:
+            _f.write('{:.0f} {:.3f} {:.3f} {:.3f} {:.3f}\n'.format(_i, _x, _y, _ex, _ey))
+
+    # # Set Vars for Estimated-background and Resolution Masks
+    # R = 85  # inner cutout radius
+    # w = 50  # annular BKGD width
+    #
+    # # Find Annular-cutout BKGD around Star and Subtract for Final Image
+    # sky_BKGD = findAverageSkyBKGD(summed_frame, cyf, cxf, R, w)
+    # sky_corrected_summed_frame = summed_frame - sky_BKGD
+    # # sky_corrected_summed_frame = summed_frame  # - sky_BKGD
+    #
+    # export_fits(end_path + name + '_summed.fits', sky_corrected_summed_frame)
+    # os.remove(start_path + name + '_all.fits')
+
+    # clean up if successfully finished
+    if _remove_tmp:
+        if _v:
+            print('Removing unbzipped fits-files')
+        _files_list = _files if not isinstance(_files, str) else [_files]
+        for _file in _files_list:
+            os.remove(os.path.join(_path_in, _file))
 
 
 def scale_image(image, correction='local'):
@@ -972,6 +1497,8 @@ def empty_db_record():
                         'last_modified': time_now_utc
                     },
                     'location': [],
+                    'lock_position': None,
+                    'shifts': None,
                     'strehl': {
                         'status': {
                             'done': False,
@@ -1097,6 +1624,15 @@ def get_config(_config_file='config.ini'):
     for telescope in 'Palomar', 'KittPeak':
         _config['telescope_data'][telescope] = ast.literal_eval(config.get('Strehl', telescope))
         _config['telescope_data'][telescope]['Strehl_factor'] = _tmp[telescope]
+
+    # metrics [arcsec] to judge if an observation is good/bad
+    _config['core_min'] = float(config.get('Strehl', 'core_min'))
+    _config['halo_max'] = float(config.get('Strehl', 'halo_max'))
+
+    # faint pipeline:
+    _config['faint'] = dict()
+    _config['faint']['win'] = int(config.get('Faint', 'win'))
+    _config['faint']['n_threads'] = int(config.get('Faint', 'n_threads'))
 
     # pca pipeline
     _config['pca'] = dict()
@@ -1295,14 +1831,14 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
             check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
             # check on PCA
             # Strehl done and ok? then proceed:
-            # FIXME:  core and halo:
             if _select['pipelined']['automated']['strehl']['status']['done'] and \
-                            _select['pipelined']['automated']['strehl']['core_arcsec'] > 0.14e-5 and \
-                            _select['pipelined']['automated']['strehl']['halo_arcsec'] < 1.0e5:
+                _select['pipelined']['automated']['strehl']['core_arcsec'] > _config['core_min'] and \
+                _select['pipelined']['automated']['strehl']['halo_arcsec'] < _config['halo_max']:
                 check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
             # make preview images
             check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
-            # once(/if) Strehl is ready, it'll rerun preview generation to SR on the image
+            # once(/if) Strehl is ready, it'll rerun preview generation to show SR on the image
+            _logger.info('Ran Strehl, PCA, and preview checks for {:s}'.format(_obs))
 
         # not processed?
         elif len(path_obs_list) == 0:
@@ -1356,8 +1892,8 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
         # run through lucky pipeline? computed Strehl? is it good? all positive - then proceed
         if _select['pipelined']['automated']['status']['done'] and \
                 _select['pipelined']['automated']['strehl']['status']['done'] and \
-                _select['pipelined']['automated']['strehl']['core_arcsec'] > 0.14 and \
-                _select['pipelined']['automated']['strehl']['halo_arcsec'] < 1.0:
+                _select['pipelined']['automated']['strehl']['core_arcsec'] > _config['core_min'] and \
+                _select['pipelined']['automated']['strehl']['halo_arcsec'] < _config['halo_max']:
             _logger.debug('{:s} suitable for faint pipeline'.format(_obs))
 
             # following structure.md:
@@ -1370,7 +1906,28 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
                 # new/changed? (re)load data from disk + update database entry + (re)make preview
                 if _select['pipelined']['faint']['last_modified'] != time_tag:
                     # TODO: load data from disk (load shifts.txt)
+                    f_shifts = [f for f in os.listdir(path_faint) if f == 'shifts.txt'][0]
+                    # lock position + shifts (frame_number x y ex ey)
+                    x, y, shifts = load_faint_shifts(os.path.join(path_faint, f_shifts))
                     # TODO: update database entry
+                    _coll.update_one(
+                        {'_id': _obs},
+                        {
+                            '$set': {
+                                'pipelined.faint.status.done': True,
+                                'pipelined.faint.last_modified': time_tag,
+                                'pipelined.automated.location': ['{:s}:{:s}'.format(
+                                    _config['analysis_machine_external_host'],
+                                    _config['analysis_machine_external_port']),
+                                    _config['path_archive']],
+                                'pipelined.faint.lock_position': [x, y],
+                                'pipelined.faint.shifts': shifts,
+                                'pipelined.faint.preview.done': False,
+                                'pipelined.faint.strehl.status.done': False,
+                                'pipelined.faint.pca.status.done': False
+                            }
+                        }
+                    )
                     # reload entry from db:
                     _select = _coll.find_one({'_id': _obs})
                     _logger.info('Updated faint pipeline entry for {:s}'.format(_obs))
@@ -1382,13 +1939,30 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
                     check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='faint')
                 # make preview images
                 check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='faint')
-                # once(/if) Strehl is ready, it'll rerun preview generation to SR on the image
+                # once(/if) Strehl is ready, it'll rerun preview generation to show SR on the image
 
             # path does not exist? make sure it's not marked 'done'
             elif _select['pipelined']['faint']['status']['done']:
                 # TODO: update database entry if incorrectly marked 'done'
                 # TODO: (could not find the respective directory)
-
+                _coll.update_one(
+                    {'_id': _obs},
+                    {
+                        '$set': {
+                            'pipelined.faint.status.done': False,
+                            'pipelined.faint.last_modified': utc_now(),
+                            'pipelined.automated.location': [],
+                            'pipelined.faint.lock_position': None,
+                            'pipelined.faint.shifts': None,
+                            'pipelined.faint.preview.done': False,
+                            'pipelined.faint.strehl.status.done': False,
+                            'pipelined.faint.pca.status.done': False
+                        }
+                    }
+                )
+                _logger.debug(
+                    '{:s} not (yet) processed (at least I could not find it), marking undone'.
+                        format(_obs))
                 # reload entry from db:
                 _select = _coll.find_one({'_id': _obs})
                 _logger.info('Corrected faint pipeline entry for {:s}'.format(_obs))
@@ -1405,7 +1979,7 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
                            _config['max_pipelining_retries']:
                 # TODO: prepare stuff for job execution
                 # TODO: put a job into the queue
-                job_faint_pipeline()
+                job_faint_pipeline(_config=_config, _date=_date, _obs=_obs, _path_out=path_faint)
                 # update database entry
                 _coll.update_one(
                     {'_id': _obs},
@@ -1545,8 +2119,8 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
                 job_strehl(_path_in=path_obs, _fits_name=_fits_name,
                            _obs=_obs, _path_out=path_out,
                            _plate_scale=plate_scale, _Strehl_factor=Strehl_factor,
-                           _method='pipeline_settings.txt',
-                           _drizzled=_drizzled)
+                           _method='pipeline_settings.txt', _drizzled=_drizzled,
+                           _core_min=_config['core_min'], _halo_max=_config['halo_max'])
                 # update database entry
                 _coll.update_one(
                     {'_id': _obs},
@@ -1594,7 +2168,7 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated'):
             if _select['pipelined'][_pipe]['pca']['last_modified'] != time_tag:
                 # load data from disk
                 # load contrast curve
-                f_cc = [f for f in os.listdir(path_pca) if '_contrast_curve.txt' in f][0]
+                f_cc = '{:s}_contrast_curve.txt'.format(_obs)
                 x, y, cc = load_cc(os.path.join(path_pca, f_cc))
                 # update database entry
                 _coll.update_one(
