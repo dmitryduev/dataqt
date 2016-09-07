@@ -1746,6 +1746,7 @@ def get_config(_abs_path=None, _config_file='config.ini'):
     _config['mongo_port'] = int(config.get('Database', 'port'))
     _config['mongo_db'] = config.get('Database', 'db')
     _config['mongo_collection_obs'] = config.get('Database', 'collection_obs')
+    _config['mongo_collection_aux'] = config.get('Database', 'collection_aux')
     _config['mongo_collection_pwd'] = config.get('Database', 'collection_pwd')
     _config['mongo_user'] = config.get('Database', 'user')
     _config['mongo_pwd'] = config.get('Database', 'pwd')
@@ -3100,6 +3101,9 @@ if __name__ == '__main__':
                 # TODO: query database for all contrast curves and Strehls [+seeing - lower priority]
                 # TODO: make joint plots to display on the website
                 # TODO: do that once a day or so
+                status_ok = check_summary(_config=config, _logger=logger, _coll=coll, _date=date)
+                if not status_ok:
+                    logger.error('Checking summaries failed for {:s}'.format(date))
 
             logger.info('Finished archiving cycle.')
             sleep_for = naptime(config)  # seconds
