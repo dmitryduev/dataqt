@@ -13,15 +13,17 @@ This repository contains code that is used for the [Robo-AO](roboao.caltech.edu)
 ### Prerequisites
 * pm2
 * python libraries
- * flask
- * huey
- * mongoclient
- ...
+  * flask
+  * huey
+  * mongoclient
+  ...
+
 ---
 
 ### Configuration file
 
 * config.ini
+
 ---
 
 ### Set up and use MongoDB with authentication
