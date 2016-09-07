@@ -97,6 +97,7 @@ Check it out:
 db['some_collection'].find_one()
 ```
 #### Add admin user for data access on the website
+
 Connect to database from pymongo and do an insertion:
 ```python
 from pymongo import MongoClient
@@ -114,7 +115,7 @@ result = coll.insert_one(
 )
 ```
 
-**Use [Robomongo](https://robomongo.org) to display/edit DB data!! It's super handy!**
+**Use [Robomongo](https://robomongo.org) to display/edit DB data!! It's super handy!**  
 Useful tip: check [this](https://docs.mongodb.com/manual/tutorial/enable-authentication/) out.
 ---
 
