@@ -115,9 +115,11 @@ result = coll.insert_one(
 )
 ```
 
-**Use [Robomongo](https://robomongo.org) to display/edit DB data!! It's super handy!**  
+**Use [Robomongo](https://robomongo.org) to display/edit DB data!! It's super handy!**
+
 Useful tip: check [this](https://docs.mongodb.com/manual/tutorial/enable-authentication/) out.
----
+
+----------------------------------------------------------------------------------------------
 
 ### Set up a Redis-based task queue to consume and process archiving jobs
 
