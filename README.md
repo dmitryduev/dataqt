@@ -1,4 +1,4 @@
-# Robo-AO archive
+# Robo-AO data archive
 
 This repository contains code that is used for the [Robo-AO](roboao.caltech.edu) automated data processing together with the (web-)tools to access the data.  This includes the pipeline to process faint target observations, estimate Strehl ratios, run PSF subtraction, generate contrast curves, and produce preview images for individual objects, and generate nightly summary plots with estimated seeing, 'joint' contrast curves, and Strehl ratios.  
 >Robo-AO is the first automated laser guide star system that is currently installed on the Kitt Peak National Observatory's 2.1 meter telescope in Arizona. 
@@ -20,6 +20,7 @@ This repository contains code that is used for the [Robo-AO](roboao.caltech.edu)
 ---
 
 ### Configuration file
+
 * config.ini
 ---
 
