@@ -155,6 +155,7 @@ mongod --auth --dbpath /Users/dmitryduev/web/mongodb/
 ---
 
 ## Implementation details
+
 * MongoDB noSQL database
 * huey task queue + redis-server
 * Flask back-end for the web tools
