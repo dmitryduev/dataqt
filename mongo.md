@@ -1,6 +1,6 @@
 # Set up and use mongodb with authentication
 
-Also check [this](https://docs.mongodb.com/manual/tutorial/enable-authentication/)
+Also check [this](https://docs.mongodb.com/manual/tutorial/enable-authentication/) out.
 
 Install (yum on Fedora; homebrew on MacOS)
 Edit the config file. Config file location:  
@@ -28,9 +28,9 @@ $ mongo
 > use admin
 > db.createUser(
     {
-        user :"admin",
+        user: "admin",
         pwd: "roboaokicksass", 
-        roles: [{role: "userAdminAnyDatabase", db:"admin"}]})
+        roles: [{role: "userAdminAnyDatabase", db: "admin"}]})
 > exit 
 ```
 Connect to mongodb
@@ -84,7 +84,7 @@ db = client.roboao
 db.authenticate('roboao', 'roboaokicksass')
 coll = db['users']
 result = coll.insert_one(
-        {'_id': 'adminus',
+        {'_id': 'admin',
          'password': generate_password_hash('robo@0'),
          'programs': 'all',
          'last_modified': datetime.datetime.now()}
