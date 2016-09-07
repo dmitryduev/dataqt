@@ -114,7 +114,7 @@ result = coll.insert_one(
 )
 ```
 
-**Use [Robomongo](robomongo.org) to display DB data!! It's super handy!**
+**Use [Robomongo](https://robomongo.org) to display/edit DB data!! It's super handy!**
 Useful tip: check [this](https://docs.mongodb.com/manual/tutorial/enable-authentication/) out.
 ---
 
@@ -158,6 +158,7 @@ mongod --auth --dbpath /Users/dmitryduev/web/mongodb/
 * MongoDB noSQL database
 * huey task queue + redis-server
 * Flask back-end for the web tools
+
 ---
 
 ## Archive structure
