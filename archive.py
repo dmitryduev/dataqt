@@ -13,6 +13,8 @@ import argparse
 import inspect
 import traceback
 import os
+import glob
+from distutils.dir_util import copy_tree
 import logging
 import datetime
 import pytz
@@ -128,12 +130,12 @@ def job_faint_pipeline(_config, _raws_zipped, _date, _obs, _path_out):
         # print('\n', raws)
 
         tag = [tag for tag in ('high_flux', 'faint', 'zero_flux', 'failed') if
-               os.path.exists(os.path.join(_path_lucky, _date, tag, _obs))][0]
+               os.path.exists(os.path.join(_path_lucky, tag, _obs))][0]
 
         # get lock position and (square) window size
         if tag in ('high_flux', 'faint'):
             x_lock, y_lock = \
-                get_xy_from_pipeline_settings_txt(os.path.join(_path_lucky, _date, tag, _obs))
+                get_xy_from_pipeline_settings_txt(os.path.join(_path_lucky, tag, _obs))
 
             win = int(np.min([_config['faint']['win'], x_lock, y_lock]))
         else:
@@ -390,7 +392,7 @@ def utc_now():
     return datetime.datetime.now(pytz.utc)
 
 
-def naptime(nap_time_start, nap_time_stop):
+def naptime(_config):
     """
         Return time to sleep in seconds for the archiving engine
         before waking up to rerun itself.
@@ -398,8 +400,57 @@ def naptime(nap_time_start, nap_time_stop):
          In the nap time, it's nap_time_start_utc - utc_now()
     :return:
     """
-    now_local = datetime.datetime.now()
-    # TODO: finish!
+    try:
+        # local or UTC?
+        tz = pytz.utc if _config['nap_time']['frame'] == 'UTC' else None
+        now = datetime.datetime.now(tz)
+
+        if _config['nap_time']['sleep_at_night']:
+
+            last_midnight = datetime.datetime(now.year, now.month, now.day, tzinfo=tz)
+            next_midnight = datetime.datetime(now.year, now.month, now.day, tzinfo=tz) \
+                            + datetime.timedelta(days=1)
+
+            hm_start = map(int, _config['nap_time']['start'].split(':'))
+            hm_stop = map(int, _config['nap_time']['stop'].split(':'))
+
+            if hm_stop[0] < hm_start[0]:
+                h_before_midnight = 24 - (hm_start[0] + hm_start[1] / 60.0)
+                h_after_midnight = hm_stop[0] + hm_stop[1] / 60.0
+
+                # print((next_midnight - now).total_seconds() / 3600.0, h_before_midnight)
+                # print((now - last_midnight).total_seconds() / 3600.0, h_after_midnight)
+
+                if (next_midnight - now).total_seconds() / 3600.0 < h_before_midnight:
+                    sleep_until = next_midnight + datetime.timedelta(hours=h_after_midnight)
+                    print('sleep until:', sleep_until)
+                elif (now - last_midnight).total_seconds() / 3600.0 < h_after_midnight:
+                    sleep_until = last_midnight + datetime.timedelta(hours=h_after_midnight)
+                    print('sleep until:', sleep_until)
+                else:
+                    sleep_until = now + datetime.timedelta(minutes=_config['loop_interval'])
+                    print('sleep until:', sleep_until)
+
+            else:
+                h_after_midnight_start = hm_start[0] + hm_start[1] / 60.0
+                h_after_midnight_stop = hm_stop[0] + hm_stop[1] / 60.0
+
+                if (last_midnight + datetime.timedelta(hours=h_after_midnight_start) <
+                        now < last_midnight + datetime.timedelta(hours=h_after_midnight_stop)):
+                    sleep_until = last_midnight + datetime.timedelta(hours=h_after_midnight_stop)
+                    print('sleep until:', sleep_until)
+                else:
+                    sleep_until = now + datetime.timedelta(minutes=_config['loop_interval'])
+                print('sleep until:', sleep_until)
+
+            return (sleep_until - now).total_seconds()
+
+    except Exception as _e:
+        print(_e)
+        traceback.print_exc()
+        # return _config['loop_interval']*60
+        # sys.exit()
+        return False
 
 
 def mkdirs(_path):
@@ -863,24 +914,24 @@ def reduce_faint_object_noram(_path_in, _files, _path_calib, _path_out, _obs,
                 np.argmax(np.sqrt(shifts[:, 1] ** 2 + shifts[:, 2] ** 2))))
 
     # output
-    if not os.path.exists(os.path.join(_path_out, _obs)):
-        os.makedirs(os.path.join(_path_out, _obs))
+    if not os.path.exists(os.path.join(_path_out)):
+        os.makedirs(os.path.join(_path_out))
 
     # get original fits header for output
     with fits.open(os.path.join(_path_in, _files[0])) as _hdulist:
         # header:
         header = _hdulist[0].header
 
-    export_fits(os.path.join(_path_out, _obs, _obs + '_simple_sum.fits'),
+    export_fits(os.path.join(_path_out, _obs + '_simple_sum.fits'),
                 summed_seeing_limited_frame, header)
 
-    export_fits(os.path.join(_path_out, _obs, _obs + '_summed.fits'),
+    export_fits(os.path.join(_path_out, _obs + '_summed.fits'),
                 summed_frame, header)
 
-    cyf, cxf = image_center(_path=os.path.join(_path_out, _obs), _fits_name=_obs + '_summed.fits',
+    cyf, cxf = image_center(_path=_path_out, _fits_name=_obs + '_summed.fits',
                             _x0=cx0, _y0=cy0, _win=_win)
     print('Output lock position:', cxf, cyf)
-    with open(os.path.join(_path_out, _obs, 'shifts.txt'), 'w') as _f:
+    with open(os.path.join(_path_out, 'shifts.txt'), 'w') as _f:
         _f.write('# lock position: {:d} {:d}\n'.format(cxf, cyf))
         _f.write('# frame_number x_shift[pix] y_shift[pix] ex_shift[pix] ey_shift[pix]\n')
         for _i, _x, _y, _ex, _ey in shifts:
@@ -1474,6 +1525,7 @@ def empty_db_record():
                         'done': False
                     },
                     'preview': {
+                        'force_redo': False,
                         'done': False,
                         'retries': 0,
                         'last_modified': time_now_utc
@@ -1483,6 +1535,7 @@ def empty_db_record():
                     'fits_header': {},
                     'strehl': {
                         'status': {
+                            'force_redo': False,
                             'done': False,
                             'retries': 0
                         },
@@ -1496,10 +1549,12 @@ def empty_db_record():
                     },
                     'pca': {
                         'status': {
+                            'force_redo': False,
                             'done': False,
                             'retries': 0
                         },
                         'preview': {
+                            'force_redo': False,
                             'done': False,
                             'retries': 0,
                             'last_modified': time_now_utc
@@ -1513,10 +1568,12 @@ def empty_db_record():
                 },
                 'faint': {
                     'status': {
+                        'force_redo': False,
                         'done': False,
                         'retries': 0
                     },
                     'preview': {
+                        'force_redo': False,
                         'done': False,
                         'retries': 0,
                         'last_modified': time_now_utc
@@ -1527,6 +1584,7 @@ def empty_db_record():
                     'shifts': None,
                     'strehl': {
                         'status': {
+                            'force_redo': False,
                             'done': False,
                             'retries': 0
                         },
@@ -1540,10 +1598,12 @@ def empty_db_record():
                     },
                     'pca': {
                         'status': {
+                            'force_redo': False,
                             'done': False,
                             'retries': 0
                         },
                         'preview': {
+                            'force_redo': False,
                             'done': False,
                             'retries': 0,
                             'last_modified': time_now_utc
@@ -1563,7 +1623,8 @@ def empty_db_record():
                 'mean': None,
                 'last_modified': time_now_utc
             },
-            'bzip2': {
+            'distributed': {
+                'status': False,
                 'location': [],
                 'last_modified': time_now_utc
             },
@@ -1695,9 +1756,19 @@ def get_config(_abs_path=None, _config_file='config.ini'):
 
     # consider data from:
     _config['archiving_start_date'] = datetime.datetime.strptime(
-                            config.get('Auxiliary', 'archiving_start_date'), '%Y/%m/%d')
+                            config.get('Misc', 'archiving_start_date'), '%Y/%m/%d')
     # how many times to try to rerun pipelines:
-    _config['max_pipelining_retries'] = config.get('Auxiliary', 'max_pipelining_retries')
+    _config['max_pipelining_retries'] = config.get('Misc', 'max_pipelining_retries')
+
+    # nap time -- do not interfere with the nightly operations On/Off
+    _config['nap_time'] = dict()
+    _config['nap_time']['sleep_at_night'] = eval(config.get('Misc', 'nap_time'))
+    # local or UTC?
+    _config['nap_time']['frame'] = config.get('Misc', 'nap_time_frame')
+    _config['nap_time']['start'] = config.get('Misc', 'nap_time_start')
+    _config['nap_time']['stop'] = config.get('Misc', 'nap_time_stop')
+
+    _config['loop_interval'] = float(config.get('Misc', 'loop_interval'))
 
     return _config
 
@@ -1711,7 +1782,7 @@ def connect_to_db(_config, _logger=None):
         client = MongoClient(host=_config['mongo_host'], port=_config['mongo_port'])
         _db = client[_config['mongo_db']]
         if _logger is not None:
-            _logger.debug('Successfully connected to the Robo-AO database at {:s}:{:d}'.
+            _logger.debug('Connecting to the Robo-AO database at {:s}:{:d}'.
                           format(_config['mongo_host'], _config['mongo_port']))
     except Exception as _e:
         _db = None
@@ -1775,6 +1846,10 @@ def connect_to_db(_config, _logger=None):
         if _logger is not None:
             _logger.error(_e)
 
+    if _logger is not None:
+        _logger.debug('Successfully connected to the Robo-AO database at {:s}:{:d}'.
+                      format(_config['mongo_host'], _config['mongo_port']))
+
     return _db, _coll, _program_pi
 
 
@@ -1794,9 +1869,30 @@ def get_fits_header(fits_file):
     return header
 
 
+def set_key(_logger, _coll, _obs, _key, _value):
+    try:
+        _coll.update_one(
+            {'_id': _obs},
+            {
+                '$set': {
+                    _key: _value
+                }
+            }
+        )
+    except Exception as _e:
+        print(_e)
+        traceback.print_exc()
+        _logger.error('Setting {:s} key with {:s} failed for: {:s}\n{:s}'.format(_key, str(_value), _obs, _e))
+        return False
+
+    return True
+
+
 def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
     """
         Check if observation has been automatically lucky-pipelined
+
+        If force_redo switch is on, no checks are performed
     :param _config: config data
     :param _logger: logger instance
     :param _coll: collection in the database
@@ -1852,21 +1948,24 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
                 )
                 _logger.debug('Updated automated pipeline entry for {:s}'.format(_obs))
 
-                # reload entry from db:
-                _select = _coll.find_one({'_id': _obs})
-
             # check on Strehl:
-            check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
+            check_strehl(_config, _logger, _coll, _coll.find_one({'_id': _obs}),
+                         _date, _obs, _pipe='automated')
             # check on PCA
+            # reload entry from db:
+            _select = _coll.find_one({'_id': _obs})
             # Strehl done and ok? then proceed:
-            if _select['pipelined']['automated']['strehl']['status']['done'] and \
-                _select['pipelined']['automated']['strehl']['core_arcsec'] > _config['core_min'] and \
-                _select['pipelined']['automated']['strehl']['halo_arcsec'] < _config['halo_max']:
-                check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
+            if _select['pipelined']['automated']['pca']['status']['force_redo'] or \
+                    (_select['pipelined']['automated']['strehl']['status']['done'] and
+                     _select['pipelined']['automated']['strehl']['core_arcsec'] > _config['core_min'] and
+                     _select['pipelined']['automated']['strehl']['halo_arcsec'] < _config['halo_max']):
+                check_pca(_config, _logger, _coll, _coll.find_one({'_id': _obs}),
+                          _date, _obs, _pipe='automated')
             # make preview images
-            check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automated')
+            check_preview(_config, _logger, _coll, _coll.find_one({'_id': _obs}),
+                          _date, _obs, _pipe='automated')
             # once(/if) Strehl is ready, it'll rerun preview generation to show SR on the image
-            _logger.info('Ran Strehl, PCA, and preview checks for {:s}'.format(_obs))
+            _logger.info('Ran checks for {:s}'.format(_obs))
 
         # not processed?
         elif len(path_obs_list) == 0:
@@ -1897,10 +1996,24 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
 
     except Exception as _e:
         print(_e)
+        traceback.print_exc()
         _logger.error('{:s}, automated pipeline: {:s}'.format(_obs, _e))
+        # make sure all force_redo switches are off:
+        for _key in ('pipelined.automated.pca.status.force_redo',
+                     'pipelined.automated.pca.preview.force_redo',
+                     'pipelined.automated.preview.force_redo',
+                     'pipelined.automated.strehl.status.force_redo'):
+            set_key(_logger, _coll, _obs, _key, False)
         return False
 
-    return True
+    # make sure all force_redo switches are off:
+    for _key in ('pipelined.automated.pca.status.force_redo',
+                 'pipelined.automated.pca.preview.force_redo',
+                 'pipelined.automated.preview.force_redo',
+                 'pipelined.automated.strehl.status.force_redo'):
+        _status = set_key(_logger, _coll, _obs, _key, False)
+
+    return _status
 
 
 def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
@@ -1918,10 +2031,11 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
     """
     try:
         # run through lucky pipeline? computed Strehl? is it good? all positive - then proceed
-        if _select['pipelined']['automated']['status']['done'] and \
-                _select['pipelined']['automated']['strehl']['status']['done'] and \
-                _select['pipelined']['automated']['strehl']['core_arcsec'] > _config['core_min'] and \
-                _select['pipelined']['automated']['strehl']['halo_arcsec'] < _config['halo_max']:
+        if _select['pipelined']['faint']['status']['force_redo'] or \
+                (_select['pipelined']['automated']['status']['done'] and
+                 _select['pipelined']['automated']['strehl']['status']['done'] and
+                 _select['pipelined']['automated']['strehl']['core_arcsec'] > _config['core_min'] and
+                 _select['pipelined']['automated']['strehl']['halo_arcsec'] < _config['halo_max']):
             _logger.debug('{:s} suitable for faint pipeline'.format(_obs))
 
             # following structure.md:
@@ -1933,7 +2047,8 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
                 time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_faint).st_mtime)
                 # new/changed? (re)load data from disk + update database entry + (re)make preview
                 if _select['pipelined']['faint']['last_modified'] != time_tag:
-                    # TODO: load data from disk (load shifts.txt)
+                    # load data from disk
+                    # load shifts.txt:
                     f_shifts = [f for f in os.listdir(path_faint) if f == 'shifts.txt'][0]
                     # lock position + shifts (frame_number x y ex ey)
                     x, y, shifts = load_faint_shifts(os.path.join(path_faint, f_shifts))
@@ -1941,7 +2056,7 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
                     f_fits = os.path.join(path_faint, '{:s}_summed.fits'.format(_obs))
                     header = get_fits_header(f_fits)
 
-                    # TODO: update database entry
+                    # update database entry
                     _coll.update_one(
                         {'_id': _obs},
                         {
@@ -1961,23 +2076,27 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
                             }
                         }
                     )
-                    # reload entry from db:
-                    _select = _coll.find_one({'_id': _obs})
                     _logger.info('Updated faint pipeline entry for {:s}'.format(_obs))
                 # check on Strehl:
-                check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='faint')
+                check_strehl(_config, _logger, _coll, _coll.find_one({'_id': _obs}),
+                             _date, _obs, _pipe='faint')
                 # check on PCA
+                # reload entry from db:
+                _select = _coll.find_one({'_id': _obs})
                 # Strehl done? then proceed:
-                if _select['pipelined']['faint']['strehl']['status']['done']:
-                    check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='faint')
+                if _select['pipelined']['faint']['pca']['status']['force_redo'] or \
+                        _select['pipelined']['faint']['strehl']['status']['done']:
+                    check_pca(_config, _logger, _coll, _coll.find_one({'_id': _obs}),
+                              _date, _obs, _pipe='faint')
                 # make preview images
-                check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='faint')
+                check_preview(_config, _logger, _coll, _coll.find_one({'_id': _obs}),
+                              _date, _obs, _pipe='faint')
                 # once(/if) Strehl is ready, it'll rerun preview generation to show SR on the image
 
             # path does not exist? make sure it's not marked 'done'
             elif _select['pipelined']['faint']['status']['done']:
-                # TODO: update database entry if incorrectly marked 'done'
-                # TODO: (could not find the respective directory)
+                # update database entry if incorrectly marked 'done'
+                # (could not find the respective directory)
                 _coll.update_one(
                     {'_id': _obs},
                     {
@@ -2007,12 +2126,13 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
             # to update the database entry (since the last_modified value
             # will be different from the new folder modification date)
 
-            if not _select['pipelined']['faint']['status']['done'] and \
-                           _select['pipelined']['faint']['status']['retries'] < \
-                           _config['max_pipelining_retries']:
-                # TODO: prepare stuff for job execution
+            if _select['pipelined']['faint']['status']['force_redo'] or \
+                    (not _select['pipelined']['faint']['status']['done'] and
+                     _select['pipelined']['faint']['status']['retries'] <
+                     _config['max_pipelining_retries']):
+                # prepare stuff for job execution
                 _raws_zipped = _select['raw_data']['data']
-                # TODO: put a job into the queue
+                # put a job into the queue
                 job_faint_pipeline(_config=_config, _raws_zipped=_raws_zipped, _date=_date,
                                    _obs=_obs, _path_out=path_faint)
                 # update database entry
@@ -2031,10 +2151,26 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
 
     except Exception as _e:
         print(_e)
+        traceback.print_exc()
         _logger.error('{:s}, faint pipeline: {:s}'.format(_obs, _e))
+        # make sure all force_redo switches are off:
+        for _key in ('pipelined.faint.status.force_redo',
+                     'pipelined.faint.pca.status.force_redo',
+                     'pipelined.faint.pca.preview.force_redo',
+                     'pipelined.faint.preview.force_redo',
+                     'pipelined.faint.strehl.status.force_redo'):
+            set_key(_logger, _coll, _obs, _key, False)
         return False
 
-    return True
+        # make sure all force_redo switches are off:
+    for _key in ('pipelined.faint.status.force_redo',
+                 'pipelined.faint.pca.status.force_redo',
+                 'pipelined.faint.pca.preview.force_redo',
+                 'pipelined.faint.preview.force_redo',
+                 'pipelined.faint.strehl.status.force_redo'):
+        _status = set_key(_logger, _coll, _obs, _key, False)
+
+    return _status
 
 
 def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated'):
@@ -2117,9 +2253,10 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
         # to update the database entry (since the last_modified value
         # will be different from the new folder modification date)
 
-        if not _select['pipelined'][_pipe]['strehl']['status']['done'] and \
-                       _select['pipelined'][_pipe]['strehl']['status']['retries'] < \
-                       _config['max_pipelining_retries']:
+        if _select['pipelined'][_pipe]['strehl']['status']['force_redo'] or \
+                (not _select['pipelined'][_pipe]['strehl']['status']['done'] and
+                 _select['pipelined'][_pipe]['strehl']['status']['retries'] <
+                 _config['max_pipelining_retries']):
             if _pipe == 'automated':
                 # check if actually processed through pipeline
                 path_obs_list = [os.path.join(_config['path_pipe'], _date, tag, _obs) for
@@ -2263,9 +2400,10 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated'):
         # to update the database entry (since the last_modified value
         # will be different from the new folder modification date)
 
-        if not _select['pipelined'][_pipe]['pca']['status']['done'] and \
-                       _select['pipelined'][_pipe]['pca']['status']['retries'] < \
-                       _config['max_pipelining_retries']:
+        if _select['pipelined'][_pipe]['pca']['status']['force_redo'] or \
+                (not _select['pipelined'][_pipe]['pca']['status']['done'] and
+                 _select['pipelined'][_pipe]['pca']['status']['retries'] <
+                 _config['max_pipelining_retries']):
             if _pipe == 'automated':
                 # check if actually processed through pipeline
                 path_obs_list = [os.path.join(_config['path_pipe'], _date, tag, _obs) for
@@ -2348,11 +2486,12 @@ def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automate
     try:
         # preview_done = False, done = True, tried not too many times
         # OR preview_done = True, done = True, but a new Strehl is available, tried not too many times
-        if (not _select['pipelined'][_pipe]['preview']['done'] and
+        if _select['pipelined'][_pipe]['preview']['force_redo'] or \
+                (not _select['pipelined'][_pipe]['preview']['done'] and
                 _select['pipelined'][_pipe]['status']['done'] and
                 _select['pipelined'][_pipe]['preview']['retries']
                     < _config['max_pipelining_retries'])\
-                or (_select['pipelined'][_pipe]['preview']['done'] and
+                or (_select['pipelined'][_pipe]['status']['done'] and
                     _select['pipelined'][_pipe]['preview']['done'] and
                     _select['pipelined'][_pipe]['strehl']['last_modified'] >
                     _select['pipelined'][_pipe]['preview']['last_modified'] and
@@ -2480,10 +2619,11 @@ def check_pca_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='auto
 
     try:
         # preview_done = False, done = True, tried not too many times
-        if not _select['pipelined'][_pipe]['pca']['preview']['done'] and \
-                _select['pipelined'][_pipe]['pca']['status']['done'] and \
-                _select['pipelined'][_pipe]['pca']['preview']['retries'] \
-                        < _config['max_pipelining_retries']:
+        if _select['pipelined'][_pipe]['pca']['preview']['force_redo'] or \
+                (not _select['pipelined'][_pipe]['pca']['preview']['done'] and
+                 _select['pipelined'][_pipe]['pca']['status']['done'] and
+                 _select['pipelined'][_pipe]['pca']['preview']['retries']
+                         < _config['max_pipelining_retries']):
             # following structure.md:
             path_pca = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'pca')
 
@@ -2596,6 +2736,124 @@ def check_raws(_config, _logger, _coll, _select, _date, _obs, _date_files):
     return True
 
 
+def check_distributed(_config, _logger, _coll, _select, _date, _obs, _n_days=1.0):
+    """
+        Check if observation has been processed and can be distributed.
+        Generate a compressed file with everything.
+
+    :param _config: config data
+    :param _logger: logger instance
+    :param _coll: collection in the database
+    :param _select: database entry
+    :param _date: date of obs
+    :param _obs: obs name
+    :param _n_days: pipelining done n days ago
+
+    :return:
+
+    """
+    try:
+        if not _select['distributed']['status']:
+            # to keep things simple, just check if the pipelines are marked 'done'
+            # more than _n_days ago. this should give enough time for all other tasks
+            # to finish/fail
+            done = _select['pipelined']['automated']['status']['done'] and \
+                    (_select['pipelined']['faint']['status']['done'] or
+                     _select['pipelined']['faint']['status']['retries']
+                      > _config['max_pipelining_retries'] or
+                     _select['pipelined']['faint']['status']['retries']
+                      == _config['max_pipelining_retries'])
+
+            _path_obs = os.path.join(_config['path_archive'], _date, _obs)
+            last_modified = datetime.datetime.utcfromtimestamp(
+                                os.stat(os.path.join(_path_obs)).st_mtime)
+            last_modified = last_modified.replace(tzinfo=pytz.utc)
+
+            if done and (utc_now() - last_modified).total_seconds()/86400.0 > _n_days:
+                # prepare everything for distribution
+                _path_pipe = os.path.join(_config['path_pipe'], _date,
+                                          str(_select['pipelined']['automated']['classified_as']))
+                _path_archive = os.path.join(_config['path_archive'], _date)
+                _status_ok = prepare_for_distribution(_path_pipe, _path_archive, _obs)
+                # update database entry:
+                if _status_ok:
+                    _coll.update_one(
+                        {'_id': _obs},
+                        {
+                            '$set': {
+                                'distributed.status': True,
+                                'distributed.location': ['{:s}:{:s}'.format(
+                                        _config['analysis_machine_external_host'],
+                                        _config['analysis_machine_external_port']),
+                                        _config['path_archive']],
+                                'distributed.last_modified': utc_now()
+                            }
+                        }
+                    )
+                    _logger.info('{:s} ready for distribution'.format(_obs))
+                else:
+                    _coll.update_one(
+                        {'_id': _obs},
+                        {
+                            '$set': {
+                                'distributed.status': False,
+                                'distributed.location': [],
+                                'distributed.last_modified': utc_now()
+                            }
+                        }
+                    )
+                    _logger.info('{:s} ready for distribution'.format(_obs))
+
+    except Exception as _e:
+        print(_e)
+        traceback.print_exc()
+        _logger.error('{:s}, distributed or not check failed: {:s}'.format(_obs, _e))
+        return False
+
+    return True
+
+
+def prepare_for_distribution(_path_pipe, _path_archive, _obs):
+    """
+        Create an archive with all the processed data
+    :param _path_pipe:
+    :param _path_archive:
+    :param _obs:
+    :return:
+    """
+    try:
+        # try to copy automated pipeline output. it's ok if this fails
+        try:
+            copy_tree(os.path.join(_path_pipe, _obs), os.path.join(_path_archive, _obs, 'automated'))
+        finally:
+            pass
+
+        # create a tarball
+        pipelines = [_path for _path in os.listdir(os.path.join(_path_archive, _obs))
+                     if os.path.isdir(os.path.join(_path_archive, _obs, _path)) and _path[0] != '.']
+        _p = subprocess.Popen(['tar', '-cf', '{:s}'.format(os.path.join(_path_archive, _obs, '{:s}.tar'.format(_obs))),
+                               '-C', os.path.join(_path_archive, _obs)] + pipelines)
+        # wait for it to finish
+        _p.wait()
+
+        # compress it:
+        _p = subprocess.Popen(['lbzip2', '-f', '{:s}'.format(os.path.join(_path_archive,
+                                                                          _obs, '{:s}.tar'.format(_obs))), '--best'])
+        # wait for it to finish
+        _p.wait()
+
+        # remove the copy of automatically-pipelined files
+        for _path in glob.glob(os.path.join(_path_archive, _obs, 'automated', '*.*')):
+            if os.path.isfile(_path):
+                os.remove(_path)
+    except Exception as _e:
+        print(_e)
+        traceback.print_exc()
+        return False
+
+    return True
+
+
 def parse_obs_name(_obs, _program_pi):
     """
         Parse Robo-AO observation name
@@ -2694,148 +2952,173 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     ''' set up logging '''
-    logger = set_up_logging(_path='logs', _name='archive', _level=logging.DEBUG)
+    logger = set_up_logging(_path='logs', _name='archive', _level=logging.DEBUG, _mode='a')
 
-    # if you start me up... if you start me up I'll never stop (hopefully not)
-    logger.info('Started daily archiving job.')
+    while True:
+        # if you start me up... if you start me up I'll never stop (hopefully not)
+        logger.info('Started archiving cycle.')
 
-    try:
-        ''' script absolute location '''
-        abs_path = os.path.dirname(inspect.getfile(inspect.currentframe()))
-
-        ''' load config data '''
         try:
-            config = get_config(_abs_path=abs_path, _config_file=args.config_file)
-            logger.debug('Successfully read in the config file {:s}'.format(args.config_file))
-        except Exception as e:
-            logger.error(e)
-            logger.error('Failed to read in the config file {:s}'.format(args.config_file))
-            sys.exit()
+            ''' script absolute location '''
+            abs_path = os.path.dirname(inspect.getfile(inspect.currentframe()))
 
-        ''' check connection to redis server that processes pipeline tasks '''
-        try:
-            pubsub = huey.storage.listener()
-            logger.debug('Successfully connected to the redis server at 127.0.0.1:6379')
-        except ConnectionError as e:
-            logger.error(e)
-            logger.error('Redis server not responding')
-            sys.exit()
+            ''' load config data '''
+            try:
+                config = get_config(_abs_path=abs_path, _config_file=args.config_file)
+                logger.debug('Successfully read in the config file {:s}'.format(args.config_file))
+            except Exception as e:
+                traceback.print_exc()
+                logger.error(e)
+                logger.error('Failed to read in the config file {:s}'.format(args.config_file))
+                sys.exit()
 
-        ''' Connect to the mongodb database '''
-        try:
-            db, coll, program_pi = connect_to_db(_config=config, _logger=logger)
-            if None in (db, coll, program_pi):
-                raise Exception('Failed to connect to the database')
-        except Exception as e:
-            logger.error(e)
-            sys.exit()
+            ''' check connection to redis server that processes pipeline tasks '''
+            try:
+                pubsub = huey.storage.listener()
+                logger.debug('Successfully connected to the redis server at 127.0.0.1:6379')
+            except ConnectionError as e:
+                traceback.print_exc()
+                logger.error(e)
+                logger.error('Redis server not responding')
+                sys.exit()
 
-        '''
-         ###############################
-         CHECK IF DATABASE IS UP TO DATE
-         ###############################
-        '''
+            ''' Connect to the mongodb database '''
+            try:
+                db, coll, program_pi = connect_to_db(_config=config, _logger=logger)
+                if None in (db, coll, program_pi):
+                    raise Exception('Failed to connect to the database')
+            except Exception as e:
+                traceback.print_exc()
+                logger.error(e)
+                sys.exit()
 
-        ''' check all raw data starting from config['archiving_start_date'] '''
-        # get all dates with some raw data
-        dates = [p for p in os.listdir(config['path_raw'])
-                 if os.path.isdir(os.path.join(config['path_raw'], p))
-                 and datetime.datetime.strptime(p, '%Y%m%d') >= config['archiving_start_date']]
-        print(dates)
-        # for each date get all unique obs names (used as _id 's in the db)
-        for date in dates:
-            date_files = os.listdir(os.path.join(config['path_raw'], date))
-            # check the endings (\Z) and skip _N.fits.bz2:
-            # must start with program number (e.g. 24_ or 24.1_)
-            pattern_start = r'\d+.?\d??_'
-            # must be a bzipped fits file
-            pattern_end = r'.[0-9]{6}.fits.bz2\Z'
-            pattern_fits = r'.fits.bz2\Z'
-            # skip calibration files and pointings
-            date_obs = [re.split(pattern_fits, s)[0] for s in date_files
-                        if re.search(pattern_end, s) is not None and
-                        re.match(pattern_start, s) is not None and
-                        re.match('pointing_', s) is None and
-                        re.match('bias_', s) is None and
-                        re.match('dark_', s) is None and
-                        re.match('flat_', s) is None and
-                        re.match('seeing_', s) is None]
-            # print(date_obs)
-            # TODO: handle seeing files separately [lower priority]
-            date_seeing = [re.split(pattern_end, s)[0] for s in date_files
-                           if re.search(pattern_end, s) is not None and
-                           re.match('seeing_', s) is not None]
-            # print(date_seeing)
-            # for each source name see if there's an entry in the database
-            for obs in date_obs:
-                print('processing {:s}'.format(obs))
-                logger.debug('processing {:s}'.format(obs))
+            '''
+             ###############################
+             CHECK IF DATABASE IS UP TO DATE
+             ###############################
+            '''
 
-                # parse observation name
-                prog_num, prog_pi, sou_name, \
-                    filt, date_utc, camera, marker = parse_obs_name(obs, program_pi)
+            ''' check all raw data starting from config['archiving_start_date'] '''
+            # get all dates with some raw data
+            dates = [p for p in os.listdir(config['path_raw'])
+                     if os.path.isdir(os.path.join(config['path_raw'], p))
+                     and datetime.datetime.strptime(p, '%Y%m%d') >= config['archiving_start_date']]
+            print(dates)
+            # for each date get all unique obs names (used as _id 's in the db)
+            for date in dates:
+                date_files = os.listdir(os.path.join(config['path_raw'], date))
+                # check the endings (\Z) and skip _N.fits.bz2:
+                # must start with program number (e.g. 24_ or 24.1_)
+                pattern_start = r'\d+.?\d??_'
+                # must be a bzipped fits file
+                pattern_end = r'.[0-9]{6}.fits.bz2\Z'
+                pattern_fits = r'.fits.bz2\Z'
+                # skip calibration files and pointings
+                date_obs = [re.split(pattern_fits, s)[0] for s in date_files
+                            if re.search(pattern_end, s) is not None and
+                            re.match(pattern_start, s) is not None and
+                            re.match('pointing_', s) is None and
+                            re.match('bias_', s) is None and
+                            re.match('dark_', s) is None and
+                            re.match('flat_', s) is None and
+                            re.match('seeing_', s) is None]
+                # print(date_obs)
+                # TODO: handle seeing files separately [lower priority]
+                date_seeing = [re.split(pattern_end, s)[0] for s in date_files
+                               if re.search(pattern_end, s) is not None and
+                               re.match('seeing_', s) is not None]
+                # print(date_seeing)
+                # for each source name see if there's an entry in the database
+                for obs in date_obs:
+                    print('processing {:s}'.format(obs))
+                    logger.debug('processing {:s}'.format(obs))
 
-                # look up entry in the database:
-                select = coll.find_one({'_id': obs})
-                # if entry not in database, create empty one and populate it
-                if select is None:
-                    print('{:s} not in database, adding...'.format(obs))
-                    logger.info('{:s} not in database, adding'.format(obs))
+                    # parse observation name
+                    prog_num, prog_pi, sou_name, \
+                        filt, date_utc, camera, marker = parse_obs_name(obs, program_pi)
 
-                    # initialize db entry and populate it
-                    entry = init_db_entry(_config=config,
-                                          _path_obs=os.path.join(config['path_raw'], date),
-                                          _date_files=date_files,
-                                          _obs=obs, _sou_name=sou_name,
-                                          _prog_num=prog_num, _prog_pi=prog_pi,
-                                          _date_utc=date_utc, _camera=camera,
-                                          _filt=filt)
-                    # insert it into database
-                    result = coll.insert_one(entry)
-                    # and select it:
+                    # look up entry in the database:
                     select = coll.find_one({'_id': obs})
+                    # if entry not in database, create empty one and populate it
+                    if select is None:
+                        print('{:s} not in database, adding...'.format(obs))
+                        logger.info('{:s} not in database, adding'.format(obs))
 
-                # entry found in database, check if pipelined, update entry if necessary
-                else:
-                    print('{:s} in database, checking...'.format(obs))
+                        # initialize db entry and populate it
+                        entry = init_db_entry(_config=config,
+                                              _path_obs=os.path.join(config['path_raw'], date),
+                                              _date_files=date_files,
+                                              _obs=obs, _sou_name=sou_name,
+                                              _prog_num=prog_num, _prog_pi=prog_pi,
+                                              _date_utc=date_utc, _camera=camera,
+                                              _filt=filt)
+                        # insert it into database
+                        result = coll.insert_one(entry)
+                        # and select it:
+                        select = coll.find_one({'_id': obs})
 
-                ''' check raw data '''
-                status_ok = check_raws(_config=config, _logger=logger, _coll=coll,
-                                       _select=select, _date=date, _obs=obs, _date_files=date_files)
-                if not status_ok:
-                    logger.error('Checking failed for raw data: {:s}'.format(obs))
+                    # entry found in database, check if pipelined, update entry if necessary
+                    else:
+                        print('{:s} in database, checking...'.format(obs))
 
-                ''' check lucky-pipelined data '''
-                # Strehl and PCA are checked from within check_pipe_automated
-                status_ok = check_pipe_automated(_config=config, _logger=logger, _coll=coll,
-                                                 _select=select, _date=date, _obs=obs)
-                if not status_ok:
-                    logger.error('Checking failed for lucky pipeline: {:s}'.format(obs))
+                    ''' check raw data '''
+                    status_ok = check_raws(_config=config, _logger=logger, _coll=coll,
+                                           _select=select, _date=date, _obs=obs, _date_files=date_files)
+                    if not status_ok:
+                        logger.error('Checking failed for raw data: {:s}'.format(obs))
 
-                ''' check faint-pipelined data '''
-                status_ok = check_pipe_faint(_config=config, _logger=logger, _coll=coll,
-                                             _select=select, _date=date, _obs=obs)
-                if not status_ok:
-                    logger.error('Checking failed for faint pipeline: {:s}'.format(obs))
+                    ''' check lucky-pipelined data '''
+                    # Strehl and PCA are checked from within check_pipe_automated
+                    status_ok = check_pipe_automated(_config=config, _logger=logger, _coll=coll,
+                                                     _select=coll.find_one({'_id': obs}), _date=date, _obs=obs)
+                    if not status_ok:
+                        logger.error('Checking failed for lucky pipeline: {:s}'.format(obs))
 
-                # TODO: if it is a planetary observation, run the planetary pipeline
-                ''' check planetary-pipelined data '''
+                    ''' check faint-pipelined data '''
+                    status_ok = check_pipe_faint(_config=config, _logger=logger, _coll=coll,
+                                                 _select=coll.find_one({'_id': obs}), _date=date, _obs=obs)
+                    if not status_ok:
+                        logger.error('Checking failed for faint pipeline: {:s}'.format(obs))
 
-                ''' check seeing data '''
-                # TODO: [lower priority]
-                # for each date check if lists of processed and raw seeing files match
-                # rerun seeing.py for each date if necessary
-                # update last_modified if necessary
+                    # TODO: if it is a planetary observation, run the planetary pipeline
+                    ''' check planetary-pipelined data '''
 
-                # TODO: mark distributed when all pipelines done or n_retries>3,
-                # TODO: compress everything with bzip2, store and transfer over to Caltech
+                    ''' check seeing data '''
+                    # TODO: [lower priority]
+                    # for each date check if lists of processed and raw seeing files match
+                    # rerun seeing.py for each date if necessary
+                    # update last_modified if necessary
 
-            # TODO: query database for all contrast curves and Strehls [+seeing - lower priority]
-            # TODO: make joint plots to display on the website
+                    # mark distributed when all pipelines done or n_retries>3
+                    # compress everything with bzip2, store and TODO: transfer over to Caltech
+                    status_ok = check_distributed(_config=config, _logger=logger, _coll=coll,
+                                                  _select=coll.find_one({'_id': obs}),
+                                                  _date=date, _obs=obs, _n_days=0.1)
+                    if not status_ok:
+                        logger.error('Checking failed if distributed: {:s}'.format(obs))
 
-    except Exception as e:
-        print(e)
-        logger.error(e)
-        logger.error('Unknown error.')
-    finally:
-        logger.info('Finished daily archiving job.')
+                # TODO: query database for all contrast curves and Strehls [+seeing - lower priority]
+                # TODO: make joint plots to display on the website
+                # TODO: do that once a day or so
+
+            logger.info('Finished archiving cycle.')
+            sleep_for = naptime(config)  # seconds
+            if sleep_for:
+                time.sleep(sleep_for)
+            else:
+                logger.error('Could not fall asleep, exiting.')
+                break
+
+        except KeyboardInterrupt:
+            logger.error('User exited the archiver.')
+            logger.info('Finished archiving cycle.')
+            break
+
+        except Exception as e:
+            print(e)
+            traceback.print_exc()
+            logger.error(e)
+            logger.error('Unknown error, exiting. Please check the logs')
+            # TODO: send out an email with an alert
+            logger.info('Finished archiving cycle.')
+            break
