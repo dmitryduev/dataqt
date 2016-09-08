@@ -42,6 +42,7 @@ import image_registration
 
 from skimage import exposure, img_as_float
 from matplotlib.patches import Rectangle
+import matplotlib.lines as mlines
 from matplotlib.offsetbox import AnchoredOffsetbox, AuxTransformBox, VPacker, TextArea
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -2815,45 +2816,46 @@ def check_distributed(_config, _logger, _coll, _select, _date, _obs, _n_days=1.0
                      _select['pipelined']['faint']['status']['retries']
                       == _config['max_pipelining_retries'])
 
-            _path_obs = os.path.join(_config['path_archive'], _date, _obs)
-            last_modified = datetime.datetime.utcfromtimestamp(
-                                os.stat(os.path.join(_path_obs)).st_mtime)
-            last_modified = last_modified.replace(tzinfo=pytz.utc)
+            if done:
+                _path_obs = os.path.join(_config['path_archive'], _date, _obs)
+                last_modified = datetime.datetime.utcfromtimestamp(
+                                    os.stat(os.path.join(_path_obs)).st_mtime)
+                last_modified = last_modified.replace(tzinfo=pytz.utc)
 
-            if done and (utc_now() - last_modified).total_seconds()/86400.0 > _n_days:
-                # prepare everything for distribution
-                _path_pipe = os.path.join(_config['path_pipe'], _date,
-                                          str(_select['pipelined']['automated']['classified_as']))
-                _path_archive = os.path.join(_config['path_archive'], _date)
-                _status_ok = prepare_for_distribution(_path_pipe, _path_archive, _obs)
-                # update database entry:
-                if _status_ok:
-                    _coll.update_one(
-                        {'_id': _obs},
-                        {
-                            '$set': {
-                                'distributed.status': True,
-                                'distributed.location': ['{:s}:{:s}'.format(
-                                        _config['analysis_machine_external_host'],
-                                        _config['analysis_machine_external_port']),
-                                        _config['path_archive']],
-                                'distributed.last_modified': utc_now()
+                if (utc_now() - last_modified).total_seconds()/86400.0 > _n_days:
+                    # prepare everything for distribution
+                    _path_pipe = os.path.join(_config['path_pipe'], _date,
+                                              str(_select['pipelined']['automated']['classified_as']))
+                    _path_archive = os.path.join(_config['path_archive'], _date)
+                    _status_ok = prepare_for_distribution(_path_pipe, _path_archive, _obs)
+                    # update database entry:
+                    if _status_ok:
+                        _coll.update_one(
+                            {'_id': _obs},
+                            {
+                                '$set': {
+                                    'distributed.status': True,
+                                    'distributed.location': ['{:s}:{:s}'.format(
+                                            _config['analysis_machine_external_host'],
+                                            _config['analysis_machine_external_port']),
+                                            _config['path_archive']],
+                                    'distributed.last_modified': utc_now()
+                                }
                             }
-                        }
-                    )
-                    _logger.info('{:s} ready for distribution'.format(_obs))
-                else:
-                    _coll.update_one(
-                        {'_id': _obs},
-                        {
-                            '$set': {
-                                'distributed.status': False,
-                                'distributed.location': [],
-                                'distributed.last_modified': utc_now()
+                        )
+                        _logger.info('{:s} ready for distribution'.format(_obs))
+                    else:
+                        _coll.update_one(
+                            {'_id': _obs},
+                            {
+                                '$set': {
+                                    'distributed.status': False,
+                                    'distributed.location': [],
+                                    'distributed.last_modified': utc_now()
+                                }
                             }
-                        }
-                    )
-                    _logger.info('{:s} ready for distribution'.format(_obs))
+                        )
+                        _logger.info('{:s} ready for distribution'.format(_obs))
 
     except Exception as _e:
         print(_e)
@@ -2868,7 +2870,88 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date):
     try:
         # TODO: check/do seeing
         # TODO: make summary Strehl plot
-        # TODO: make summary contrast curve plot
+        # make summary contrast curve plot
+        try:
+            _logger.debug('Trying to generate contrast curve summary for {:s}'.format(_date))
+            print('Generating contrast curve summary for {:s}'.format(_date))
+            # query the database:
+            day = datetime.datetime.strptime(_date, '%Y%m%d')
+
+            cursor = _coll.find({'date_utc': {'$gt': day, '$lt': day + datetime.timedelta(days=1)}})
+            _pipe = 'automated'
+            contrast_curves = np.array([np.array(_obs['pipelined'][_pipe]['pca']['contrast_curve']) for _obs in cursor
+                                        if _obs['pipelined'][_pipe]['pca']['status']['done']])
+
+            cursor = _coll.find({'date_utc': {'$gt': day, '$lt': day + datetime.timedelta(days=1)}})
+            _pipe = 'faint'
+            contrast_curves_faint = np.array([np.array(_obs['pipelined'][_pipe]['pca']['contrast_curve'])
+                                              for _obs in cursor
+                                              if _obs['pipelined'][_pipe]['pca']['status']['done']])
+
+            if len(contrast_curves) > 0 or len(contrast_curves_faint) > 0:
+                _logger.info('Generating contrast curve summary for {:s}'.format(_date))
+                fig = plt.figure('Contrast curve', figsize=(8, 3.5), dpi=200)
+                ax = fig.add_subplot(111)
+
+                # add to plot:
+                sep_mean = np.linspace(0.2, 1.45, num=100)
+
+                # lucky-pipelined
+                cc_mean = []
+                for contrast_curve in contrast_curves:
+                    ax.plot(contrast_curve[:, 0], contrast_curve[:, 1], '-', c=plt.cm.Greys(0.27), linewidth=1.1)
+                    cc_mean.append(np.interp(sep_mean, contrast_curve[:, 0], contrast_curve[:, 1]))
+                if len(cc_mean) > 0:
+                    # add median to plot:
+                    ax.plot(sep_mean, np.median(np.array(cc_mean).T, axis=1), '-',
+                            c=plt.cm.Oranges(0.7), linewidth=2.1)
+
+                # faint-pipelined:
+                cc_mean = []
+                for contrast_curve in contrast_curves_faint:
+                    ax.plot(contrast_curve[:, 0], contrast_curve[:, 1], '--', c=plt.cm.Blues(0.27), linewidth=1.1)
+                    cc_mean.append(np.interp(sep_mean, contrast_curve[:, 0], contrast_curve[:, 1]))
+
+                if len(cc_mean) > 0:
+                    # add median to plot:
+                    ax.plot(sep_mean, np.median(np.array(cc_mean).T, axis=1), '--',
+                            c=plt.cm.Oranges(0.5), linewidth=2.1)
+                # # add median to plot:
+                # ax.plot(sep_mean, np.median(np.array(cc_mean).T, axis=1), '-', c=plt.cm.Oranges(0.7), linewidth=2.5)
+
+                # beautify and save:
+                ax.set_xlim([0.2, 1.45])
+                ax.set_xlabel('Separation [arcseconds]')  # , fontsize=18)
+                ax.set_ylabel('Contrast [$\Delta$mag]')  # , fontsize=18)
+                ax.set_ylim([0, 8])
+                ax.set_ylim(ax.get_ylim()[::-1])
+                ax.grid(linewidth=0.5)
+
+                # custom legend:
+                lucky_line = mlines.Line2D([], [], color=plt.cm.Greys(0.27), linestyle='-',
+                                           label='Individual lucky contrast curves')
+                faint_line = mlines.Line2D([], [], color=plt.cm.Blues(0.27), linestyle='--',
+                                           label='Individual faint contrast curves')
+                lucky_line_median = mlines.Line2D([], [], color=plt.cm.Oranges(0.7), linestyle='-',
+                                                  label='Median lucky contrast curve')
+                faint_line_median = mlines.Line2D([], [], color=plt.cm.Oranges(0.5), linestyle='--',
+                                                  markersize=15, label='Individual faint contrast curve')
+                plt.legend(loc='best', handles=[lucky_line, faint_line, lucky_line_median, faint_line_median],
+                           prop = {'size': 6})
+
+                plt.tight_layout()
+
+                # dump results to disk
+                _path_out = os.path.join(_config['path_archive'], _date, 'summary')
+                if not (os.path.exists(_path_out)):
+                    os.makedirs(_path_out)
+
+                fig.savefig(os.path.join(_path_out, 'contrast_curve.{:s}.png'.format(_date)), dpi=200)
+        except Exception as _e:
+            print(_e)
+            traceback.print_exc()
+            _logger.error('Summary contrast curve generation failed for {:s}: {:s}'.format(_date, _e))
+
         # TODO: check/insert weather data into the database
         pass
 
@@ -3099,7 +3182,7 @@ if __name__ == '__main__':
                 # for each source name see if there's an entry in the database
                 for obs in date_obs:
                     print('processing {:s}'.format(obs))
-                    logger.debug('processing {:s}'.format(obs))
+                    logger.info('processing {:s}'.format(obs))
 
                     # parse observation name
                     prog_num, prog_pi, sou_name, \
@@ -3186,9 +3269,10 @@ if __name__ == '__main__':
         except KeyboardInterrupt:
             logger.error('User exited the archiver.')
             logger.info('Finished archiving cycle.')
-            # try disconnecting from the database
+            # try disconnecting from the database (if connected)
             try:
-                client.close()
+                if 'client' in locals():
+                    client.close()
             finally:
                 break
 
@@ -3199,8 +3283,9 @@ if __name__ == '__main__':
             logger.error('Unknown error, exiting. Please check the logs')
             # TODO: send out an email with an alert
             logger.info('Finished archiving cycle.')
-            # try disconnecting from the database
+            # try disconnecting from the database (if connected)
             try:
-                client.close()
+                if 'client' in locals():
+                    client.close()
             finally:
                 break
