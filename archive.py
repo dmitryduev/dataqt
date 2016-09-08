@@ -96,6 +96,25 @@ class AnchoredSizeBar(AnchoredOffsetbox):
                                    frameon=frameon)
 
 
+def inqueue(job_type, *_args):
+    """
+        Check if a job has already been enqueued
+
+    :param job_type: string corresponding to the name of function decorated with @huey.task()
+    :param args: list of strings. all must be in the huey-redis task string representation
+                 do print(pending) to see what I mean by that
+    :return:
+    """
+    pending = huey.get_storage().enqueued_items()
+    # print(huey.pending())
+
+    if len(pending) > 0:
+        isin = len([task for task in pending if (job_type in task) and all([_s in task for _s in _args])]) >= 1
+    else:
+        isin = False
+    return isin
+
+
 @huey.task()
 # @numba.jit
 def job_faint_pipeline(_config, _raws_zipped, _date, _obs, _path_out):
@@ -2055,12 +2074,12 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
 
     """
     try:
-        # run through lucky pipeline? computed Strehl? is it good? all positive - then proceed
+        # ran through lucky pipeline? computed Strehl? is it bad? all positive - then proceed
         if _select['pipelined']['faint']['status']['force_redo'] or \
                 (_select['pipelined']['automated']['status']['done'] and
                  _select['pipelined']['automated']['strehl']['status']['done'] and
-                 _select['pipelined']['automated']['strehl']['core_arcsec'] > _config['core_min'] and
-                 _select['pipelined']['automated']['strehl']['halo_arcsec'] < _config['halo_max']):
+                     (_select['pipelined']['automated']['strehl']['core_arcsec'] < _config['core_min'] or
+                      _select['pipelined']['automated']['strehl']['halo_arcsec'] > _config['halo_max'])):
             _logger.debug('{:s} suitable for faint pipeline'.format(_obs))
 
             # following structure.md:
@@ -2158,8 +2177,9 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
                 # prepare stuff for job execution
                 _raws_zipped = _select['raw_data']['data']
                 # put a job into the queue
-                job_faint_pipeline(_config=_config, _raws_zipped=_raws_zipped, _date=_date,
-                                   _obs=_obs, _path_out=path_faint)
+                if not inqueue('job_faint_pipeline', _obs, path_faint):
+                    job_faint_pipeline(_config=_config, _raws_zipped=_raws_zipped, _date=_date,
+                                       _obs=_obs, _path_out=path_faint)
                 # update database entry
                 _coll.update_one(
                     {'_id': _obs},
@@ -2318,11 +2338,12 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
                 plate_scale = _config['telescope_data'][telescope]['scale_red']
 
                 # put a job into the queue
-                job_strehl(_path_in=path_obs, _fits_name=_fits_name,
-                           _obs=_obs, _path_out=path_out,
-                           _plate_scale=plate_scale, _Strehl_factor=Strehl_factor,
-                           _method=_method, _drizzled=_drizzled,
-                           _core_min=_config['core_min'], _halo_max=_config['halo_max'])
+                if not inqueue('job_strehl', _obs, path_out):
+                    job_strehl(_path_in=path_obs, _fits_name=_fits_name,
+                               _obs=_obs, _path_out=path_out,
+                               _plate_scale=plate_scale, _Strehl_factor=Strehl_factor,
+                               _method=_method, _drizzled=_drizzled,
+                               _core_min=_config['core_min'], _halo_max=_config['halo_max'])
                 # update database entry
                 _coll.update_one(
                     {'_id': _obs},
@@ -2345,7 +2366,7 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
     return True
 
 
-def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated'):
+def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe):
     """
 
     :param _config: config data
@@ -2362,7 +2383,7 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated'):
         # following structure.md:
         path_pca = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'pca')
 
-        # path exists? (if yes - it must have been created by job_strehl)
+        # path exists? (if yes - it must have been created by job_pca)
         if os.path.exists(path_pca):
             # check folder modified date:
             time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_pca).st_mtime)
@@ -2469,9 +2490,10 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated'):
                     raise NotImplementedError
 
                 # put a job into the queue
-                job_pca(_config=_config, _path_in=path_obs, _fits_name=_fits_name, _obs=_obs,
-                        _path_out=path_out, _plate_scale=plate_scale,
-                        _method=_method, _x=None, _y=None, _drizzled=_drizzled)
+                if not inqueue('job_pca', _obs, path_out):
+                    job_pca(_config=_config, _path_in=path_obs, _fits_name=_fits_name, _obs=_obs,
+                            _path_out=path_out, _plate_scale=plate_scale,
+                            _method=_method, _x=None, _y=None, _drizzled=_drizzled)
                 # update database entry
                 _coll.update_one(
                     {'_id': _obs},
@@ -2735,7 +2757,7 @@ def check_raws(_config, _logger, _coll, _select, _date, _obs, _date_files):
     """
     try:
         # raw file names
-        _raws = [_s for _s in _date_files if re.match(_obs, _s) is not None]
+        _raws = [_s for _s in _date_files if re.match(re.escape(_obs), _s) is not None]
         # time tags. use the 'freshest' time tag for 'last_modified'
         time_tags = [datetime.datetime.utcfromtimestamp(
                         os.stat(os.path.join(_config['path_raw'], _date, _s)).st_mtime)
@@ -2961,7 +2983,7 @@ def init_db_entry(_config, _path_obs, _date_files, _obs,
     _entry['filter'] = _filt  # also get this from FITS header
 
     # find raw fits files:
-    _raws = [_s for _s in _date_files if re.match(_obs, _s) is not None]
+    _raws = [_s for _s in _date_files if re.match(re.escape(_obs), _s) is not None]
     _entry['raw_data']['location'].append(['{:s}:{:s}'.format(
         _config['analysis_machine_external_host'],
         _config['analysis_machine_external_port']),
@@ -3149,6 +3171,9 @@ if __name__ == '__main__':
                 status_ok = check_aux(_config=config, _logger=logger, _coll=coll, _coll_aux=coll_aux, _date=date)
                 if not status_ok:
                     logger.error('Checking summaries failed for {:s}'.format(date))
+
+                # print(huey.get_storage().enqueued_items())
+                # print(huey.pending())
 
             logger.info('Finished archiving cycle.')
             sleep_for = naptime(config)  # seconds
