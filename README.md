@@ -4,23 +4,29 @@ This repository contains code that is used for the [Robo-AO](http://roboao.calte
 >Robo-AO is the first automated laser guide star system that is currently installed on the Kitt Peak National Observatory's 2.1 meter telescope in Arizona. 
 
 **archive.py** is the data processing engine.  
-**server_data_archive.py** is the web-server for data access.
+**server\_data\_archive.py** is the web-server for data access.
 
 --- 
 
 ## How do I deploy the archiving system?
 
 ### Prerequisites
-* pm2
+* pm2 process manager
 * python libraries
   * flask
-  * huey
+  * huey (Dima's forked version with a few tweaks)
   * mongoclient
+  * image_registration (Dima's forked version with a few tweaks)
   ...
+
+Clone the repository:
+```bash
+git clone https://github.com/dmitryduev/dataqt.git
+```
 
 ---
 
-### Configuration file
+### Configuration file (settings and paths)
 
 * config.ini
 
@@ -64,9 +70,10 @@ mongo -u "admin" -p "roboaokicksass" --authenticationDatabase "admin"
 ```
 Add user to your database:
 ```bash
-# Add user to your DB
 $ mongo
-> use some_db
+# This will create a databased called 'roboao' if it is not there yet
+> use roboao
+# Add user to your DB
 > db.createUser(
     {
       user: "roboao",
@@ -74,6 +81,11 @@ $ mongo
       roles: ["readWrite"]
     }
 )
+# Optionally create collections:
+> db.createCollection("objects")
+> db.createCollection("aux")
+> db.createCollection("users")
+# this will be later done from python anyways 
 ```
 If you get locked out, start over (on Linux)
 ```bash
@@ -104,6 +116,7 @@ from pymongo import MongoClient
 from werkzeug.security import generate_password_hash
 import datetime
 client = MongoClient('ip_address_or_uri')
+# select database 'roboao'
 db = client.roboao
 db.authenticate('roboao', 'roboaokicksass')
 coll = db['users']
@@ -154,6 +167,16 @@ start MongoDB:
 ```bash
 mongod --auth --dbpath /Users/dmitryduev/web/mongodb/
 ```
+
+### Data access via the web-server
+
+Run the data access web-server using the pm2 process manager:
+```bash
+pm2 start server_data_archive.py --interpreter=/path/to/python
+```
+
+#### Little tutorial on how to use the web-site (once it's ready)
+
 ---
 
 ## Implementation details

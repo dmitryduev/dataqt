@@ -775,187 +775,188 @@ def reduce_faint_object_noram(_path_in, _files, _path_calib, _path_out, _obs,
     :param _interactive_plot: show interactively updated plot?
     :return:
     """
+    try:
+        if isinstance(_files, str):
+            _files_list = [_files]
+        else:
+            _files_list = _files
 
-    if isinstance(_files, str):
-        _files_list = [_files]
-    else:
-        _files_list = _files
+        files_sizes = [os.stat(os.path.join(_path_in, fs)).st_size for fs in _files_list]
 
-    files_sizes = [os.stat(os.path.join(_path_in, fs)).st_size for fs in _files_list]
+        # get total number of frames to allocate
+        # bar = pyprind.ProgBar(sum(files_sizes), stream=1, title='Getting total number of frames')
+        # number of frames in each fits file
+        n_frames_files = []
+        for jj, _file in enumerate(_files_list):
+            with fits.open(os.path.join(_path_in, _file)) as _hdulist:
+                if jj == 0:
+                    # get image size (this would be (1024, 1024) for the Andor camera)
+                    image_size = _hdulist[0].shape
+                n_frames_files.append(len(_hdulist))
+                # bar.update(iterations=files_sizes[jj])
+        # total number of frames
+        numFrames = sum(n_frames_files)
 
-    # get total number of frames to allocate
-    # bar = pyprind.ProgBar(sum(files_sizes), stream=1, title='Getting total number of frames')
-    # number of frames in each fits file
-    n_frames_files = []
-    for jj, _file in enumerate(_files_list):
-        with fits.open(os.path.join(_path_in, _file)) as _hdulist:
-            if jj == 0:
-                # get image size (this would be (1024, 1024) for the Andor camera)
-                image_size = _hdulist[0].shape
-            n_frames_files.append(len(_hdulist))
-            # bar.update(iterations=files_sizes[jj])
-    # total number of frames
-    numFrames = sum(n_frames_files)
-
-    # Stack to seeing-limited image
-    if _v:
-        bar = pyprind.ProgBar(sum(files_sizes), stream=1, title='Stacking to seeing-limited image')
-    summed_seeing_limited_frame = np.zeros((image_size[0], image_size[1]), dtype=np.float)
-    for jj, _file in enumerate(_files_list):
-        # print(jj)
-        with fits.open(os.path.join(_path_in, _file)) as _hdulist:
-            # frames_before = sum(n_frames_files[:jj])
-            for ii, _ in enumerate(_hdulist):
-                summed_seeing_limited_frame += _hdulist[ii].data
-                # print(ii + frames_before, '\n', _data[ii, :, :])
+        # Stack to seeing-limited image
         if _v:
-            bar.update(iterations=files_sizes[jj])
+            bar = pyprind.ProgBar(sum(files_sizes), stream=1, title='Stacking to seeing-limited image')
+        summed_seeing_limited_frame = np.zeros((image_size[0], image_size[1]), dtype=np.float)
+        for jj, _file in enumerate(_files_list):
+            # print(jj)
+            with fits.open(os.path.join(_path_in, _file)) as _hdulist:
+                # frames_before = sum(n_frames_files[:jj])
+                for ii, _ in enumerate(_hdulist):
+                    summed_seeing_limited_frame += _hdulist[ii].data
+                    # print(ii + frames_before, '\n', _data[ii, :, :])
+            if _v:
+                bar.update(iterations=files_sizes[jj])
 
-    # load darks and flats
-    if _v:
-        print('Loading darks and flats')
-    dark, flat = load_darks_and_flats(_path_calib, _mode, _filt)
-    if dark is None or flat is None:
-        raise Exception('Could not open darks and flats')
-
-    if _v:
-        print('Total number of frames to be registered: {:d}'.format(numFrames))
-
-    # Sum of all (properly shifted) frames (with not too large a shift and chi**2)
-    summed_frame = np.zeros_like(summed_seeing_limited_frame, dtype=np.float)
-
-    # Pick a frame to align to
-    # try the seeing-limited sum of all frames:
-    im1 = deepcopy(summed_seeing_limited_frame)
-
-    if _interactive_plot:
-        plt.axes([0., 0., 1., 1.])
-        plt.ion()
-        plt.grid('off')
-        plt.axis('off')
-        plt.show()
-
-    im1 = calibrate_frame(im1, dark, flat, _iter=3)
-    im1 = gaussian_filter(im1, sigma=5)  # 5, 10
-    im1 = im1[cy0 - _win: cy0 + _win, cx0 - _win: cx0 + _win]
-
-    # frame_num x y ex ey:
-    shifts = np.zeros((numFrames, 5))
-
-    # set up frequency grid for shift2d
-    ny, nx = image_size
-    xfreq_0 = np.fft.fftfreq(nx)[np.newaxis, :]
-    yfreq_0 = np.fft.fftfreq(ny)[:, np.newaxis]
-
-    fftn, ifftn = image_registration.fft_tools.fast_ffts.get_ffts(nthreads=_nthreads,
-                                                                  use_numpy_fft=False)
-
-    if _v:
-        bar = pyprind.ProgBar(numFrames, stream=1, title='Registering frames')
-
-    fn = 0
-    for jj, _file in enumerate(_files_list):
-        with fits.open(os.path.join(_path_in, _file)) as _hdulist:
-            # frames_before = sum(n_frames_files[:jj])
-            for ii, _ in enumerate(_hdulist):
-                img = np.array(_hdulist[ii].data, dtype=np.float)  # do proper casting
-
-                # tic = _time()
-                img = calibrate_frame(img, dark, flat, _iter=3)
-                # print(_time()-tic)
-
-                # tic = _time()
-                img_comp = gaussian_filter(img, sigma=5)
-                img_comp = img_comp[cy0 - _win: cy0 + _win, cx0 - _win: cx0 + _win]
-                # print(_time() - tic)
-
-                # tic = _time()
-                # chi2_shift -> chi2_shift_iterzoom
-                dy2, dx2, edy2, edx2 = image_registration.chi2_shift(im1, img_comp, nthreads=_nthreads,
-                                                                     upsample_factor='auto', zeromean=True)
-                # print(dx2, dy2, edx2, edy2)
-                # print(_time() - tic)
-                # tic = _time()
-                # note the order of dx and dy in shift2d vs shiftnd!!!
-                # img = image_registration.fft_tools.shiftnd(img, (-dx2, -dy2),
-                #                                            nthreads=_nthreads, use_numpy_fft=False)
-                img = shift2d(fftn, ifftn, img, -dy2, -dx2, xfreq_0, yfreq_0)
-                # print(_time() - tic, '\n')
-
-                # if np.sqrt(dx2 ** 2 + dy2 ** 2) > 0.8 * _win \
-                #     or np.sqrt(edx2 ** 2 + edy2 ** 2) > 0.5:
-                if np.sqrt(dx2 ** 2 + dy2 ** 2) > 0.8 * _win:
-                    # skip frames with too large a shift
-                    pass
-                    # print(' # {:d} shift was too big: '.format(i),
-                    #       np.sqrt(shifts[i, 1] ** 2 + shifts[i, 2] ** 2), shifts[i, 1], shifts[i, 2])
-                else:
-                    # otherwise store the shift values and add to the 'integrated' image
-                    shifts[fn, :] = [fn, -dx2, -dy2, edx2, edy2]
-                    summed_frame += img
-
-                if _interactive_plot:
-                    plt.imshow(summed_frame, cmap='gray', origin='lower', interpolation='nearest')
-                    plt.draw()
-                    plt.pause(0.001)
-
-                if _v:
-                    bar.update()
-
-                # increment frame number
-                fn += 1
-
-    if _interactive_plot:
-        raw_input('press any key to close plot')
-
-    if _v:
-        print('Largest move was {:.2f} pixels for frame {:d}'.
-              format(np.max(np.sqrt(shifts[:, 1] ** 2 + shifts[:, 2] ** 2)),
-                np.argmax(np.sqrt(shifts[:, 1] ** 2 + shifts[:, 2] ** 2))))
-
-    # output
-    if not os.path.exists(os.path.join(_path_out)):
-        os.makedirs(os.path.join(_path_out))
-
-    # get original fits header for output
-    with fits.open(os.path.join(_path_in, _files[0])) as _hdulist:
-        # header:
-        header = _hdulist[0].header
-
-    export_fits(os.path.join(_path_out, _obs + '_simple_sum.fits'),
-                summed_seeing_limited_frame, header)
-
-    export_fits(os.path.join(_path_out, _obs + '_summed.fits'),
-                summed_frame, header)
-
-    cyf, cxf = image_center(_path=_path_out, _fits_name=_obs + '_summed.fits',
-                            _x0=cx0, _y0=cy0, _win=_win)
-    print('Output lock position:', cxf, cyf)
-    with open(os.path.join(_path_out, 'shifts.txt'), 'w') as _f:
-        _f.write('# lock position: {:d} {:d}\n'.format(cxf, cyf))
-        _f.write('# frame_number x_shift[pix] y_shift[pix] ex_shift[pix] ey_shift[pix]\n')
-        for _i, _x, _y, _ex, _ey in shifts:
-            _f.write('{:.0f} {:.3f} {:.3f} {:.3f} {:.3f}\n'.format(_i, _x, _y, _ex, _ey))
-
-    # # Set Vars for Estimated-background and Resolution Masks
-    # R = 85  # inner cutout radius
-    # w = 50  # annular BKGD width
-    #
-    # # Find Annular-cutout BKGD around Star and Subtract for Final Image
-    # sky_BKGD = findAverageSkyBKGD(summed_frame, cyf, cxf, R, w)
-    # sky_corrected_summed_frame = summed_frame - sky_BKGD
-    # # sky_corrected_summed_frame = summed_frame  # - sky_BKGD
-    #
-    # export_fits(end_path + name + '_summed.fits', sky_corrected_summed_frame)
-    # os.remove(start_path + name + '_all.fits')
-
-    # clean up if successfully finished
-    if _remove_tmp:
+        # load darks and flats
         if _v:
-            print('Removing unbzipped fits-files')
-        _files_list = _files if not isinstance(_files, str) else [_files]
-        for _file in _files_list:
-            os.remove(os.path.join(_path_in, _file))
+            print('Loading darks and flats')
+        dark, flat = load_darks_and_flats(_path_calib, _mode, _filt)
+        if dark is None or flat is None:
+            raise Exception('Could not open darks and flats')
+
+        if _v:
+            print('Total number of frames to be registered: {:d}'.format(numFrames))
+
+        # Sum of all (properly shifted) frames (with not too large a shift and chi**2)
+        summed_frame = np.zeros_like(summed_seeing_limited_frame, dtype=np.float)
+
+        # Pick a frame to align to
+        # try the seeing-limited sum of all frames:
+        im1 = deepcopy(summed_seeing_limited_frame)
+
+        if _interactive_plot:
+            plt.axes([0., 0., 1., 1.])
+            plt.ion()
+            plt.grid('off')
+            plt.axis('off')
+            plt.show()
+
+        im1 = calibrate_frame(im1, dark, flat, _iter=3)
+        im1 = gaussian_filter(im1, sigma=5)  # 5, 10
+        im1 = im1[cy0 - _win: cy0 + _win, cx0 - _win: cx0 + _win]
+
+        # frame_num x y ex ey:
+        shifts = np.zeros((numFrames, 5))
+
+        # set up frequency grid for shift2d
+        ny, nx = image_size
+        xfreq_0 = np.fft.fftfreq(nx)[np.newaxis, :]
+        yfreq_0 = np.fft.fftfreq(ny)[:, np.newaxis]
+
+        fftn, ifftn = image_registration.fft_tools.fast_ffts.get_ffts(nthreads=_nthreads,
+                                                                      use_numpy_fft=False)
+
+        if _v:
+            bar = pyprind.ProgBar(numFrames, stream=1, title='Registering frames')
+
+        fn = 0
+        for jj, _file in enumerate(_files_list):
+            with fits.open(os.path.join(_path_in, _file)) as _hdulist:
+                # frames_before = sum(n_frames_files[:jj])
+                for ii, _ in enumerate(_hdulist):
+                    img = np.array(_hdulist[ii].data, dtype=np.float)  # do proper casting
+
+                    # tic = _time()
+                    img = calibrate_frame(img, dark, flat, _iter=3)
+                    # print(_time()-tic)
+
+                    # tic = _time()
+                    img_comp = gaussian_filter(img, sigma=5)
+                    img_comp = img_comp[cy0 - _win: cy0 + _win, cx0 - _win: cx0 + _win]
+                    # print(_time() - tic)
+
+                    # tic = _time()
+                    # chi2_shift -> chi2_shift_iterzoom
+                    dy2, dx2, edy2, edx2 = image_registration.chi2_shift(im1, img_comp, nthreads=_nthreads,
+                                                                         upsample_factor='auto', zeromean=True)
+                    # print(dx2, dy2, edx2, edy2)
+                    # print(_time() - tic)
+                    # tic = _time()
+                    # note the order of dx and dy in shift2d vs shiftnd!!!
+                    # img = image_registration.fft_tools.shiftnd(img, (-dx2, -dy2),
+                    #                                            nthreads=_nthreads, use_numpy_fft=False)
+                    img = shift2d(fftn, ifftn, img, -dy2, -dx2, xfreq_0, yfreq_0)
+                    # print(_time() - tic, '\n')
+
+                    # if np.sqrt(dx2 ** 2 + dy2 ** 2) > 0.8 * _win \
+                    #     or np.sqrt(edx2 ** 2 + edy2 ** 2) > 0.5:
+                    if np.sqrt(dx2 ** 2 + dy2 ** 2) > 0.8 * _win:
+                        # skip frames with too large a shift
+                        pass
+                        # print(' # {:d} shift was too big: '.format(i),
+                        #       np.sqrt(shifts[i, 1] ** 2 + shifts[i, 2] ** 2), shifts[i, 1], shifts[i, 2])
+                    else:
+                        # otherwise store the shift values and add to the 'integrated' image
+                        shifts[fn, :] = [fn, -dx2, -dy2, edx2, edy2]
+                        summed_frame += img
+
+                    if _interactive_plot:
+                        plt.imshow(summed_frame, cmap='gray', origin='lower', interpolation='nearest')
+                        plt.draw()
+                        plt.pause(0.001)
+
+                    if _v:
+                        bar.update()
+
+                    # increment frame number
+                    fn += 1
+
+        if _interactive_plot:
+            raw_input('press any key to close plot')
+
+        if _v:
+            print('Largest move was {:.2f} pixels for frame {:d}'.
+                  format(np.max(np.sqrt(shifts[:, 1] ** 2 + shifts[:, 2] ** 2)),
+                    np.argmax(np.sqrt(shifts[:, 1] ** 2 + shifts[:, 2] ** 2))))
+
+        # output
+        if not os.path.exists(os.path.join(_path_out)):
+            os.makedirs(os.path.join(_path_out))
+
+        # get original fits header for output
+        with fits.open(os.path.join(_path_in, _files[0])) as _hdulist:
+            # header:
+            header = _hdulist[0].header
+
+        export_fits(os.path.join(_path_out, _obs + '_simple_sum.fits'),
+                    summed_seeing_limited_frame, header)
+
+        export_fits(os.path.join(_path_out, _obs + '_summed.fits'),
+                    summed_frame, header)
+
+        cyf, cxf = image_center(_path=_path_out, _fits_name=_obs + '_summed.fits',
+                                _x0=cx0, _y0=cy0, _win=_win)
+        print('Output lock position:', cxf, cyf)
+        with open(os.path.join(_path_out, 'shifts.txt'), 'w') as _f:
+            _f.write('# lock position: {:d} {:d}\n'.format(cxf, cyf))
+            _f.write('# frame_number x_shift[pix] y_shift[pix] ex_shift[pix] ey_shift[pix]\n')
+            for _i, _x, _y, _ex, _ey in shifts:
+                _f.write('{:.0f} {:.3f} {:.3f} {:.3f} {:.3f}\n'.format(_i, _x, _y, _ex, _ey))
+
+        # # Set Vars for Estimated-background and Resolution Masks
+        # R = 85  # inner cutout radius
+        # w = 50  # annular BKGD width
+        #
+        # # Find Annular-cutout BKGD around Star and Subtract for Final Image
+        # sky_BKGD = findAverageSkyBKGD(summed_frame, cyf, cxf, R, w)
+        # sky_corrected_summed_frame = summed_frame - sky_BKGD
+        # # sky_corrected_summed_frame = summed_frame  # - sky_BKGD
+        #
+        # export_fits(end_path + name + '_summed.fits', sky_corrected_summed_frame)
+        # os.remove(start_path + name + '_all.fits')
+
+    finally:
+        # clean up if successfully finished
+        if _remove_tmp:
+            if _v:
+                print('Removing unbzipped fits-files')
+            _files_list = _files if not isinstance(_files, str) else [_files]
+            for _file in _files_list:
+                os.remove(os.path.join(_path_in, _file))
 
 
 def scale_image(image, correction='local'):
@@ -1748,6 +1749,7 @@ def get_config(_abs_path=None, _config_file='config.ini'):
     _config['mongo_collection_obs'] = config.get('Database', 'collection_obs')
     _config['mongo_collection_aux'] = config.get('Database', 'collection_aux')
     _config['mongo_collection_pwd'] = config.get('Database', 'collection_pwd')
+    _config['mongo_collection_weather'] = config.get('Database', 'collection_weather')
     _config['mongo_user'] = config.get('Database', 'user')
     _config['mongo_pwd'] = config.get('Database', 'pwd')
 
@@ -1780,8 +1782,8 @@ def connect_to_db(_config, _logger=None):
     :return:
     """
     try:
-        client = MongoClient(host=_config['mongo_host'], port=_config['mongo_port'])
-        _db = client[_config['mongo_db']]
+        _client = MongoClient(host=_config['mongo_host'], port=_config['mongo_port'])
+        _db = _client[_config['mongo_db']]
         if _logger is not None:
             _logger.debug('Connecting to the Robo-AO database at {:s}:{:d}'.
                           format(_config['mongo_host'], _config['mongo_port']))
@@ -1817,6 +1819,28 @@ def connect_to_db(_config, _logger=None):
             _logger.error('Failed to use a collection {:s} with obs data in the database'.
                           format(_config['mongo_collection_obs']))
     try:
+        _coll_aux = _db[_config['mongo_collection_aux']]
+        if _logger is not None:
+            _logger.debug('Using collection {:s} with aux data in the database'.
+                          format(_config['mongo_collection_aux']))
+    except Exception as _e:
+        _coll_aux = None
+        if _logger is not None:
+            _logger.error(_e)
+            _logger.error('Failed to use a collection {:s} with aux data in the database'.
+                          format(_config['mongo_collection_aux']))
+    try:
+        _coll_weather = _db[_config['mongo_collection_weather']]
+        if _logger is not None:
+            _logger.debug('Using collection {:s} with KP weather data in the database'.
+                          format(_config['mongo_collection_weather']))
+    except Exception as _e:
+        _coll_weather = None
+        if _logger is not None:
+            _logger.error(_e)
+            _logger.error('Failed to use a collection {:s} with KP weather data in the database'.
+                          format(_config['mongo_collection_weather']))
+    try:
         _coll_usr = _db[_config['mongo_collection_pwd']]
         # cursor = coll.find()
         # for doc in cursor:
@@ -1851,7 +1875,7 @@ def connect_to_db(_config, _logger=None):
         _logger.debug('Successfully connected to the Robo-AO database at {:s}:{:d}'.
                       format(_config['mongo_host'], _config['mongo_port']))
 
-    return _db, _coll, _program_pi
+    return _client, _db, _coll, _coll_aux, _coll_weather, _program_pi
 
 
 def get_fits_header(fits_file):
@@ -2261,7 +2285,7 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
             if _pipe == 'automated':
                 # check if actually processed through pipeline
                 path_obs_list = [os.path.join(_config['path_pipe'], _date, tag, _obs) for
-                                 tag in ('high_flux', 'faint', 'zero_flux', 'failed') if
+                                 tag in ('high_flux', 'faint', 'zero_flux') if
                                  os.path.exists(os.path.join(_config['path_pipe'], _date, tag, _obs))]
                 _fits_name = '100p.fits'
                 _drizzled = True
@@ -2408,7 +2432,7 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe='automated'):
             if _pipe == 'automated':
                 # check if actually processed through pipeline
                 path_obs_list = [os.path.join(_config['path_pipe'], _date, tag, _obs) for
-                                 tag in ('high_flux', 'faint', 'zero_flux', 'failed') if
+                                 tag in ('high_flux', 'faint', 'zero_flux') if
                                  os.path.exists(os.path.join(_config['path_pipe'], _date, tag, _obs))]
                 _fits_name = '100p.fits'
                 _drizzled = True
@@ -2519,8 +2543,12 @@ def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automate
 
                 # what's in a fits name?
                 if _pipe == 'automated':
-                    f_fits = os.path.join(path_obs, '100p.fits')
-                    _method = 'pipeline_settings.txt'
+                    if 'failed' not in path_obs:
+                        f_fits = os.path.join(path_obs, '100p.fits')
+                        _method = 'pipeline_settings.txt'
+                    else:
+                        f_fits = os.path.join(path_obs, 'sum.fits')
+                        _method = 'sextractor'
                 elif _pipe == 'faint':
                     f_fits = os.path.join(path_obs, '{:s}_summed.fits'.format(_obs))
                     _method = 'shifts.txt'
@@ -2814,6 +2842,23 @@ def check_distributed(_config, _logger, _coll, _select, _date, _obs, _n_days=1.0
     return True
 
 
+def check_aux(_config, _logger, _coll, _coll_aux, _date):
+    try:
+        # TODO: check/do seeing
+        # TODO: make summary Strehl plot
+        # TODO: make summary contrast curve plot
+        # TODO: check/insert weather data into the database
+        pass
+
+    except Exception as _e:
+        print(_e)
+        traceback.print_exc()
+        _logger.error('Summary check failed for {:s}: {:s}'.format(_date, _e))
+        return False
+
+    return True
+
+
 def prepare_for_distribution(_path_pipe, _path_archive, _obs):
     """
         Create an archive with all the processed data
@@ -2985,7 +3030,7 @@ if __name__ == '__main__':
 
             ''' Connect to the mongodb database '''
             try:
-                db, coll, program_pi = connect_to_db(_config=config, _logger=logger)
+                client, db, coll, coll_aux, coll_weather, program_pi = connect_to_db(_config=config, _logger=logger)
                 if None in (db, coll, program_pi):
                     raise Exception('Failed to connect to the database')
             except Exception as e:
@@ -3101,7 +3146,7 @@ if __name__ == '__main__':
                 # TODO: query database for all contrast curves and Strehls [+seeing - lower priority]
                 # TODO: make joint plots to display on the website
                 # TODO: do that once a day or so
-                status_ok = check_summary(_config=config, _logger=logger, _coll=coll, _date=date)
+                status_ok = check_aux(_config=config, _logger=logger, _coll=coll, _coll_aux=coll_aux, _date=date)
                 if not status_ok:
                     logger.error('Checking summaries failed for {:s}'.format(date))
 
@@ -3116,7 +3161,11 @@ if __name__ == '__main__':
         except KeyboardInterrupt:
             logger.error('User exited the archiver.')
             logger.info('Finished archiving cycle.')
-            break
+            # try disconnecting from the database
+            try:
+                client.close()
+            finally:
+                break
 
         except Exception as e:
             print(e)
@@ -3125,4 +3174,8 @@ if __name__ == '__main__':
             logger.error('Unknown error, exiting. Please check the logs')
             # TODO: send out an email with an alert
             logger.info('Finished archiving cycle.')
-            break
+            # try disconnecting from the database
+            try:
+                client.close()
+            finally:
+                break
