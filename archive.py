@@ -2866,93 +2866,122 @@ def check_distributed(_config, _logger, _coll, _select, _date, _obs, _n_days=1.0
     return True
 
 
-def check_aux(_config, _logger, _coll, _coll_aux, _date):
+def check_aux(_config, _logger, _coll, _coll_aux, _date, _n_days=1.5):
     try:
+        _select = _coll_aux.find_one({'_id': _date})
         # TODO: check/do seeing
         # TODO: make summary Strehl plot
         # make summary contrast curve plot
-        try:
-            _logger.debug('Trying to generate contrast curve summary for {:s}'.format(_date))
-            print('Generating contrast curve summary for {:s}'.format(_date))
-            # query the database:
-            day = datetime.datetime.strptime(_date, '%Y%m%d')
+        last_modified = _select['contrast_curve']['last_modified'].replace(tzinfo=pytz.utc)
+        if not _select['contrast_curve']['done'] or \
+                    (utc_now() - last_modified).total_seconds() / 86400.0 > _n_days:
+            try:
+                _logger.debug('Trying to generate contrast curve summary for {:s}'.format(_date))
+                print('Generating contrast curve summary for {:s}'.format(_date))
+                # query the database:
+                day = datetime.datetime.strptime(_date, '%Y%m%d')
 
-            cursor = _coll.find({'date_utc': {'$gt': day, '$lt': day + datetime.timedelta(days=1)}})
-            _pipe = 'automated'
-            contrast_curves = np.array([np.array(_obs['pipelined'][_pipe]['pca']['contrast_curve']) for _obs in cursor
-                                        if _obs['pipelined'][_pipe]['pca']['status']['done']])
+                cursor = _coll.find({'date_utc': {'$gt': day, '$lt': day + datetime.timedelta(days=1)}})
+                _pipe = 'automated'
+                contrast_curves = np.array([np.array(_obs['pipelined'][_pipe]['pca']['contrast_curve'])
+                                            for _obs in cursor
+                                            if _obs['pipelined'][_pipe]['pca']['status']['done']])
 
-            cursor = _coll.find({'date_utc': {'$gt': day, '$lt': day + datetime.timedelta(days=1)}})
-            _pipe = 'faint'
-            contrast_curves_faint = np.array([np.array(_obs['pipelined'][_pipe]['pca']['contrast_curve'])
-                                              for _obs in cursor
-                                              if _obs['pipelined'][_pipe]['pca']['status']['done']])
+                cursor = _coll.find({'date_utc': {'$gt': day, '$lt': day + datetime.timedelta(days=1)}})
+                _pipe = 'faint'
+                contrast_curves_faint = np.array([np.array(_obs['pipelined'][_pipe]['pca']['contrast_curve'])
+                                                  for _obs in cursor
+                                                  if _obs['pipelined'][_pipe]['pca']['status']['done']])
 
-            if len(contrast_curves) > 0 or len(contrast_curves_faint) > 0:
-                _logger.info('Generating contrast curve summary for {:s}'.format(_date))
-                fig = plt.figure('Contrast curve', figsize=(8, 3.5), dpi=200)
-                ax = fig.add_subplot(111)
+                if len(contrast_curves) > 0 or len(contrast_curves_faint) > 0:
+                    _logger.info('Generating contrast curve summary for {:s}'.format(_date))
+                    fig = plt.figure('Contrast curve', figsize=(8, 3.5), dpi=200)
+                    ax = fig.add_subplot(111)
 
-                # add to plot:
-                sep_mean = np.linspace(0.2, 1.45, num=100)
+                    # add to plot:
+                    sep_mean = np.linspace(0.2, 1.45, num=100)
 
-                # lucky-pipelined
-                cc_mean = []
-                for contrast_curve in contrast_curves:
-                    ax.plot(contrast_curve[:, 0], contrast_curve[:, 1], '-', c=plt.cm.Greys(0.27), linewidth=1.1)
-                    cc_mean.append(np.interp(sep_mean, contrast_curve[:, 0], contrast_curve[:, 1]))
-                if len(cc_mean) > 0:
-                    # add median to plot:
-                    ax.plot(sep_mean, np.median(np.array(cc_mean).T, axis=1), '-',
-                            c=plt.cm.Oranges(0.7), linewidth=2.1)
+                    # lucky-pipelined
+                    cc_mean = []
+                    for contrast_curve in contrast_curves:
+                        ax.plot(contrast_curve[:, 0], contrast_curve[:, 1], '-', c=plt.cm.Greys(0.27), linewidth=1.1)
+                        cc_mean.append(np.interp(sep_mean, contrast_curve[:, 0], contrast_curve[:, 1]))
+                    if len(cc_mean) > 0:
+                        # add median to plot:
+                        ax.plot(sep_mean, np.median(np.array(cc_mean).T, axis=1), '-',
+                                c=plt.cm.Oranges(0.7), linewidth=2.1)
 
-                # faint-pipelined:
-                cc_mean = []
-                for contrast_curve in contrast_curves_faint:
-                    ax.plot(contrast_curve[:, 0], contrast_curve[:, 1], '--', c=plt.cm.Blues(0.27), linewidth=1.1)
-                    cc_mean.append(np.interp(sep_mean, contrast_curve[:, 0], contrast_curve[:, 1]))
+                    # faint-pipelined:
+                    cc_mean = []
+                    for contrast_curve in contrast_curves_faint:
+                        ax.plot(contrast_curve[:, 0], contrast_curve[:, 1], '--', c=plt.cm.Blues(0.27), linewidth=1.1)
+                        cc_mean.append(np.interp(sep_mean, contrast_curve[:, 0], contrast_curve[:, 1]))
 
-                if len(cc_mean) > 0:
-                    # add median to plot:
-                    ax.plot(sep_mean, np.median(np.array(cc_mean).T, axis=1), '--',
-                            c=plt.cm.Oranges(0.5), linewidth=2.1)
-                # # add median to plot:
-                # ax.plot(sep_mean, np.median(np.array(cc_mean).T, axis=1), '-', c=plt.cm.Oranges(0.7), linewidth=2.5)
+                    if len(cc_mean) > 0:
+                        # add median to plot:
+                        ax.plot(sep_mean, np.median(np.array(cc_mean).T, axis=1), '--',
+                                c=plt.cm.Oranges(0.5), linewidth=2.1)
+                    # # add median to plot:
+                    # ax.plot(sep_mean, np.median(np.array(cc_mean).T, axis=1), '-',
+                    #         c=plt.cm.Oranges(0.7), linewidth=2.5)
 
-                # beautify and save:
-                ax.set_xlim([0.2, 1.45])
-                ax.set_xlabel('Separation [arcseconds]')  # , fontsize=18)
-                ax.set_ylabel('Contrast [$\Delta$mag]')  # , fontsize=18)
-                ax.set_ylim([0, 8])
-                ax.set_ylim(ax.get_ylim()[::-1])
-                ax.grid(linewidth=0.5)
+                    # beautify and save:
+                    ax.set_xlim([0.2, 1.45])
+                    ax.set_xlabel('Separation [arcseconds]')  # , fontsize=18)
+                    ax.set_ylabel('Contrast [$\Delta$mag]')  # , fontsize=18)
+                    ax.set_ylim([0, 8])
+                    ax.set_ylim(ax.get_ylim()[::-1])
+                    ax.grid(linewidth=0.5)
 
-                # custom legend:
-                lucky_line = mlines.Line2D([], [], color=plt.cm.Greys(0.27), linestyle='-',
-                                           label='Individual lucky contrast curves')
-                faint_line = mlines.Line2D([], [], color=plt.cm.Blues(0.27), linestyle='--',
-                                           label='Individual faint contrast curves')
-                lucky_line_median = mlines.Line2D([], [], color=plt.cm.Oranges(0.7), linestyle='-',
-                                                  label='Median lucky contrast curve')
-                faint_line_median = mlines.Line2D([], [], color=plt.cm.Oranges(0.5), linestyle='--',
-                                                  markersize=15, label='Individual faint contrast curve')
-                plt.legend(loc='best', handles=[lucky_line, faint_line, lucky_line_median, faint_line_median],
-                           prop = {'size': 6})
+                    # custom legend:
+                    lucky_line = mlines.Line2D([], [], color=plt.cm.Greys(0.27), linestyle='-',
+                                               label='Individual lucky contrast curves')
+                    faint_line = mlines.Line2D([], [], color=plt.cm.Blues(0.27), linestyle='--',
+                                               label='Individual faint contrast curves')
+                    lucky_line_median = mlines.Line2D([], [], color=plt.cm.Oranges(0.7), linestyle='-',
+                                                      label='Median lucky contrast curve')
+                    faint_line_median = mlines.Line2D([], [], color=plt.cm.Oranges(0.5), linestyle='--',
+                                                      markersize=15, label='Individual faint contrast curve')
+                    plt.legend(loc='best', handles=[lucky_line, faint_line, lucky_line_median, faint_line_median],
+                               prop={'size': 6})
 
-                plt.tight_layout()
+                    plt.tight_layout()
 
-                # dump results to disk
-                _path_out = os.path.join(_config['path_archive'], _date, 'summary')
-                if not (os.path.exists(_path_out)):
-                    os.makedirs(_path_out)
+                    # dump results to disk
+                    _path_out = os.path.join(_config['path_archive'], _date, 'summary')
+                    if not (os.path.exists(_path_out)):
+                        os.makedirs(_path_out)
 
-                fig.savefig(os.path.join(_path_out, 'contrast_curve.{:s}.png'.format(_date)), dpi=200)
-        except Exception as _e:
-            print(_e)
-            traceback.print_exc()
-            _logger.error('Summary contrast curve generation failed for {:s}: {:s}'.format(_date, _e))
+                    fig.savefig(os.path.join(_path_out, 'contrast_curve.{:s}.png'.format(_date)), dpi=200)
 
-        # TODO: check/insert weather data into the database
+                    _coll_aux.update_one(
+                        {'_id': _date},
+                        {
+                            '$set': {
+                                'contrast_curve.done': True,
+                                'contrast_curve.last_modified': utc_now()
+                            }
+                        }
+                    )
+                    _logger.info('Generated summary contrast curve for {:s}'.format(_date))
+
+            except Exception as _e:
+                print(_e)
+                traceback.print_exc()
+                try:
+                    _coll.update_one(
+                        {'_id': _date},
+                        {
+                            '$set': {
+                                'contrast_curve.done': False,
+                                'contrast_curve.last_modified': utc_now()
+                            }
+                        }
+                    )
+                finally:
+                    _logger.error('Summary contrast curve generation failed for {:s}: {:s}'.format(_date, _e))
+
+        # TODO: check/insert weather data into the weather_kp? database
         pass
 
     except Exception as _e:
@@ -3248,6 +3277,16 @@ if __name__ == '__main__':
                     if not status_ok:
                         logger.error('Checking failed if distributed: {:s}'.format(obs))
 
+                ''' auxiliary (summary) data '''
+                # look up entry in the database:
+                select = coll_aux.find_one({'_id': date})
+                # if entry not in database, create empty one and populate it
+                if select is None:
+                    # insert date into aux database:
+                    result = coll_aux.insert_one({'_id': date,
+                                                  'seeing': {'done': False, 'last_modified': utc_now()},
+                                                  'contrast_curve': {'done': False, 'last_modified': utc_now()},
+                                                  'strehl': {'done': False, 'last_modified': utc_now()}})
                 # TODO: query database for all contrast curves and Strehls [+seeing - lower priority]
                 # TODO: make joint plots to display on the website
                 # TODO: do that once a day or so
