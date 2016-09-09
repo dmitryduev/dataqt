@@ -43,6 +43,7 @@ import image_registration
 from skimage import exposure, img_as_float
 from matplotlib.patches import Rectangle
 import matplotlib.lines as mlines
+import matplotlib.dates as mdates
 from matplotlib.offsetbox import AnchoredOffsetbox, AuxTransformBox, VPacker, TextArea
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -2870,11 +2871,155 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _n_days=1.5):
     try:
         _select = _coll_aux.find_one({'_id': _date})
         # TODO: check/do seeing
-        # TODO: make summary Strehl plot
-        # make summary contrast curve plot
+
+        ''' make summary Strehl plot '''
+        last_modified = _select['strehl']['last_modified'].replace(tzinfo=pytz.utc)
+        if not _select['strehl']['done'] or (utc_now() - last_modified).total_seconds() / 86400.0 > _n_days:
+            try:
+                _logger.debug('Trying to generate summary Strehl plot for {:s}'.format(_date))
+                print('Generating summary Strehl plot for {:s}'.format(_date))
+                # query the database:
+                day = datetime.datetime.strptime(_date, '%Y%m%d')
+
+                _pipe = 'automated'
+                cursor = _coll.find({'date_utc': {'$gt': day, '$lt': day + datetime.timedelta(days=1)}})
+                SR_good_lucky = np.array([[_obs['date_utc'], _obs['pipelined'][_pipe]['strehl']['ratio_percent']]
+                                          for _obs in cursor
+                                          if _obs['pipelined'][_pipe]['strehl']['status']['done'] and
+                                          _obs['pipelined'][_pipe]['strehl']['flag'] == 'OK'])
+                cursor = _coll.find({'date_utc': {'$gt': day, '$lt': day + datetime.timedelta(days=1)}})
+                SR_notgood_lucky = np.array([[_obs['date_utc'], _obs['pipelined'][_pipe]['strehl']['ratio_percent']]
+                                             for _obs in cursor
+                                             if _obs['pipelined'][_pipe]['strehl']['status']['done'] and
+                                             _obs['pipelined'][_pipe]['strehl']['flag'] == 'BAD?'])
+
+                _pipe = 'faint'
+                cursor = _coll.find({'date_utc': {'$gt': day, '$lt': day + datetime.timedelta(days=1)}})
+                SR_good_faint = np.array([[_obs['date_utc'], _obs['pipelined'][_pipe]['strehl']['ratio_percent']]
+                                          for _obs in cursor
+                                          if _obs['pipelined'][_pipe]['strehl']['status']['done'] and
+                                          _obs['pipelined'][_pipe]['strehl']['flag'] == 'OK'])
+                cursor = _coll.find({'date_utc': {'$gt': day, '$lt': day + datetime.timedelta(days=1)}})
+                SR_notgood_faint = np.array([[_obs['date_utc'], _obs['pipelined'][_pipe]['strehl']['ratio_percent']]
+                                             for _obs in cursor
+                                             if _obs['pipelined'][_pipe]['strehl']['status']['done'] and
+                                             _obs['pipelined'][_pipe]['strehl']['flag'] == 'BAD?'])
+
+                if max(map(len, (SR_good_lucky, SR_notgood_lucky, SR_good_faint, SR_notgood_faint))) > 0:
+                    _logger.info('Generating summary Strehl plot for {:s}'.format(_date))
+
+                    fig = plt.figure('Strehls for {:s}'.format(_date), figsize=(7, 3.18), dpi=200)
+                    ax = fig.add_subplot(111)
+
+                    if len(SR_good_lucky) > 0:
+                        # sort by time stamps:
+                        SR_good = SR_good_lucky[SR_good_lucky[:, 0].argsort()]
+                        good = True
+                        SR_mean = np.mean(SR_good[:, 1])
+                        SR_std = np.std(SR_good[:, 1])
+                        SR_max = np.max(SR_good[:, 1])
+                        SR_min = np.min(SR_good[:, 1])
+
+                        ax.plot(SR_good[:, 0], SR_good[:, 1], 'o', color=plt.cm.Oranges(0.7), markersize=5)
+
+                        ax.axhline(y=SR_mean, linestyle='-', color=plt.cm.Blues(0.7), linewidth=1,
+                                   label='Lucky mean = ' + str(round(SR_mean, 2)) + '%')
+                        ax.axhline(y=SR_mean + SR_std, linestyle='--', color=plt.cm.Blues(0.7), linewidth=1,
+                                   label=r'Lucky $\sigma _{SR}$ = ' + str(round(SR_std, 2)) + '%')
+                        ax.axhline(y=SR_mean - SR_std, linestyle='--', color=plt.cm.Blues(0.7), linewidth=1)
+
+                    if len(SR_notgood_lucky) > 0:
+                        SR_notgood = SR_notgood_lucky[SR_notgood_lucky[:, 0].argsort()]
+                        ax.plot(SR_notgood[:, 0], SR_notgood[:, 1], 'o', color=plt.cm.Greys(0.35), markersize=5)
+
+                    if len(SR_good_faint) > 0:
+                        # sort by time stamps:
+                        SR_good = SR_good_faint[SR_good_faint[:, 0].argsort()]
+                        good = True
+                        SR_mean = np.mean(SR_good[:, 1])
+                        SR_std = np.std(SR_good[:, 1])
+                        SR_max = np.max(SR_good[:, 1])
+                        SR_min = np.min(SR_good[:, 1])
+
+                        ax.plot(SR_good[:, 0], SR_good[:, 1], 'o', color=plt.cm.Oranges(0.45), markersize=5)
+
+                        ax.axhline(y=SR_mean, linestyle='-', color=plt.cm.Blues(0.35), linewidth=1,
+                                   label='Faint mean = ' + str(round(SR_mean, 2)) + '%')
+                        ax.axhline(y=SR_mean + SR_std, linestyle='--', color=plt.cm.Blues(0.35), linewidth=1,
+                                   label=r'Faint $\sigma _{SR}$ = ' + str(round(SR_std, 2)) + '%')
+                        ax.axhline(y=SR_mean - SR_std, linestyle='--', color=plt.cm.Blues(0.35), linewidth=1)
+
+                    if len(SR_notgood_faint) > 0:
+                        SR_notgood = SR_notgood_faint[SR_notgood_faint[:, 0].argsort()]
+                        ax.plot(SR_notgood[:, 0], SR_notgood[:, 1], 'o', color=plt.cm.Blues(0.25), markersize=5)
+
+                    # ax.set_xlabel('Time, UTC')
+                    # xstart = np.min([SR_notgood[0, 0], SR_good[0, 0]]) - datetime.timedelta(minutes=15)
+                    # xstop = np.max([SR_notgood[-1, 0], SR_good[-1, 0]]) + datetime.timedelta(minutes=15)
+                    # ax.set_xlim([xstart, xstop])
+                    ax.set_ylabel('Strehl Ratio, %')
+                    # ax.legend(bbox_to_anchor=(1.35, 1), ncol=1, numpoints=1, fancybox=True)
+                    leg1 = ax.legend(loc=1, numpoints=1, fancybox=True, prop={'size': 6})
+                    ax.grid(linewidth=0.5)
+                    ax.margins(0.05, 0.2)
+
+                    myFmt = mdates.DateFormatter('%H:%M')
+                    ax.xaxis.set_major_formatter(myFmt)
+                    fig.autofmt_xdate()
+
+                    # custom legend:
+                    lucky_bad = mlines.Line2D([], [], markerfacecolor=plt.cm.Greys(0.35), marker='o',
+                                              markersize=3, linewidth=0, label='Bad lucky Strehls')
+                    faint_bad = mlines.Line2D([], [], markerfacecolor=plt.cm.Blues(0.25), marker='o',
+                                              markersize=3, linewidth=0, label='Bad faint Strehls')
+                    lucky_ok = mlines.Line2D([], [], markerfacecolor=plt.cm.Oranges(0.7), marker='o',
+                                             markersize=3, linewidth=0, label='OK lucky Strehls')
+                    faint_ok = mlines.Line2D([], [], markerfacecolor=plt.cm.Oranges(0.45), marker='o',
+                                             markersize=3, linewidth=0, label='OK faint Strehls')
+                    plt.legend(loc=2, handles=[lucky_bad, faint_bad, lucky_ok, faint_ok], prop={'size': 6})
+
+                    # add the first legend back to the plot
+                    ax.add_artist(leg1)
+
+                    plt.tight_layout()
+
+                    # dump results to disk
+                    _path_out = os.path.join(_config['path_archive'], _date, 'summary')
+                    if not (os.path.exists(_path_out)):
+                        os.makedirs(_path_out)
+
+                    fig.savefig(os.path.join(_path_out, 'strehl.{:s}.png'.format(_date)), dpi=200)
+
+                    _coll_aux.update_one(
+                        {'_id': _date},
+                        {
+                            '$set': {
+                                'strehl.done': True,
+                                'strehl.last_modified': utc_now()
+                            }
+                        }
+                    )
+                    _logger.info('Generated summary Strehl plot for {:s}'.format(_date))
+
+            except Exception as _e:
+                print(_e)
+                traceback.print_exc()
+                try:
+                    _coll.update_one(
+                        {'_id': _date},
+                        {
+                            '$set': {
+                                'strehl.done': False,
+                                'strehl.last_modified': utc_now()
+                            }
+                        }
+                    )
+                finally:
+                    _logger.error('Summary Strehl plot generation failed for {:s}: {:s}'.format(_date, _e))
+
+        ''' make summary contrast curve plot '''
         last_modified = _select['contrast_curve']['last_modified'].replace(tzinfo=pytz.utc)
-        if not _select['contrast_curve']['done'] or \
-                    (utc_now() - last_modified).total_seconds() / 86400.0 > _n_days:
+        if not _select['contrast_curve']['done'] or (utc_now() - last_modified).total_seconds() / 86400.0 > _n_days:
             try:
                 _logger.debug('Trying to generate contrast curve summary for {:s}'.format(_date))
                 print('Generating contrast curve summary for {:s}'.format(_date))
