@@ -39,6 +39,10 @@ import subprocess
 from scipy.stats import sigmaclip
 from scipy.ndimage import gaussian_filter
 import image_registration
+import functools
+from sklearn import linear_model
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.pipeline import make_pipeline
 
 from skimage import exposure, img_as_float
 from matplotlib.patches import Rectangle
@@ -96,6 +100,262 @@ class AnchoredSizeBar(AnchoredOffsetbox):
                                    child=self._box,
                                    prop=prop,
                                    frameon=frameon)
+
+
+def memoize(f):
+    """ Minimalistic memoization decorator.
+    http://code.activestate.com/recipes/577219-minimalistic-memoization/ """
+
+    cache = {}
+
+    @functools.wraps(f)
+    def memf(*x):
+        if x not in cache:
+            cache[x] = f(*x)
+        return cache[x]
+    return memf
+
+
+class Star(object):
+    """ Define a star by its coordinates and modelled FWHM
+        Given the coordinates of a star within a 2D array, fit a model to the star and determine its
+        Full Width at Half Maximum (FWHM).The star will be modelled using astropy.modelling. Currently
+        accepted models are: 'Gaussian2D', 'Moffat2D'
+    """
+
+    _GAUSSIAN2D = 'Gaussian2D'
+    _MOFFAT2D = 'Moffat2D'
+    # _MODELS = set([_GAUSSIAN2D, _MOFFAT2D])
+
+    def __init__(self, x0, y0, data, model_type=_GAUSSIAN2D, box=100, fow_x=36, out_path='./'):
+        """ Instantiation method for the class Star.
+        The 2D array in which the star is located (data), together with the pixel coordinates (x0,y0) must be
+        passed to the instantiation method. .
+        """
+        self.x = x0
+        self.y = y0
+        self._box = box
+        # field of view in x in arcsec:
+        self._fow_x = fow_x
+        self._pix_x = data.shape[0]
+        self._XGrid, self._YGrid = self._grid_around_star(x0, y0, data)
+        self.data = data[self._XGrid, self._YGrid]
+        self.model_type = model_type
+        self.out_path = out_path
+
+    def model(self):
+        """ Fit a model to the star. """
+        return self._fit_model()
+
+    @property
+    def model_psf(self):
+        """ Return a modelled PSF for the given model  """
+        return self.model()(self._XGrid, self._YGrid)
+
+    @property
+    def fwhm(self):
+        """ Extract the FWHM from the model of the star.
+            The FWHM needs to be calculated for each model. For the Moffat, the FWHM is a function of the gamma and
+            alpha parameters (in other words, the scaling factor and the exponent of the expression), while for a
+            Gaussian FWHM = 2.3548 * sigma. Unfortunately, our case is a 2D Gaussian, so a compromise between the
+            two sigmas (sigma_x, sigma_y) must be reached. We will use the average of the two.
+        """
+        model_dict = dict(zip(self.model().param_names, self.model().parameters))
+        if self.model_type == self._MOFFAT2D:
+            gamma, alpha = [model_dict[ii] for ii in ("gamma_0", "alpha_0")]
+            FWHM = 2. * gamma * np.sqrt(2 ** (1/alpha) -1)
+        elif self.model_type == self._GAUSSIAN2D:
+            sigma_x, sigma_y = [model_dict[ii] for ii in ("x_stddev_0", "y_stddev_0")]
+            FWHM = 2.3548 * np.mean([sigma_x, sigma_y])
+        return FWHM
+
+    @memoize
+    def _fit_model(self):
+        fit_p = fitting.LevMarLSQFitter()
+        model = self._initialize_model()
+        _p = fit_p(model, self._XGrid, self._YGrid, self.data)
+        return _p
+
+    def _initialize_model(self):
+        """ Initialize a model with first guesses for the parameters.
+        The user can select between several astropy models, e.g., 'Gaussian2D', 'Moffat2D'. We will use the data to get
+        the first estimates of the parameters of each model. Finally, a Constant2D model is added to account for the
+        background or sky level around the star.
+        """
+        max_value = self.data.max()
+
+        if self.model_type == self._GAUSSIAN2D:
+            model = models.Gaussian2D(x_mean=self.x, y_mean=self.y, x_stddev=1, y_stddev=1)
+            model.amplitude = max_value
+
+            # Establish reasonable bounds for the fitted parameters
+            model.x_stddev.bounds = (0, self._box/4)
+            model.y_stddev.bounds = (0, self._box/4)
+            model.x_mean.bounds = (self.x - 5, self.x + 5)
+            model.y_mean.bounds = (self.y - 5, self.y + 5)
+
+        elif self.model_type == self._MOFFAT2D:
+            model = models.Moffat2D()
+            model.x_0 = self.x
+            model.y_0 = self.y
+            model.gamma = 2
+            model.alpha = 2
+            model.amplitude = max_value
+
+            #  Establish reasonable bounds for the fitted parameters
+            model.alpha.bounds = (1,6)
+            model.gamma.bounds = (0, self._box/4)
+            model.x_0.bounds = (self.x - 5, self.x + 5)
+            model.y_0.bounds = (self.y - 5, self.y + 5)
+
+        model += models.Const2D(self.fit_sky())
+        model.amplitude_1.fixed = True
+        return model
+
+    def fit_sky(self):
+        """ Fit the sky using a Ring2D model in which all parameters but the amplitude are fixed.
+        """
+        min_value = self.data.min()
+        ring_model = models.Ring2D(min_value, self.x, self.y, self._box * 0.4, width=self._box * 0.4)
+        ring_model.r_in.fixed = True
+        ring_model.width.fixed = True
+        ring_model.x_0.fixed = True
+        ring_model.y_0.fixed = True
+        fit_p = fitting.LevMarLSQFitter()
+        return fit_p(ring_model, self._XGrid, self._YGrid, self.data).amplitude
+
+    def _grid_around_star(self, x0, y0, data):
+        """ Build a grid of side 'box' centered in coordinates (x0,y0). """
+        lenx, leny = data.shape
+        xmin, xmax = max(x0-self._box/2, 0), min(x0+self._box/2+1, lenx-1)
+        ymin, ymax = max(y0-self._box/2, 0), min(y0+self._box/2+1, leny-1)
+        return np.mgrid[int(xmin):int(xmax), int(ymin):int(ymax)]
+
+    def plot_resulting_model(self, frame_name):
+        """ Make a plot showing data, model and residuals. """
+        data = self.data
+        model = self.model()(self._XGrid, self._YGrid)
+        _residuals = data - model
+
+        bar_len = data.shape[0] * 0.1
+        bar_len_str = '{:.1f}'.format(bar_len * self._fow_x / self._pix_x)
+
+        fig = plt.figure(figsize=(9, 3))
+        # data
+        ax1 = fig.add_subplot(1, 3, 1)
+        # print(sns.diverging_palette(10, 220, sep=80, n=7))
+        ax1.imshow(data, origin='lower', interpolation='nearest',
+                   vmin=data.min(), vmax=data.max(), cmap=plt.cm.RdBu_r)
+        # ax1.title('Data', fontsize=14)
+        ax1.grid('off')
+        ax1.set_axis_off()
+
+        asb = AnchoredSizeBar(ax1.transData,
+                              bar_len,
+                              bar_len_str[0] + r"$^{\prime\prime}\!\!\!.$" + bar_len_str[-1],
+                              loc=4, pad=0.3, borderpad=0.5, sep=10, frameon=False)
+        ax1.add_artist(asb)
+
+        # model
+        ax2 = fig.add_subplot(1, 3, 2, sharey=ax1)
+        ax2.imshow(model, origin='lower', interpolation='nearest',
+                   vmin=data.min(), vmax=data.max(), cmap=plt.cm.RdBu_r)
+        ax2.set_axis_off()
+        # ax2.title('Model', fontsize=14)
+        ax2.grid('off')
+
+        asb = AnchoredSizeBar(ax2.transData,
+                              bar_len,
+                              bar_len_str[0] + r"$^{\prime\prime}\!\!\!.$" + bar_len_str[-1],
+                              loc=4, pad=0.3, borderpad=0.5, sep=10, frameon=False)
+        ax2.add_artist(asb)
+
+        # residuals
+        ax3 = fig.add_subplot(1, 3, 3, sharey=ax1)
+        ax3.imshow(_residuals, origin='lower', interpolation='nearest', cmap=plt.cm.RdBu_r)
+        # ax3.title('Residuals', fontsize=14)
+        ax3.grid('off')
+        ax3.set_axis_off()
+
+        asb = AnchoredSizeBar(ax3.transData,
+                              bar_len,
+                              bar_len_str[0] + r"$^{\prime\prime}\!\!\!.$" + bar_len_str[-1],
+                              loc=4, pad=0.3, borderpad=0.5, sep=10, frameon=False)
+        ax3.add_artist(asb)
+
+        # plt.tight_layout()
+
+        # dancing with a tambourine to remove the white spaces on the plot:
+        fig.subplots_adjust(wspace=0, hspace=0, top=1, bottom=0, right=1, left=0)
+        plt.margins(0, 0)
+        from matplotlib.ticker import NullLocator
+        plt.gca().xaxis.set_major_locator(NullLocator())
+        plt.gca().yaxis.set_major_locator(NullLocator())
+
+        if not os.path.exists(self.out_path):
+            os.makedirs(self.out_path)
+        fig.savefig(os.path.join(self.out_path, '{:s}.png'.format(frame_name)), dpi=200)
+        # plt.show()
+
+
+def process_seeing(_path_in, _seeing_frame, _path_calib, _path_out,
+                   _frame_size_x_arcsec=36, _fit_model='Gaussian2D', _box_size=100):
+    # parse observation name
+    _, _, _, _filt, _date_utc, _, _ = parse_obs_name('9999_' + _seeing_frame, {})
+    _mode = get_mode(os.path.join(_path_in, '{:s}.fits'.format(_seeing_frame)))
+
+    # load darks and flats
+    dark, flat = load_darks_and_flats(_path_calib, _mode, _filt)
+    if dark is None or flat is None:
+        raise Exception('Could not open darks and flats')
+
+    with fits.open(os.path.join(_path_in, '{:s}.fits'.format(_seeing_frame))) as _hdulist:
+        # get image size (this would be (1024, 1024) for the Andor camera)
+        image_size = _hdulist[0].shape
+        # number of frames in the data cube:
+        nf = len(_hdulist)
+        # Stack to seeing-limited image
+        summed_seeing_limited_frame = np.zeros((image_size[0], image_size[1]), dtype=np.float)
+        for ii, _ in enumerate(_hdulist):
+            # im_tmp = np.array(_hdulist[ii].data, dtype=np.float)
+            # im_tmp = calibrate_frame(im_tmp, dark, flat, _iter=2)
+            # im_tmp = gaussian_filter(im_tmp, sigma=5)
+            # summed_seeing_limited_frame += im_tmp
+            summed_seeing_limited_frame += _hdulist[ii].data
+
+        #
+        summed_seeing_limited_frame = calibrate_frame(summed_seeing_limited_frame / nf, dark, flat, _iter=2)
+        summed_seeing_limited_frame = gaussian_filter(summed_seeing_limited_frame, sigma=5)  # 5, 10
+
+    # dump fits for sextraction:
+    _fits_stacked = '{:s}.summed.fits'.format(_seeing_frame)
+    try:
+        export_fits(os.path.join(_path_in, _fits_stacked), summed_seeing_limited_frame)
+
+        _, x, y = trim_frame(_path_in, _fits_name=_fits_stacked,
+                             _win=_box_size, _method='sextractor', _x=None, _y=None, _drizzled=False)
+        print('centroid position: ', x, y)
+
+        # remove fits:
+        os.remove(os.path.join(_path_in, _fits_stacked))
+
+        centroid = Star(x, y, summed_seeing_limited_frame, model_type=_fit_model, box=_box_size,
+                        fow_x=_frame_size_x_arcsec, out_path=os.path.join(_path_out, 'seeing'))
+        seeing = centroid.fwhm
+        print('Estimated seeing = {:.3f} pixels'.format(seeing))
+        print('Estimated seeing = {:.3f}\"'.format(seeing * _frame_size_x_arcsec / image_size[0]))
+        # plot image, model, and residuals:
+        centroid.plot_resulting_model(frame_name=_seeing_frame)
+
+        return _date_utc, seeing * _frame_size_x_arcsec / image_size[0], seeing, _filt
+
+    except Exception as _e:
+        print(_e)
+        traceback.print_exc()
+        if os.path.exists(os.path.join(_path_in, _fits_stacked)):
+            # remove fits:
+            os.remove(os.path.join(_path_in, _fits_stacked))
+        return _date_utc, None, None, _filt
 
 
 def inqueue(job_type, *_args):
@@ -1763,6 +2023,11 @@ def get_config(_abs_path=None, _config_file='config.ini'):
 
     _config['planets_prog_num'] = str(config.get('Programs', 'planets'))
 
+    # seeing
+    _config['seeing'] = dict()
+    _config['seeing']['fit_model'] = config.get('Seeing', 'fit_model')
+    _config['seeing']['win'] = int(config.get('Seeing', 'win'))
+
     # database access:
     _config['mongo_host'] = config.get('Database', 'host')
     _config['mongo_port'] = int(config.get('Database', 'port'))
@@ -2867,14 +3132,188 @@ def check_distributed(_config, _logger, _coll, _select, _date, _obs, _n_days=1.0
     return True
 
 
-def check_aux(_config, _logger, _coll, _coll_aux, _date, _n_days=1.5):
+def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days=1.5):
+    """
+        Check nightly auxiliary (summary) data
+    :param _config:
+    :param _logger:
+    :param _coll:
+    :param _coll_aux:
+    :param _date:
+    :param _seeing_frames:
+    :param _n_days:
+    :return:
+    """
     try:
         _select = _coll_aux.find_one({'_id': _date})
-        # TODO: check/do seeing
+        _path_out = os.path.join(_config['path_archive'], _date, 'summary')
+
+        ''' check/do seeing '''
+        last_modified = _select['seeing']['last_modified'].replace(tzinfo=pytz.utc)
+        # path to store unzipped raw files
+        _path_tmp = _config['path_tmp']
+        # path to raw seeing data
+        _path_seeing = os.path.join(_config['path_raw'], _date)
+        # path to calibration data produced by lucky pipeline:
+        _path_calib = os.path.join(_config['path_pipe'], _date, 'calib')
+
+        # _seeing_frames = _select['seeing']['frames']
+        _seeing_raws = ['{:s}.fits.bz2'.format(_s[0]) for _s in _seeing_frames]
+
+        if len(_seeing_raws) > 0:
+            try:
+                time_tags = [datetime.datetime.utcfromtimestamp(os.stat(os.path.join(_path_seeing, _s)).st_mtime)
+                             for _s in _seeing_raws]
+                time_tag = max(time_tags)
+                time_tag = time_tag.replace(tzinfo=pytz.utc)
+                # not done or new files appeared in the raw directory
+                if (not _select['seeing']['done'] or last_modified != time_tag) and \
+                        (_select['seeing']['retries'] <= _config['max_pipelining_retries']):
+
+                        # unbzip source file(s):
+                        lbunzip2(_path_in=_path_seeing, _files=_seeing_raws, _path_out=_path_tmp,
+                                 _keep=True, _v=True)
+
+                        # unzipped file names:
+                        _obsz = [_s[0] for _s in _seeing_frames]
+                        # print(raws)
+
+                        seeing_plot = []
+                        for ii, _obs in enumerate(_obsz):
+                            print('processing {:s}'.format(_obs))
+                            # this returns datetime, seeing in " and in pix, and used filter:
+                            _date_utc, seeing, _, _filt = process_seeing(_path_in=_path_tmp, _seeing_frame=_obs,
+                                                                         _path_calib=_path_calib, _path_out=_path_out,
+                                                                         _frame_size_x_arcsec=36,
+                                                                         _fit_model=_config['seeing']['fit_model'],
+                                                                         _box_size=_config['seeing']['win'])
+                            if seeing is not None:
+                                seeing_plot.append([_date_utc, seeing, _filt])
+                            _seeing_frames[ii][1] = _date_utc
+                            _seeing_frames[ii][2] = _filt
+                            _seeing_frames[ii][3] = seeing
+
+                        # generate summary plot for the whole night:
+                        if len(seeing_plot) > 0:
+                            seeing_plot = np.array(seeing_plot)
+                            # sort by time stamp:
+                            seeing_plot = seeing_plot[seeing_plot[:, 0].argsort()]
+
+                            # filter colors on the plot:
+                            filter_colors = {'lp600': plt.cm.Blues(0.82),
+                                             'Sg': plt.cm.Greens(0.7),
+                                             'Sr': plt.cm.Reds(0.7),
+                                             'Si': plt.cm.Oranges(0.7),
+                                             'Sz': plt.cm.Oranges(0.5)}
+
+                            fig = plt.figure('Seeing data for {:s}'.format(_date), figsize=(8, 3), dpi=200)
+                            ax = fig.add_subplot(111)
+
+                            # all filters used that night:
+                            filters_used = set(seeing_plot[:, 2])
+
+                            for filter_used in filters_used:
+                                # plot different filters in different colors
+                                mask = seeing_plot[:, 2] == filter_used
+                                fc = filter_colors[filter_used] if filter_used in filter_colors else plt.cm.Greys(0.7)
+                                ax.plot(seeing_plot[mask, 0], seeing_plot[mask, 1], '.',
+                                        c=fc, markersize=8, label=filter_used)
+
+                            ax.set_ylabel('Seeing, arcsec')  # , fontsize=18)
+                            ax.grid(linewidth=0.5)
+
+                            # evaluate estimators
+                            try:
+                                # make a robust fit to seeing data for visual reference
+                                t_seeing_plot = np.array([(_t - seeing_plot[0, 0]).total_seconds()
+                                                          for _t in seeing_plot[:, 0]])
+                                t_seeing_plot = np.expand_dims(t_seeing_plot, axis=1)
+                                estimators = [('RANSAC', linear_model.RANSACRegressor()), ]
+                                for name, estimator in estimators:
+                                    model = make_pipeline(PolynomialFeatures(degree=5), estimator)
+                                    model.fit(t_seeing_plot, seeing_plot[:, 1])
+                                    y_plot = model.predict(t_seeing_plot)
+                                    ax.plot(seeing_plot[:, 0], y_plot, '--', c=plt.cm.Blues(0.4),
+                                            linewidth=1, label='Robust {:s} fit'.format(name), clip_on=False)
+                            except Exception as _e:
+                                print(_e)
+                                traceback.print_exc()
+
+                            myFmt = mdates.DateFormatter('%H:%M')
+                            ax.xaxis.set_major_formatter(myFmt)
+                            fig.autofmt_xdate()
+
+                            # make sure our 'robust' fit didn't spoil the scale:
+                            ax.set_ylim([np.min(seeing_plot[:, 1]) * 0.9, np.max(seeing_plot[:, 1]) * 1.1])
+                            dt = datetime.timedelta(seconds=(seeing_plot[-1, 0] -
+                                                             seeing_plot[0, 0]).total_seconds() * 0.05)
+                            ax.set_xlim([seeing_plot[0, 0] - dt, seeing_plot[-1, 0] + dt])
+
+                            # add legend:
+                            ax.legend(loc='best', numpoints=1, fancybox=True, prop={'size': 6})
+
+                            plt.tight_layout()
+
+                            # plt.show()
+                            f_seeing_plot = os.path.join(_path_out, 'seeing.{:s}.png'.format(_date))
+                            fig.savefig(f_seeing_plot, dpi=300)
+
+                        # update database record:
+                        _coll_aux.update_one(
+                            {'_id': _date},
+                            {
+                                '$set': {
+                                    'seeing.done': True,
+                                    'seeing.frames': _seeing_frames,
+                                    'seeing.last_modified': time_tag
+                                },
+                                '$inc': {
+                                    'seeing.retries': 1
+                                }
+                            }
+                        )
+                        _logger.error('Successfully generated seeing summary for {:s}'.format(_date))
+
+            except Exception as _e:
+                print(_e)
+                traceback.print_exc()
+                try:
+                    _coll_aux.update_one(
+                        {'_id': _date},
+                        {
+                            '$set': {
+                                'seeing.done': False,
+                                'seeing.frames': [],
+                                'seeing.last_modified': utc_now()
+                            },
+                            '$inc': {
+                                'seeing.retries': 1
+                            }
+                        }
+                    )
+                    # clean up stuff
+                    seeing_summary_plot = os.path.join(_path_out, 'seeing.{:s}.png'.format(_date))
+                    if os.path.exists(seeing_summary_plot):
+                        os.remove(seeing_summary_plot)
+                    individual_frames_path = os.path.join(_path_out, 'seeing')
+                    for individual_frame in os.listdir(individual_frames_path):
+                        if os.path.exists(os.path.join(individual_frames_path, individual_frame)):
+                            os.remove(os.path.join(individual_frames_path, individual_frame))
+                finally:
+                    _logger.error('Seeing summary generation failed for {:s}: {:s}'.format(_date, _e))
+
+            finally:
+                # remove unzipped files
+                _seeing_raws_unzipped = [os.path.splitext(_f)[0] for _f in _seeing_raws]
+                for _seeing_raw_unzipped in _seeing_raws_unzipped:
+                    if os.path.exists(os.path.join(_path_tmp, _seeing_raw_unzipped)):
+                        os.remove(os.path.join(_path_tmp, _seeing_raw_unzipped))
 
         ''' make summary Strehl plot '''
         last_modified = _select['strehl']['last_modified'].replace(tzinfo=pytz.utc)
-        if not _select['strehl']['done'] or (utc_now() - last_modified).total_seconds() / 86400.0 > _n_days:
+        if (not _select['strehl']['done']
+            or (utc_now() - last_modified).total_seconds() / 86400.0 > _n_days) and \
+                (_select['strehl']['retries'] <= _config['max_pipelining_retries']):
             try:
                 _logger.debug('Trying to generate summary Strehl plot for {:s}'.format(_date))
                 print('Generating summary Strehl plot for {:s}'.format(_date))
@@ -2984,7 +3423,6 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _n_days=1.5):
                     plt.tight_layout()
 
                     # dump results to disk
-                    _path_out = os.path.join(_config['path_archive'], _date, 'summary')
                     if not (os.path.exists(_path_out)):
                         os.makedirs(_path_out)
 
@@ -2996,6 +3434,9 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _n_days=1.5):
                             '$set': {
                                 'strehl.done': True,
                                 'strehl.last_modified': utc_now()
+                            },
+                            '$inc': {
+                                'strehl.retries': 1
                             }
                         }
                     )
@@ -3005,21 +3446,30 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _n_days=1.5):
                 print(_e)
                 traceback.print_exc()
                 try:
-                    _coll.update_one(
+                    _coll_aux.update_one(
                         {'_id': _date},
                         {
                             '$set': {
                                 'strehl.done': False,
                                 'strehl.last_modified': utc_now()
+                            },
+                            '$inc': {
+                                'strehl.retries': 1
                             }
                         }
                     )
+                    # clean up stuff
+                    strehl_summary_plot = os.path.join(_path_out, 'strehl.{:s}.png'.format(_date))
+                    if os.path.exists(strehl_summary_plot):
+                        os.remove(strehl_summary_plot)
                 finally:
                     _logger.error('Summary Strehl plot generation failed for {:s}: {:s}'.format(_date, _e))
 
         ''' make summary contrast curve plot '''
         last_modified = _select['contrast_curve']['last_modified'].replace(tzinfo=pytz.utc)
-        if not _select['contrast_curve']['done'] or (utc_now() - last_modified).total_seconds() / 86400.0 > _n_days:
+        if (not _select['contrast_curve']['done']
+            or (utc_now() - last_modified).total_seconds() / 86400.0 > _n_days) and \
+                (_select['contrast_curve']['retries'] <= _config['max_pipelining_retries']):
             try:
                 _logger.debug('Trying to generate contrast curve summary for {:s}'.format(_date))
                 print('Generating contrast curve summary for {:s}'.format(_date))
@@ -3093,7 +3543,6 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _n_days=1.5):
                     plt.tight_layout()
 
                     # dump results to disk
-                    _path_out = os.path.join(_config['path_archive'], _date, 'summary')
                     if not (os.path.exists(_path_out)):
                         os.makedirs(_path_out)
 
@@ -3105,6 +3554,9 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _n_days=1.5):
                             '$set': {
                                 'contrast_curve.done': True,
                                 'contrast_curve.last_modified': utc_now()
+                            },
+                            '$inc': {
+                                'contrast_curve.retries': 1
                             }
                         }
                     )
@@ -3114,15 +3566,22 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _n_days=1.5):
                 print(_e)
                 traceback.print_exc()
                 try:
-                    _coll.update_one(
+                    _coll_aux.update_one(
                         {'_id': _date},
                         {
                             '$set': {
                                 'contrast_curve.done': False,
                                 'contrast_curve.last_modified': utc_now()
+                            },
+                            '$inc': {
+                                'contrast_curve.retries': 1
                             }
                         }
                     )
+                    # clean up stuff
+                    cc_summary_plot = os.path.join(_path_out, 'contrast_curve.{:s}.png'.format(_date))
+                    if os.path.exists(cc_summary_plot):
+                        os.remove(cc_summary_plot)
                 finally:
                     _logger.error('Summary contrast curve generation failed for {:s}: {:s}'.format(_date, _e))
 
@@ -3348,8 +3807,8 @@ if __name__ == '__main__':
                             re.match('flat_', s) is None and
                             re.match('seeing_', s) is None]
                 # print(date_obs)
-                # TODO: handle seeing files separately [lower priority]
-                date_seeing = [re.split(pattern_end, s)[0] for s in date_files
+                # handle seeing files separately [lower priority]
+                date_seeing = [re.split(pattern_fits, s)[0] for s in date_files
                                if re.search(pattern_end, s) is not None and
                                re.match('seeing_', s) is not None]
                 # print(date_seeing)
@@ -3408,12 +3867,6 @@ if __name__ == '__main__':
                     # TODO: if it is a planetary observation, run the planetary pipeline
                     ''' check planetary-pipelined data '''
 
-                    ''' check seeing data '''
-                    # TODO: [lower priority]
-                    # for each date check if lists of processed and raw seeing files match
-                    # rerun seeing.py for each date if necessary
-                    # update last_modified if necessary
-
                     # mark distributed when all pipelines done or n_retries>3
                     # compress everything with bzip2, store and TODO: transfer over to Caltech
                     status_ok = check_distributed(_config=config, _logger=logger, _coll=coll,
@@ -3429,13 +3882,21 @@ if __name__ == '__main__':
                 if select is None:
                     # insert date into aux database:
                     result = coll_aux.insert_one({'_id': date,
-                                                  'seeing': {'done': False, 'last_modified': utc_now()},
-                                                  'contrast_curve': {'done': False, 'last_modified': utc_now()},
-                                                  'strehl': {'done': False, 'last_modified': utc_now()}})
-                # TODO: query database for all contrast curves and Strehls [+seeing - lower priority]
-                # TODO: make joint plots to display on the website
-                # TODO: do that once a day or so
-                status_ok = check_aux(_config=config, _logger=logger, _coll=coll, _coll_aux=coll_aux, _date=date)
+                                                  'seeing': {'done': False,
+                                                             'frames': [[k, None, None, None] for k in date_seeing],
+                                                             'retries': 0,
+                                                             'last_modified': utc_now()},
+                                                  'contrast_curve': {'done': False,
+                                                                     'retries': 0,
+                                                                     'last_modified': utc_now()},
+                                                  'strehl': {'done': False,
+                                                             'retries': 0,
+                                                             'last_modified': utc_now()}})
+                # query database for all contrast curves and Strehls +seeing
+                # make joint plots to display on the website
+                # do that once a day*1.5 or so
+                status_ok = check_aux(_config=config, _logger=logger, _coll=coll, _coll_aux=coll_aux, _date=date,
+                                      _seeing_frames=[[k, None, None, None] for k in date_seeing], _n_days=1.5)
                 if not status_ok:
                     logger.error('Checking summaries failed for {:s}'.format(date))
 
