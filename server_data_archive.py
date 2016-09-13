@@ -37,9 +37,12 @@ def get_config(config_file='config.ini'):
         conf['mongo_host'] = _config.get('Database', 'host')
         conf['mongo_port'] = int(_config.get('Database', 'port'))
         conf['mongo_db'] = _config.get('Database', 'db')
+        conf['mongo_collection_obs'] = _config.get('Database', 'collection_obs')
+        conf['mongo_collection_aux'] = _config.get('Database', 'collection_aux')
+        conf['mongo_collection_pwd'] = _config.get('Database', 'collection_pwd')
+        conf['mongo_collection_weather'] = _config.get('Database', 'collection_weather')
         conf['mongo_user'] = _config.get('Database', 'user')
         conf['mongo_pwd'] = _config.get('Database', 'pwd')
-        conf['mongo_collection_pwd'] = _config.get('Database', 'collection_pwd')
 
         ''' server location '''
         conf['server_host'] = _config.get('Server', 'host')
@@ -58,43 +61,54 @@ def connect_to_db(_config):
     :return:
     """
     try:
-        client = MongoClient(host=_config['mongo_host'], port=_config['mongo_port'])
-        db = client[_config['mongo_db']]
-        # logger.debug('Successfully connected to the Robo-AO database at {:s}:{:d}'.
-        #              format(mongo_host, mongo_port))
-    except Exception as e:
-        print(e)
-        # logger.error(e)
-        # logger.error('Failed to connect to the Robo-AO database at {:s}:{:d}'.
-        #              format(mongo_host, mongo_port))
-        # sys.exit()
-        db = None
+        _client = MongoClient(host=_config['mongo_host'], port=_config['mongo_port'])
+        _db = _client[_config['mongo_db']]
+    except Exception as _e:
+        print(_e)
+        _db = None
     try:
-        db.authenticate(_config['mongo_user'], _config['mongo_pwd'])
-        # logger.debug('Successfully authenticated with the Robo-AO database at {:s}:{:d}'.
-        #              format(mongo_host, mongo_port))
-    except Exception as e:
-        print(e)
-        # logger.error(e)
-        # logger.error('Authentication failed for the Robo-AO database at {:s}:{:d}'.
-        #              format(mongo_host, mongo_port))
-        # sys.exit()
+        _db.authenticate(_config['mongo_user'], _config['mongo_pwd'])
+    except Exception as _e:
+        print(_e)
+        _db = None
     try:
-        coll = db[_config['mongo_collection_pwd']]
-        # cursor = coll.find()
-        # for doc in cursor:
-        #     print(doc)
-        # logger.debug('Using collection {:s} with user credentials data in the database'.
-        #              format(mongo_collection_pwd))
-    except Exception as e:
-        print(e)
-        # logger.error(e)
-        # logger.error('Failed to use a collection {:s} with user credentials data in the database'.
-        #              format(mongo_collection_pwd))
-        # sys.exit()
-        coll = None
+        _coll = _db[_config['mongo_collection_obs']]
+    except Exception as _e:
+        print(_e)
+        _coll = None
+    try:
+        _coll_aux = _db[_config['mongo_collection_aux']]
+    except Exception as _e:
+        print(_e)
+        _coll_aux = None
+    try:
+        _coll_weather = _db[_config['mongo_collection_weather']]
+    except Exception as _e:
+        print(_e)
+        _coll_weather = None
+    try:
+        _coll_usr = _db[_config['mongo_collection_pwd']]
+    except Exception as _e:
+        print(_e)
+        _coll_usr = None
+    try:
+        # build dictionary program num -> pi username
+        cursor = _coll_usr.find()
+        _program_pi = {}
+        for doc in cursor:
+            # handle admin separately
+            if doc['_id'] == 'admin':
+                continue
+            _progs = doc['programs']
+            for v in _progs:
+                _program_pi[str(v)] = doc['_id'].encode('ascii', 'ignore')
+                # print(program_pi)
+    except Exception as _e:
+        print(_e)
+        _program_pi = None
 
-    return db, coll
+    return _client, _db, _coll, _coll_usr, _coll_aux, _coll_weather, _program_pi
+
 
 # import functools
 # def background(f):
@@ -127,6 +141,25 @@ def connect_to_db(_config):
 app = flask.Flask(__name__)
 app.secret_key = 'roboaokicksass'
 
+
+def get_db(_config):
+    """Opens a new database connection if there is none yet for the
+    current application context.
+    """
+    if not hasattr(flask.g, 'client'):
+        flask.g.client, flask.g.db, flask.g.coll, flask.g.coll_usr, \
+        flask.g.coll_aux, flask.g.coll_weather, flask.g.program_pi = connect_to_db(_config)
+    return flask.g.client, flask.g.db, flask.g.coll, flask.g.coll_usr, \
+                flask.g.coll_aux, flask.g.coll_weather, flask.g.program_pi
+
+
+@app.teardown_appcontext
+def close_db(error):
+    """Closes the database again at the end of the request."""
+    if hasattr(flask.g, 'client'):
+        flask.g.client.close()
+
+
 login_manager = flask_login.LoginManager()
 
 login_manager.init_app(app)
@@ -136,11 +169,12 @@ config = get_config(config_file='config.ini')
 # print(config)
 
 ''' Connect to the mongodb database '''
-db, coll = connect_to_db(config)
+# client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = connect_to_db(config)
+# client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
 
 ''' throw error 500 if could not connect to database '''
-if db is None and coll is None:
-    flask.redirect(flask.url_for('internal_error'))
+# if db is None and coll is None:
+#     flask.redirect(flask.url_for('internal_error'))
 
 
 # Our mock database -> replace with pymongo query to the mongodb database
@@ -184,7 +218,8 @@ class User(flask_login.UserMixin):
 @login_manager.user_loader
 def user_loader(username):
     # look up username in database:
-    select = coll.find_one({'_id': username})
+    client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
+    select = coll_usr.find_one({'_id': username})
     if select is None:
         return
 
@@ -196,8 +231,9 @@ def user_loader(username):
 @login_manager.request_loader
 def request_loader(request):
     username = request.form.get('username')
+    client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
     # look up in the database
-    select = coll.find_one({'_id': username})
+    select = coll_usr.find_one({'_id': username})
     if select is None:
         return
 
@@ -224,7 +260,8 @@ def login():
     username = flask.request.form['username']
     # check if username exists and passwords match
     # look up in the database first:
-    select = coll.find_one({'_id': username})
+    client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
+    select = coll_usr.find_one({'_id': username})
     if select is not None and \
             check_password_hash(select['password'], flask.request.form['password']):
         user = User()
@@ -236,24 +273,100 @@ def login():
         return flask.render_template('template-login.html', fail=True)
 
 
+def stream_template(template_name, **context):
+    """
+        see: http://flask.pocoo.org/docs/0.11/patterns/streaming/
+    :param template_name:
+    :param context:
+    :return:
+    """
+    app.update_template_context(context)
+    t = app.jinja_env.get_template(template_name)
+    rv = t.stream(context)
+    rv.enable_buffering(5)
+    return rv
+
+
+def get_dates(user_id, coll, start_from=None):
+    if start_from is None:
+        # this is ~when we moved to KP:
+        # start_from = datetime.datetime(2015, 10, 1)
+        # by default -- last 30 days:
+        start_from = datetime.datetime.utcnow() - datetime.timedelta(days=30)
+
+    # dictionary: {date: {program_N: [observations]}}
+    dates = dict()
+    # programs = []
+    if user_id == 'admin':
+        # get everything;
+        cursor = coll.find({'date_utc': {'$gte': start_from}})
+    else:
+        # get only programs accessible to this user marked as distributed:
+        cursor = coll.find({'date_utc': {'$gte': start_from},
+                            'science_program.program_PI': user_id,
+                            'distributed.status': True})
+
+    # iterate over query result:
+    for obs in cursor:
+        date = obs['date_utc'].strftime('%Y%m%d')
+        # add key to dict if it is not there already:
+        if date not in dates:
+            dates[date] = dict()
+        # add key for program if it is not there yet
+        program_id = obs['science_program']['program_id']
+        if program_id not in dates[date]:
+            dates[date][program_id] = []
+        dates[date][program_id].append(obs)
+
+    # print(dates)
+    # latest obs - first
+    # dates = sorted(list(set(dates)), reverse=True)
+
+    return dates
+
+
 # serve root
 @app.route('/')
 @flask_login.login_required
-def root():
-    return flask.render_template('template-archive.html',
-                                 user=flask_login.current_user.id,
-                                 programs=['4', '41'],
-                                 dates=['20160602', '20160726'])
+def root(start_from=None):
+
+    user_id = flask_login.current_user.id
+
+    def iter_dates(_dates):
+        """
+            instead of first loading and then sending everything to user all at once,
+             yield data for a single date at a time and stream to user
+        :param _dates:
+        :return:
+        """
+        for _date in _dates:
+            # print(_date, _dates[_date])
+            yield _date, _dates[_date]
+
+    # get db connection
+    client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
+
+    # get all dates:
+    dates = get_dates(user_id, coll, start_from=start_from)
+
+    return flask.Response(stream_template('template-archive.html',
+                                          user=user_id,
+                                          dates=iter_dates(dates)))
+    # return flask.render_template('template-archive.html',
+    #                              user=flask_login.current_user.id,
+    #                              programs=['4', '41'],
+    #                              dates=['20160602', '20160726'])
 
 
-# serve root
+# manage users
 @app.route('/manage_users')
 @flask_login.login_required
 def manage_users():
     if flask_login.current_user.id == 'admin':
         # fetch users from the database:
         _users = {}
-        cursor = coll.find()
+        client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
+        cursor = coll_usr.find()
         for usr in cursor:
             # print(usr)
             if usr['programs'] == 'all':
@@ -281,7 +394,8 @@ def add_user():
         # print(len(user), len(password), len(programs))
         if len(user) == 0 or len(password) == 0:
             return 'everything must be set'
-        result = coll.insert_one(
+        client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
+        result = coll_usr.insert_one(
             {'_id': user,
              'password': generate_password_hash(password),
              'programs': programs,
@@ -312,7 +426,8 @@ def edit_user():
             return 'username must be set'
         # keep old password:
         if len(password) == 0:
-            result = coll.update_one(
+            client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
+            result = coll_usr.update_one(
                 {'_id': id},
                 {
                     '$set': {
@@ -324,7 +439,8 @@ def edit_user():
             )
         # else change password too:
         else:
-            result = coll.update_one(
+            client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
+            result = coll_usr.update_one(
                 {'_id': id},
                 {
                     '$set': {
@@ -353,7 +469,8 @@ def remove_user():
             return 'Cannot remove the admin!'
         # print(user)
         # try to remove
-        result = coll.delete_one({'_id': user})
+        client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
+        result = coll_usr.delete_one({'_id': user})
         return 'success'
     except Exception as _e:
         print(_e)

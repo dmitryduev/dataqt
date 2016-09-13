@@ -1786,8 +1786,7 @@ def empty_db_record():
             'alternative_names': [],
             'science_program': {
                 'program_id': None,
-                'program_PI': None,
-                'distributed': None
+                'program_PI': None
             },
             'date_utc': None,
             'telescope': None,
@@ -3233,8 +3232,9 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
                                     model = make_pipeline(PolynomialFeatures(degree=5), estimator)
                                     model.fit(t_seeing_plot, seeing_plot[:, 1])
                                     y_plot = model.predict(t_seeing_plot)
+                                    # noinspection PyUnboundLocalVariable
                                     ax.plot(seeing_plot[:, 0], y_plot, '--', c=plt.cm.Blues(0.4),
-                                            linewidth=1, label='Robust {:s} fit'.format(name), clip_on=False)
+                                            linewidth=1, label='Robust {:s} fit'.format(name), clip_on=True)
                             except Exception as _e:
                                 print(_e)
                                 traceback.print_exc()
@@ -3321,24 +3321,24 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
                 day = datetime.datetime.strptime(_date, '%Y%m%d')
 
                 _pipe = 'automated'
-                cursor = _coll.find({'date_utc': {'$gt': day, '$lt': day + datetime.timedelta(days=1)}})
+                cursor = _coll.find({'date_utc': {'$gte': day, '$lt': day + datetime.timedelta(days=1)}})
                 SR_good_lucky = np.array([[_obs['date_utc'], _obs['pipelined'][_pipe]['strehl']['ratio_percent']]
                                           for _obs in cursor
                                           if _obs['pipelined'][_pipe]['strehl']['status']['done'] and
                                           _obs['pipelined'][_pipe]['strehl']['flag'] == 'OK'])
-                cursor = _coll.find({'date_utc': {'$gt': day, '$lt': day + datetime.timedelta(days=1)}})
+                cursor = _coll.find({'date_utc': {'$gte': day, '$lt': day + datetime.timedelta(days=1)}})
                 SR_notgood_lucky = np.array([[_obs['date_utc'], _obs['pipelined'][_pipe]['strehl']['ratio_percent']]
                                              for _obs in cursor
                                              if _obs['pipelined'][_pipe]['strehl']['status']['done'] and
                                              _obs['pipelined'][_pipe]['strehl']['flag'] == 'BAD?'])
 
                 _pipe = 'faint'
-                cursor = _coll.find({'date_utc': {'$gt': day, '$lt': day + datetime.timedelta(days=1)}})
+                cursor = _coll.find({'date_utc': {'$gte': day, '$lt': day + datetime.timedelta(days=1)}})
                 SR_good_faint = np.array([[_obs['date_utc'], _obs['pipelined'][_pipe]['strehl']['ratio_percent']]
                                           for _obs in cursor
                                           if _obs['pipelined'][_pipe]['strehl']['status']['done'] and
                                           _obs['pipelined'][_pipe]['strehl']['flag'] == 'OK'])
-                cursor = _coll.find({'date_utc': {'$gt': day, '$lt': day + datetime.timedelta(days=1)}})
+                cursor = _coll.find({'date_utc': {'$gte': day, '$lt': day + datetime.timedelta(days=1)}})
                 SR_notgood_faint = np.array([[_obs['date_utc'], _obs['pipelined'][_pipe]['strehl']['ratio_percent']]
                                              for _obs in cursor
                                              if _obs['pipelined'][_pipe]['strehl']['status']['done'] and
@@ -3476,13 +3476,13 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
                 # query the database:
                 day = datetime.datetime.strptime(_date, '%Y%m%d')
 
-                cursor = _coll.find({'date_utc': {'$gt': day, '$lt': day + datetime.timedelta(days=1)}})
+                cursor = _coll.find({'date_utc': {'$gte': day, '$lt': day + datetime.timedelta(days=1)}})
                 _pipe = 'automated'
                 contrast_curves = np.array([np.array(_obs['pipelined'][_pipe]['pca']['contrast_curve'])
                                             for _obs in cursor
                                             if _obs['pipelined'][_pipe]['pca']['status']['done']])
 
-                cursor = _coll.find({'date_utc': {'$gt': day, '$lt': day + datetime.timedelta(days=1)}})
+                cursor = _coll.find({'date_utc': {'$gte': day, '$lt': day + datetime.timedelta(days=1)}})
                 _pipe = 'faint'
                 contrast_curves_faint = np.array([np.array(_obs['pipelined'][_pipe]['pca']['contrast_curve'])
                                                   for _obs in cursor
