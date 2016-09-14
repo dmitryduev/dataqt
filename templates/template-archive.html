@@ -14,6 +14,8 @@
     <!-- Bootstrap core CSS -->
     <link rel="stylesheet" href="/static/css/bootstrap.min.css">
     <link rel="stylesheet" href="/static/css/bootstrap-magnify.min.css">
+    <link rel="stylesheet" href="/static/css/bootstrap-datetimepicker.min.css">
+    <link rel="stylesheet" href="/static/css/bootstrap-submenu.min.css">
 
     <style>
         body {
@@ -140,7 +142,7 @@
         <div id="navbar" class="navbar-collapse collapse">
             <ul class="nav navbar-nav">
                 <!--<li class="active"><a href="#">Calendar</a></li>-->
-                <li><a href="#">Calendar</a></li>
+{#                <li><a href="#">Calendar</a></li>#}
                 <li><a href="#">Search</a></li>
             </ul>
             <ul class="nav navbar-nav navbar-right">
@@ -193,63 +195,108 @@
                 </div>
                 <div class="btn-group">
                     <button type="button" class="btn btn-primary dropdown-toggle"
-                            data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                            data-toggle="dropdown" data-submenu aria-haspopup="true" aria-expanded="false">
                         Show dates <span class="caret"></span>
                     </button>
                     <ul class="dropdown-menu">
-                        <li><a href="#">This month</a></li>
-                        <li><a href="#">Everything</a></li>
-                        <li><a href="#">Show calendar</a></li>
+                        <li><a href="/">Last 30 days</a></li>
+                        <li><a href="?start=20150901">Everything</a></li>
+                        <li class="dropdown-submenu">
+                            <a tabindex="0">Select date</a>
+                            <ul class="dropdown-menu" style="padding: 5px 10px 0px 10px;">
+                                <li>
+                                <div class="form-group">
+                                    <div class="row">
+                                        <div class="col-md-12">
+                                            <div id="datetimepicker"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                </li>
+                            </ul>
+                        </li>
+                        <li class="dropdown-submenu">
+                            <a tabindex="0">Select range</a>
+                            <ul class="dropdown-menu" style="padding: 5px 10px 0px 10px;">
+                                <li>From: [under construction]</li>
+                                <li>To: [under construction]</li>
+                            </ul>
+                        </li>
                     </ul>
                 </div>
             </h2>
         </div>
     </div>
     {% for date, programs in dates %}
-        <div class="container">
-            <div class="col-md-12">
-                <h3>{{ date }}</h3><br>
-
-                <div class="data-tabs">
-
-                    <!-- Nav tabs -->
-                    <ul class="nav nav-tabs" role="tablist" id="{{ date }}-nav-tabs">
-                        <li role="presentation" class="active">
-                            <a href="#{{ date }}-data" aria-controls="{{ date }}-data"
-                               role="tab" data-toggle="tab">Data</a></li>
-                        <li role="presentation">
-                            <a href="#{{ date }}-preview" aria-controls="{{ date }}-preview"
-                               role="tab" data-toggle="tab">Preview</a></li>
-                        <li role="presentation">
-                            <a href="#{{ date }}-auxiliary" aria-controls="{{ date }}-auxiliary"
-                               role="tab" data-toggle="tab">Auxiliary data</a></li>
-                    </ul>
-
-                    <!-- Tab panes -->
-                    <div class="tab-content">
-                        <div role="tabpanel" class="tab-pane active" id="{{ date }}-data">
-                            {% for program in programs %}
-                                <h4>Program {{ program }}: data access</h4>
-                                Master wget-script to fetch all data:
-                                <a href="#">program_{{ program }}_{{ date }}.wget.sh</a>
-                                <br>
-                                Individual bzipped files
-                            {% endfor %}
-                        </div>
-                        <div role="tabpanel" class="tab-pane" id="{{ date }}-preview">
-                            {% for program in programs %}
-                                <h4>Program {{ program }}: images preview</h4>
-                            {% endfor %}
-                        </div>
-                        <div role="tabpanel" class="tab-pane" id="{{ date }}-auxiliary">
-                            <h4>System performance and meteo data</h4>
-                        </div>
-                    </div>
-
+        {% if None in (date, programs) %}
+            <div class="container">
+                <div class="col-md-12">
+                    <h3>No science data to show</h3>
                 </div>
             </div>
-        </div>
-        <br>
+            <br>
+        {% else %}
+            <div class="container">
+                <div class="col-md-12">
+                    <h3>{{ date }}</h3><br>
+
+                    <div class="data-tabs">
+
+                        <!-- Nav tabs -->
+                        <ul class="nav nav-tabs" role="tablist" id="{{ date }}-nav-tabs">
+                            <li role="presentation" class="active">
+                                <a href="#{{ date }}-data" aria-controls="{{ date }}-data"
+                                   role="tab" data-toggle="tab">Data</a></li>
+                            <li role="presentation">
+                                <a href="#{{ date }}-preview" aria-controls="{{ date }}-preview"
+                                   role="tab" data-toggle="tab">Preview</a></li>
+                            <li role="presentation">
+                                <a href="#{{ date }}-auxiliary" aria-controls="{{ date }}-auxiliary"
+                                   role="tab" data-toggle="tab">Auxiliary data</a></li>
+                        </ul>
+
+                        <!-- Tab panes -->
+                        <div class="tab-content">
+                            <div role="tabpanel" class="tab-pane active" id="{{ date }}-data">
+                                {% for program in programs %}
+                                    <h4>Program {{ program }}: data access</h4>
+                                    Master wget-script to fetch all data:
+                                    <abbr title="Dont't forget to 'chmod u+x'">
+                                        <a href="/get_data?date={{ date }}&program={{ program }}">
+                                            program_{{ program }}_{{ date }}.wget.sh
+                                        </a><br>
+                                    </abbr>
+                                    <br>
+                                    Individual bzipped files:
+                                    <blockquote style="font-size: 14px;">
+                                        <p>
+                                            {% for obs in programs[program] %}
+{#                                                check if bz2 exists: #}
+                                                {% if obs['distributed']['status'] %}
+                                                    <a href="/data/{{ date }}/{{ obs['_id'] }}/{{ obs['_id'] }}.tar.bz2">
+                                                        {{ obs['_id'] }}.tar.bz2
+                                                    </a><br>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </p>
+                                    </blockquote>
+                                {% endfor %}
+                            </div>
+                            <div role="tabpanel" class="tab-pane" id="{{ date }}-preview">
+                                {% for program in programs %}
+                                    <h4>Program {{ program }}: images preview</h4>
+                                {% endfor %}
+                            </div>
+                            <div role="tabpanel" class="tab-pane" id="{{ date }}-auxiliary">
+                                <h4>System performance and meteo data</h4>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+            <br>
+        {% endif %}
     {% endfor %}
 {% else %}
     <div class="container">
@@ -266,12 +313,33 @@
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
 <script src="/static/js/bootstrap.min.js"></script>
 <script src="/static/js/bootstrap-magnify.js"></script>
+<script src="/static/js/moment.min.js"></script>
+<script src="/static/js/bootstrap-datetimepicker.min.js"></script>
+<script src="/static/js/bootstrap-submenu.min.js"></script>
+<script type="text/javascript">
+    $('[data-submenu]').submenupicker();
+    $(function () {
+        $('#datetimepicker').datetimepicker({format : "YYYY/MM/DD",
+                                             inline: true
+                                             });
+        $("#datetimepicker").on("dp.hide",function (e) {
+            var m = moment(e.date);
+{#            $('#go').attr('href', m.format('YYYYMMDD'));#}
+            window.location.href = "?show_date=" + m.format('YYYYMMDD');
+        });
+        $("#datetimepicker").on("dp.change",function (e) {
+            var m = moment(e.date);
+{#            $('#go').attr('href', m.format('YYYYMMDD'));#}
+            window.location.href = "?show_date=" + m.format('YYYYMMDD');
+        });
+    });
+</script>
 <script>
     // for AJAX requests [absolute website's uri]:
     $SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
 
     // switch tabs
-    $('.data-tabs a').click(function (e) {
+    $('.data-tabs li a').click(function (e) {
         e.preventDefault();
         $(this).tab('show')
     });

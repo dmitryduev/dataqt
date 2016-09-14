@@ -19,6 +19,7 @@ from collections import OrderedDict
 import flask
 import flask_login
 from werkzeug.security import generate_password_hash, check_password_hash
+from urlparse import urlparse
 
 
 def get_config(config_file='config.ini'):
@@ -33,6 +34,8 @@ def get_config(config_file='config.ini'):
 
         ''' connect to mongodb database '''
         conf = dict()
+        # paths:
+        conf['path_archive'] = _config.get('Path', 'path_archive')
         # database access:
         conf['mongo_host'] = _config.get('Database', 'host')
         conf['mongo_port'] = int(_config.get('Database', 'port'))
@@ -205,7 +208,13 @@ Once deployed, comment the following definition:
 # FIXME:
 @app.route('/data/<path:filename>')
 def data_static(filename):
-    return flask.send_from_directory(config.get('Path', 'path_to_website_data'), filename)
+    """
+        Get files from the archive
+    :param filename:
+    :return:
+    """
+    _p, _f = os.path.split(filename)
+    return flask.send_from_directory(os.path.join(config['path_archive'], _p), _f)
 
 
 ''' handle user login'''
@@ -287,24 +296,46 @@ def stream_template(template_name, **context):
     return rv
 
 
-def get_dates(user_id, coll, start_from=None):
-    if start_from is None:
+def get_dates(user_id, coll, start=None, show_date=None):
+    if start is None:
         # this is ~when we moved to KP:
-        # start_from = datetime.datetime(2015, 10, 1)
+        # start = datetime.datetime(2015, 10, 1)
         # by default -- last 30 days:
-        start_from = datetime.datetime.utcnow() - datetime.timedelta(days=30)
+        start = datetime.datetime.utcnow() - datetime.timedelta(days=30)
+    else:
+        try:
+            start = datetime.datetime.strptime(start, '%Y%m%d')
+        except Exception as _e:
+            print(_e)
+            start = datetime.datetime.utcnow() - datetime.timedelta(days=30)
+    if show_date is not None:
+        try:
+            show_date = datetime.datetime.strptime(show_date, '%Y%m%d')
+        except Exception as _e:
+            print(_e)
+            show_date = None
 
     # dictionary: {date: {program_N: [observations]}}
     dates = dict()
     # programs = []
     if user_id == 'admin':
         # get everything;
-        cursor = coll.find({'date_utc': {'$gte': start_from}})
+        if show_date is None:
+            cursor = coll.find({'date_utc': {'$gte': start}})
+        else:
+            cursor = coll.find({'date_utc': {'$gte': show_date,
+                                             '$lt': show_date + datetime.timedelta(days=1)}})
     else:
         # get only programs accessible to this user marked as distributed:
-        cursor = coll.find({'date_utc': {'$gte': start_from},
-                            'science_program.program_PI': user_id,
-                            'distributed.status': True})
+        if show_date is None:
+            cursor = coll.find({'date_utc': {'$gte': start},
+                                'science_program.program_PI': user_id,
+                                'distributed.status': True})
+        else:
+            cursor = coll.find({'date_utc': {'$gte': show_date,
+                                             '$lt': show_date + datetime.timedelta(days=1)},
+                                'science_program.program_PI': user_id,
+                                'distributed.status': True})
 
     # iterate over query result:
     for obs in cursor:
@@ -325,10 +356,53 @@ def get_dates(user_id, coll, start_from=None):
     return dates
 
 
-# serve root
-@app.route('/')
+@app.route('/get_data', methods=['GET'])
 @flask_login.login_required
-def root(start_from=None):
+def wget_script():
+    url = urlparse(flask.request.url).netloc
+    _date_str = flask.request.args['date']
+    _date = datetime.datetime.strptime(_date_str, '%Y%m%d')
+    _program = flask.request.args['program']
+
+    user_id = flask_login.current_user.id
+    # get db connection
+    client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
+
+    # trying to get something you're not supposed to get?
+    if user_id != 'admin' and program_pi[_program] != user_id:
+        flask.abort(403)
+    else:
+        cursor = coll.find({'date_utc': {'$gte': _date,
+                                         '$lt': _date + datetime.timedelta(days=1)},
+                            'science_program.program_id': _program,
+                            'distributed.status': True})
+        response_text = '#!/usr/bin/env bash\n'
+        for obs in cursor:
+            response_text += 'wget http://{:s}/data/{:s}/{:s}/{:s}.tar.bz2\n'.format(url, _date_str,
+                                                                                obs['_id'], obs['_id'])
+        # print(response_text)
+
+        # generate .sh file on the fly
+        response = flask.make_response(response_text)
+        response.headers['Content-Disposition'] = \
+            'attachment; filename=program_{:s}_{:s}.wget.sh'.format(_program, _date_str)
+        return response
+
+
+# serve root
+@app.route('/', methods=['GET'])
+@flask_login.login_required
+def root():
+    if 'start' in flask.request.args and 'show_date' in flask.request.args:
+        flask.abort(500)
+    if 'show_date' in flask.request.args:
+        show_date = flask.request.args['show_date']
+    else:
+        show_date = None
+    if 'start' in flask.request.args:
+        start = flask.request.args['start']
+    else:
+        start = None
 
     user_id = flask_login.current_user.id
 
@@ -339,15 +413,18 @@ def root(start_from=None):
         :param _dates:
         :return:
         """
-        for _date in _dates:
-            # print(_date, _dates[_date])
-            yield _date, _dates[_date]
+        if len(_dates) > 0:
+            for _date in _dates:
+                # print(_date, _dates[_date])
+                yield _date, _dates[_date]
+        else:
+            yield None, None
 
     # get db connection
     client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
 
     # get all dates:
-    dates = get_dates(user_id, coll, start_from=start_from)
+    dates = get_dates(user_id, coll, start=start, show_date=show_date)
 
     return flask.Response(stream_template('template-archive.html',
                                           user=user_id,
