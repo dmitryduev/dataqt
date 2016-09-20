@@ -7,7 +7,7 @@
     <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
     <meta name="description" content="">
     <meta name="author" content="Dmitry A. Duev">
-    <!--<link rel="icon" href="favicon.ico">-->
+    <link rel="icon" type="image/png" href="/static/robot-favicon.png">
 
     <title>Robo-AO data archive</title>
 
@@ -18,8 +18,28 @@
     <link rel="stylesheet" href="/static/css/bootstrap-submenu.min.css">
 
     <style>
+        html {
+            position: relative;
+            min-height: 100%;
+        }
         body {
             padding-top: 70px;
+            /* Margin bottom by footer height */
+            margin-bottom: 60px;
+        }
+        .footer {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            /* Set the fixed height of the footer here */
+            height: 60px;
+            background-color: #f5f5f5;
+        }
+        .footer > .container {
+            padding-top: 20px;
+            padding-right: 15px;
+            padding-left: 15px;
+            text-align: center;
         }
         .main-container {
             padding: 40px 15px;
@@ -72,20 +92,21 @@
                 transform: translate3d(0, 0, 0);
             }
         }
-        #carouselButtons {
+        .carouselButtons {
+            position: absolute;
+            top: 45%;
+            z-index: 5;
+{#            display: inline-block;#}
+            margin-top: -10px;
+            left: 42%;
+            right: auto;
             text-align: center;
             cursor: pointer;
         }
         #carousel-play {
-            width: 70%;
-            margin-top: 75px;
-            margin-left: 15%;
-            margin-right: auto;
             display: block;
         }
         #carousel-pause {
-            width: 100%;
-            margin: 75px auto;
             display: none;
         }
         .img-wrapper {
@@ -119,6 +140,13 @@
             color:#111111;
             padding:12px;
             font-size:10px;
+        }
+        .back-to-top {
+            cursor: pointer;
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display:none;
         }
     </style>
 </head>
@@ -202,7 +230,7 @@
                         <li><a href="/">Last 30 days</a></li>
                         <li><a href="?start=20150901">Everything</a></li>
                         <li class="dropdown-submenu">
-                            <a tabindex="0">Select date</a>
+                            <a tabindex="0" style="cursor: pointer; cursor: hand;">Select date</a>
                             <ul class="dropdown-menu" style="padding: 5px 10px 0px 10px;">
                                 <li>
                                 <div class="form-group">
@@ -216,7 +244,7 @@
                             </ul>
                         </li>
                         <li class="dropdown-submenu">
-                            <a tabindex="0">Select range</a>
+                            <a tabindex="0" style="cursor: pointer; cursor: hand;">Select range</a>
                             <ul class="dropdown-menu" style="padding: 5px 10px 0px 10px;">
                                 <li>From: [under construction]</li>
                                 <li>To: [under construction]</li>
@@ -238,7 +266,7 @@
         {% else %}
             <div class="container">
                 <div class="col-md-12">
-                    <h3>{{ date }}</h3><br>
+                    <h3>{{ date }}</h3>
 
                     <div class="data-tabs">
 
@@ -259,19 +287,18 @@
                         <div class="tab-content">
                             <div role="tabpanel" class="tab-pane active" id="{{ date }}-data">
                                 {% for program in programs %}
-                                    <h4>Program {{ program }}: data access</h4>
+                                    <h4>Program {{ program }}</h4>
                                     Master wget-script to fetch all data:
                                     <abbr title="Dont't forget to 'chmod u+x'">
                                         <a href="/get_data?date={{ date }}&program={{ program }}">
                                             program_{{ program }}_{{ date }}.wget.sh
                                         </a><br>
                                     </abbr>
-                                    <br>
-                                    Individual bzipped files:
+                                    Individual compressed tarballs:
                                     <blockquote style="font-size: 14px;">
                                         <p>
                                             {% for obs in programs[program] %}
-{#                                                check if bz2 exists: #}
+                                                {# check if bz2 exists: #}
                                                 {% if obs['distributed']['status'] %}
                                                     <a href="/data/{{ date }}/{{ obs['_id'] }}/{{ obs['_id'] }}.tar.bz2">
                                                         {{ obs['_id'] }}.tar.bz2
@@ -289,13 +316,92 @@
                             </div>
                             <div role="tabpanel" class="tab-pane" id="{{ date }}-auxiliary">
                                 <h4>System performance and meteo data</h4>
+                                {% if aux[date] | length > 0 %}
+                                    {% for aux_key in aux[date] %}
+                                        {% if aux[date][aux_key]['done'] %}
+                                            {# pull seeing data together #}
+                                            {% if aux_key == 'seeing' %}
+                                                <div class="col-md-12">
+                                            {% endif %}
+                                            <div class="col-md-6">
+                                                <h5>{{ aux_key }}</h5>
+                                                <img src="/data/{{date}}/summary/{{ aux_key }}.{{date}}.png"
+                                                     alt="{{ aux_key }}" class="img-responsive pop"
+                                                     style="cursor:pointer; cursor: hand;">
+                                            </div>
+                                        {% endif %}
+                                    {% if aux_key == 'seeing' %}
+                                        <div class="col-md-6">
+                                            <h5>{{ aux_key }} movie [image, model, residuals]</h5>
+                                            <div id="seeingCarousel" class="carousel carousel-fade"
+                                                 data-interval="300" data-pause="false" style="width:100%"
+                                                 onmouseover="pauseCarouselShow();"
+                                                 onmouseleave="pauseCarouselHide();">
+                                                <div class="carousel-inner">
+                                                    <div class="item active">
+                                                        {% set fi0 = aux[date][aux_key]['frames'][0] %}
+                                                        {% set datestr = fi0[:fi0.index('.')].split('_')[-2:] %}
+                                                        {% set dat  = datestr[0][0:4]+'/'+
+                                                                            datestr[0][4:6]+'/'+datestr[0][6:] %}
+                                                        {% set time = datestr[1][0:2]+':'+
+                                                                            datestr[1][2:4]+':'+datestr[1][4:] %}
+                                                        <img src="/data/{{date}}/summary/seeing/{{fi0}}"
+                                                             alt="" class="img-responsive">
+                                                        <div class="carousel-caption"
+                                                             style="position:absolute !important; top:-5%;
+                                                                    padding-bottom: 0px;">
+                                                            {{dat}}&nbsp;{{time}}</div>
+                                                    </div>
+                                                    {% for fi in aux[date][aux_key]['frames'][1:] %}
+                                                        <div class="item">
+                                                            {% set datestr = fi[:fi.index('.')].split('_')[-2:] %}
+                                                            {% set dat  = datestr[0][0:4]+'/'+
+                                                                            datestr[0][4:6]+'/'+datestr[0][6:] %}
+                                                            {% set time = datestr[1][0:2]+':'+
+                                                                            datestr[1][2:4]+':'+datestr[1][4:] %}
+                                                            <img src="/data/{{date}}/summary/seeing/{{fi}}"
+                                                                 alt="" class="img-responsive">
+                                                            <div class="carousel-caption"
+                                                                 style="position:absolute !important; top:-5%">
+                                                                {{dat}}&nbsp;{{time}}</div>
+                                                        </div>
+                                                    {% endfor %}
+                                                </div>
+
+                                                <a class="left carousel-control" href="#seeingCarousel"
+                                                   data-slide="prev">
+                                                    <span class="glyphicon glyphicon-chevron-left"></span>
+                                                </a>
+                                                <a class="right carousel-control" href="#seeingCarousel"
+                                                   data-slide="next">
+                                                    <span class="glyphicon glyphicon-chevron-right"></span>
+                                                </a>
+
+                                                <a id="carousel-play" class="carousel-control carouselButtons"
+                                                   onclick="playCarousel()">
+                                                        <span class="glyphicon glyphicon-play"
+                                                              style="font-size: 40px !important;"></span>
+                                                </a>
+                                                <a id="carousel-pause" class="carousel-control carouselButtons"
+                                                   onclick="pauseCarousel()">
+                                                        <span class="glyphicon glyphicon-pause"
+                                                              style="font-size: 40px !important;"></span>
+                                                </a>
+                                            </div>
+                                        </div>
+                                        {# pull seeing data together: #}
+                                        </div>
+                                    {% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    <h5>No data to show.</h5>
+                                {% endif %}
                             </div>
                         </div>
 
                     </div>
                 </div>
             </div>
-            <br>
         {% endif %}
     {% endfor %}
 {% else %}
@@ -305,6 +411,34 @@
         </div>
     </div>
 {% endif %}
+<br>
+
+<footer class="footer">
+    <div class="container">
+        <p class="text-muted">&copy; Robo-AO data archive 2016</p>
+    </div>
+</footer>
+
+
+<!-- Modal to display aux images -->
+<div class="modal fade" id="aux_image_modal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal">
+                    <span aria-hidden="true">&times;</span><span class="sr-only">Close</span>
+                </button>
+                <h4 class="modal-title"></h4>
+            </div>
+            <div class="modal-body">
+                <img src="" id="aux_image_preview" style="width: 100%;" >
+            </div>
+{#            <div class="modal-footer">#}
+{#                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>#}
+{#            </div>#}
+        </div>
+    </div>
+</div>
 
 
 <!-- Bootstrap core JavaScript
@@ -324,13 +458,13 @@
                                              });
         $("#datetimepicker").on("dp.hide",function (e) {
             var m = moment(e.date);
-{#            $('#go').attr('href', m.format('YYYYMMDD'));#}
-            window.location.href = "?show_date=" + m.format('YYYYMMDD');
+            window.location.href = "?start=" + m.format('YYYYMMDD') +
+                    "&stop=" + m.add(1, 'days').format('YYYYMMDD');
         });
         $("#datetimepicker").on("dp.change",function (e) {
             var m = moment(e.date);
-{#            $('#go').attr('href', m.format('YYYYMMDD'));#}
-            window.location.href = "?show_date=" + m.format('YYYYMMDD');
+            window.location.href = "?start=" + m.format('YYYYMMDD') +
+                    "&stop=" + m.add(1, 'days').format('YYYYMMDD');
         });
     });
 </script>
@@ -352,5 +486,61 @@
         }
     }
 </script>
+<script>
+$(document).ready(function(){
+    $(window).scroll(function () {
+        if ($(this).scrollTop() > 50) {
+            $('#back-to-top').fadeIn();
+        }
+        else {
+            $('#back-to-top').fadeOut();
+        }
+    });
+    // scroll body to 0px on click
+    $('#back-to-top').click(function () {
+        $('#back-to-top').tooltip('hide');
+        $('body,html').animate({
+            scrollTop: 0
+        }, 600);
+        return false;
+    });
+
+    $('#back-to-top').tooltip('show');
+
+});
+</script>
+<script>
+$(".pop").on("click", function() {
+    $('#aux_image_preview').attr('src', $(this).attr('src'));
+    $('#aux_image_modal').modal('show');
+});
+</script>
+<script>
+function playCarousel() {
+    $('.carousel').carousel('cycle');
+    $('#carousel-play').hide();
+}
+function pauseCarousel() {
+    $('.carousel').carousel('pause');
+    $('#carousel-pause').hide();
+    $('#carousel-play').show();
+}
+function pauseCarouselShow() {
+    if ($('#carousel-play').css('display') == 'none') {
+        $('#carousel-pause').show();
+    }
+}
+function pauseCarouselHide() {
+    $('#carousel-pause').hide();
+}
+</script>
+
+<!-- Scroll to top -->
+<a id="back-to-top" href="#" class="btn btn-primary btn-lg back-to-top"
+   role="button" title="Click to return on the top page"
+   data-toggle="tooltip" data-placement="left">
+    <span class="glyphicon glyphicon-chevron-up"></span>
+</a>
+
 </body>
 </html>

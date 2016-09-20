@@ -245,7 +245,7 @@ class Star(object):
         ax1 = fig.add_subplot(1, 3, 1)
         # print(sns.diverging_palette(10, 220, sep=80, n=7))
         ax1.imshow(data, origin='lower', interpolation='nearest',
-                   vmin=data.min(), vmax=data.max(), cmap=plt.cm.RdBu_r)
+                   vmin=data.min(), vmax=data.max(), cmap=plt.cm.inferno)
         # ax1.title('Data', fontsize=14)
         ax1.grid('off')
         ax1.set_axis_off()
@@ -259,7 +259,8 @@ class Star(object):
         # model
         ax2 = fig.add_subplot(1, 3, 2, sharey=ax1)
         ax2.imshow(model, origin='lower', interpolation='nearest',
-                   vmin=data.min(), vmax=data.max(), cmap=plt.cm.RdBu_r)
+                   vmin=data.min(), vmax=data.max(), cmap=plt.cm.inferno)
+        # RdBu_r, magma, inferno, viridis
         ax2.set_axis_off()
         # ax2.title('Model', fontsize=14)
         ax2.grid('off')
@@ -272,7 +273,7 @@ class Star(object):
 
         # residuals
         ax3 = fig.add_subplot(1, 3, 3, sharey=ax1)
-        ax3.imshow(_residuals, origin='lower', interpolation='nearest', cmap=plt.cm.RdBu_r)
+        ax3.imshow(_residuals, origin='lower', interpolation='nearest', cmap=plt.cm.inferno)
         # ax3.title('Residuals', fontsize=14)
         ax3.grid('off')
         ax3.set_axis_off()

@@ -171,23 +171,6 @@ login_manager.init_app(app)
 config = get_config(config_file='config.ini')
 # print(config)
 
-''' Connect to the mongodb database '''
-# client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = connect_to_db(config)
-# client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
-
-''' throw error 500 if could not connect to database '''
-# if db is None and coll is None:
-#     flask.redirect(flask.url_for('internal_error'))
-
-
-# Our mock database -> replace with pymongo query to the mongodb database
-# users = {'admin': {'password': generate_password_hash('robo@0'),
-#                    'programs': ['all']},
-#          'user': {'password': generate_password_hash('test'),
-#                   'programs': ['4']}
-#          }
-# users = {'admin': {'password': 'pbkdf2:sha1:1000$tytMHt8x$121b8c130d98997228c100b13aa82acc9696c172'}}
-
 ''' serve additional static data (preview images, compressed source data)
 
 When deploying, make sure WSGIScriptAlias is overridden by Apache's directive:
@@ -296,7 +279,7 @@ def stream_template(template_name, **context):
     return rv
 
 
-def get_dates(user_id, coll, start=None, show_date=None):
+def get_dates(user_id, coll, start=None, stop=None):
     if start is None:
         # this is ~when we moved to KP:
         # start = datetime.datetime(2015, 10, 1)
@@ -308,34 +291,27 @@ def get_dates(user_id, coll, start=None, show_date=None):
         except Exception as _e:
             print(_e)
             start = datetime.datetime.utcnow() - datetime.timedelta(days=30)
-    if show_date is not None:
+
+    if stop is None:
+        stop = datetime.datetime.utcnow()
+    else:
         try:
-            show_date = datetime.datetime.strptime(show_date, '%Y%m%d')
+            stop = datetime.datetime.strptime(stop, '%Y%m%d')
         except Exception as _e:
             print(_e)
-            show_date = None
+            stop = datetime.datetime.utcnow()
 
     # dictionary: {date: {program_N: [observations]}}
     dates = dict()
     # programs = []
     if user_id == 'admin':
         # get everything;
-        if show_date is None:
-            cursor = coll.find({'date_utc': {'$gte': start}})
-        else:
-            cursor = coll.find({'date_utc': {'$gte': show_date,
-                                             '$lt': show_date + datetime.timedelta(days=1)}})
+        cursor = coll.find({'date_utc': {'$gte': start, '$lt': stop}})
     else:
         # get only programs accessible to this user marked as distributed:
-        if show_date is None:
-            cursor = coll.find({'date_utc': {'$gte': start},
-                                'science_program.program_PI': user_id,
-                                'distributed.status': True})
-        else:
-            cursor = coll.find({'date_utc': {'$gte': show_date,
-                                             '$lt': show_date + datetime.timedelta(days=1)},
-                                'science_program.program_PI': user_id,
-                                'distributed.status': True})
+        cursor = coll.find({'date_utc': {'$gte': start, '$lt': stop},
+                            'science_program.program_PI': user_id,
+                            'distributed.status': True})
 
     # iterate over query result:
     for obs in cursor:
@@ -356,9 +332,33 @@ def get_dates(user_id, coll, start=None, show_date=None):
     return dates
 
 
+def get_aux(dates, coll_aux):
+
+    aux = dict()
+
+    for date in dates:
+        aux[date] = OrderedDict()
+
+        cursor = coll_aux.find({'_id': date})
+        for date_data in cursor:
+            for key in ('seeing', 'contrast_curve', 'strehl'):
+                aux[date][key] = dict()
+                aux[date][key]['done'] = True if (key in date_data and date_data[key]['done']) else False
+                if key == 'seeing':
+                    aux[date][key]['frames'] = []
+                    for frame in date_data[key]['frames']:
+                        aux[date][key]['frames'].append(frame[0] + '.png')
+
+    return aux
+
+
 @app.route('/get_data', methods=['GET'])
 @flask_login.login_required
 def wget_script():
+    """
+        Generate bash script to fetch all data for date/program with wget
+    :return:
+    """
     url = urlparse(flask.request.url).netloc
     _date_str = flask.request.args['date']
     _date = datetime.datetime.strptime(_date_str, '%Y%m%d')
@@ -393,16 +393,15 @@ def wget_script():
 @app.route('/', methods=['GET'])
 @flask_login.login_required
 def root():
-    if 'start' in flask.request.args and 'show_date' in flask.request.args:
-        flask.abort(500)
-    if 'show_date' in flask.request.args:
-        show_date = flask.request.args['show_date']
-    else:
-        show_date = None
+
     if 'start' in flask.request.args:
         start = flask.request.args['start']
     else:
         start = None
+    if 'stop' in flask.request.args:
+        stop = flask.request.args['stop']
+    else:
+        stop = None
 
     user_id = flask_login.current_user.id
 
@@ -424,15 +423,14 @@ def root():
     client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
 
     # get all dates:
-    dates = get_dates(user_id, coll, start=start, show_date=show_date)
+    dates = get_dates(user_id, coll, start=start, stop=stop)
+    # get aux info:
+    aux = get_aux(dates.keys(), coll_aux)
 
     return flask.Response(stream_template('template-archive.html',
                                           user=user_id,
+                                          aux=aux,
                                           dates=iter_dates(dates)))
-    # return flask.render_template('template-archive.html',
-    #                              user=flask_login.current_user.id,
-    #                              programs=['4', '41'],
-    #                              dates=['20160602', '20160726'])
 
 
 # manage users
