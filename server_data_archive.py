@@ -364,6 +364,12 @@ def get_dates(user_id, coll, start=None, stop=None):
 
 
 def get_aux(dates, coll_aux):
+    """
+        Get auxiliary data for a list of dates
+    :param dates:
+    :param coll_aux:
+    :return:
+    """
 
     aux = dict()
 
@@ -376,6 +382,7 @@ def get_aux(dates, coll_aux):
                 aux[date][key] = dict()
                 aux[date][key]['done'] = True if (key in date_data and date_data[key]['done']) else False
                 if key == 'seeing':
+                    # for seeing data, fetch frame names to show in a 'movie'
                     aux[date][key]['frames'] = []
                     for frame in date_data[key]['frames']:
                         aux[date][key]['frames'].append(frame[0] + '.png')
