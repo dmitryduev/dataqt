@@ -164,10 +164,12 @@ class Star(object):
         if self.model_type == self._MOFFAT2D:
             gamma, alpha = [model_dict[ii] for ii in ("gamma_0", "alpha_0")]
             FWHM = 2. * gamma * np.sqrt(2 ** (1/alpha) -1)
+            FWHM_x, FWHM_y = None, None
         elif self.model_type == self._GAUSSIAN2D:
             sigma_x, sigma_y = [model_dict[ii] for ii in ("x_stddev_0", "y_stddev_0")]
             FWHM = 2.3548 * np.mean([sigma_x, sigma_y])
-        return FWHM
+            FWHM_x, FWHM_y = 2.3548 * sigma_x, 2.3548 * sigma_y
+        return FWHM, FWHM_x, FWHM_y
 
     @memoize
     def _fit_model(self):
@@ -245,7 +247,7 @@ class Star(object):
         ax1 = fig.add_subplot(1, 3, 1)
         # print(sns.diverging_palette(10, 220, sep=80, n=7))
         ax1.imshow(data, origin='lower', interpolation='nearest',
-                   vmin=data.min(), vmax=data.max(), cmap=plt.cm.inferno)
+                   vmin=data.min(), vmax=data.max(), cmap=plt.cm.magma)
         # ax1.title('Data', fontsize=14)
         ax1.grid('off')
         ax1.set_axis_off()
@@ -259,7 +261,7 @@ class Star(object):
         # model
         ax2 = fig.add_subplot(1, 3, 2, sharey=ax1)
         ax2.imshow(model, origin='lower', interpolation='nearest',
-                   vmin=data.min(), vmax=data.max(), cmap=plt.cm.inferno)
+                   vmin=data.min(), vmax=data.max(), cmap=plt.cm.magma)
         # RdBu_r, magma, inferno, viridis
         ax2.set_axis_off()
         # ax2.title('Model', fontsize=14)
@@ -273,7 +275,7 @@ class Star(object):
 
         # residuals
         ax3 = fig.add_subplot(1, 3, 3, sharey=ax1)
-        ax3.imshow(_residuals, origin='lower', interpolation='nearest', cmap=plt.cm.inferno)
+        ax3.imshow(_residuals, origin='lower', interpolation='nearest', cmap=plt.cm.magma)
         # ax3.title('Residuals', fontsize=14)
         ax3.grid('off')
         ax3.set_axis_off()
@@ -342,13 +344,14 @@ def process_seeing(_path_in, _seeing_frame, _path_calib, _path_out,
 
         centroid = Star(x, y, summed_seeing_limited_frame, model_type=_fit_model, box=_box_size,
                         fow_x=_frame_size_x_arcsec, out_path=os.path.join(_path_out, 'seeing'))
-        seeing = centroid.fwhm
+        seeing, seeing_x, seeing_y = centroid.fwhm
         print('Estimated seeing = {:.3f} pixels'.format(seeing))
         print('Estimated seeing = {:.3f}\"'.format(seeing * _frame_size_x_arcsec / image_size[0]))
         # plot image, model, and residuals:
         centroid.plot_resulting_model(frame_name=_seeing_frame)
 
-        return _date_utc, seeing * _frame_size_x_arcsec / image_size[0], seeing, _filt
+        return _date_utc, seeing * _frame_size_x_arcsec / image_size[0], seeing, _filt, \
+                seeing_x * _frame_size_x_arcsec / image_size[0], seeing_y * _frame_size_x_arcsec / image_size[0]
 
     except Exception as _e:
         print(_e)
@@ -356,7 +359,7 @@ def process_seeing(_path_in, _seeing_frame, _path_calib, _path_out,
         if os.path.exists(os.path.join(_path_in, _fits_stacked)):
             # remove fits:
             os.remove(os.path.join(_path_in, _fits_stacked))
-        return _date_utc, None, None, _filt
+        return _date_utc, None, None, _filt, None, None
 
 
 def inqueue(job_type, *_args):
@@ -1177,7 +1180,7 @@ def reduce_faint_object_noram(_path_in, _files, _path_calib, _path_out, _obs,
                         summed_frame += img
 
                     if _interactive_plot:
-                        plt.imshow(summed_frame, cmap='gray', origin='lower', interpolation='nearest')
+                        plt.imshow(summed_frame, cmap=plt.cm.magma, origin='lower', interpolation='nearest')
                         plt.draw()
                         plt.pause(0.001)
 
@@ -1294,7 +1297,7 @@ def generate_pipe_preview(_path_out, _obs, preview_img, preview_img_cropped,
             ax.plot(objects[:, 0]-1, objects[:, 1]-1, 'o',
                     markeredgewidth=1, markerfacecolor='None', markeredgecolor=plt.cm.Oranges(0.8))
         # ax.imshow(preview_img, cmap='gray', origin='lower', interpolation='nearest')
-        ax.imshow(preview_img, cmap='gray', origin='lower', interpolation='nearest')
+        ax.imshow(preview_img, cmap=plt.cm.magma, origin='lower', interpolation='nearest')
         # plot a box around the cropped object
         if _x is not None and _y is not None:
             _h = int(preview_img_cropped.shape[0])
@@ -1320,7 +1323,7 @@ def generate_pipe_preview(_path_out, _obs, preview_img, preview_img_cropped,
         ax = plt.Axes(fig, [0., 0., 1., 1.])
         ax.set_axis_off()
         fig.add_axes(ax)
-        ax.imshow(preview_img_cropped, cmap='gray', origin='lower', interpolation='nearest')
+        ax.imshow(preview_img_cropped, cmap=plt.cm.magma, origin='lower', interpolation='nearest')
         # add scale bar:
         # draw a horizontal bar with length of 0.1*x_size
         # (ax.transData) with a label underneath.
@@ -1383,7 +1386,7 @@ def generate_pca_images(_path_out, _obs, _preview_img, _cc,
         ax = plt.Axes(fig, [0., 0., 1., 1.])
         ax.set_axis_off()
         fig.add_axes(ax)
-        ax.imshow(_preview_img, cmap='gray', origin='lower', interpolation='nearest')
+        ax.imshow(_preview_img, cmap=plt.cm.magma, origin='lower', interpolation='nearest')
         # add scale bar:
         # draw a horizontal bar with length of 0.1*x_size
         # (ax.transData) with a label underneath.
@@ -2266,10 +2269,12 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
             # reload entry from db:
             _select = _coll.find_one({'_id': _obs})
             # Strehl done and ok? then proceed:
+            # FIXME: _config['core_min']*0.1 this is to force PSF subtraction on "lucky-asteroids"
+            # FIXME: _config['halo_max']*1.5 this is to force PSF subtraction on "lucky-asteroids"
             if _select['pipelined']['automated']['pca']['status']['force_redo'] or \
                     (_select['pipelined']['automated']['strehl']['status']['done'] and
-                     _select['pipelined']['automated']['strehl']['core_arcsec'] > _config['core_min'] and
-                     _select['pipelined']['automated']['strehl']['halo_arcsec'] < _config['halo_max']):
+                     _select['pipelined']['automated']['strehl']['core_arcsec'] > _config['core_min']*0.1 and
+                     _select['pipelined']['automated']['strehl']['halo_arcsec'] < _config['halo_max']*1.5):
                 check_pca(_config, _logger, _coll, _coll.find_one({'_id': _obs}),
                           _date, _obs, _pipe='automated')
             # make preview images
@@ -3075,12 +3080,14 @@ def check_distributed(_config, _logger, _coll, _select, _date, _obs, _n_days=1.0
             # to keep things simple, just check if the pipelines are marked 'done'
             # more than _n_days ago. this should give enough time for all other tasks
             # to finish/fail
+            # if lucky Strehl is OK, faint pipeline would never trigger
             done = _select['pipelined']['automated']['status']['done'] and \
                     (_select['pipelined']['faint']['status']['done'] or
                      _select['pipelined']['faint']['status']['retries']
                       > _config['max_pipelining_retries'] or
                      _select['pipelined']['faint']['status']['retries']
-                      == _config['max_pipelining_retries'])
+                      == _config['max_pipelining_retries'] or
+                     _select['pipelined']['automated']['strehl']['flag'] == 'OK')
 
             if done:
                 _path_obs = os.path.join(_config['path_archive'], _date, _obs)
@@ -3182,16 +3189,19 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
                         for ii, _obs in enumerate(_obsz):
                             print('processing {:s}'.format(_obs))
                             # this returns datetime, seeing in " and in pix, and used filter:
-                            _date_utc, seeing, _, _filt = process_seeing(_path_in=_path_tmp, _seeing_frame=_obs,
-                                                                         _path_calib=_path_calib, _path_out=_path_out,
-                                                                         _frame_size_x_arcsec=36,
-                                                                         _fit_model=_config['seeing']['fit_model'],
-                                                                         _box_size=_config['seeing']['win'])
+                            _date_utc, seeing, _, _filt, seeing_x, seeing_y = \
+                                process_seeing(_path_in=_path_tmp, _seeing_frame=_obs,
+                                               _path_calib=_path_calib, _path_out=_path_out,
+                                               _frame_size_x_arcsec=36,
+                                               _fit_model=_config['seeing']['fit_model'],
+                                               _box_size=_config['seeing']['win'])
                             if seeing is not None:
                                 seeing_plot.append([_date_utc, seeing, _filt])
                             _seeing_frames[ii][1] = _date_utc
                             _seeing_frames[ii][2] = _filt
                             _seeing_frames[ii][3] = seeing
+                            _seeing_frames[ii][4] = seeing_x
+                            _seeing_frames[ii][5] = seeing_y
 
                         # generate summary plot for the whole night:
                         if len(seeing_plot) > 0:
@@ -3897,7 +3907,8 @@ if __name__ == '__main__':
                 # make joint plots to display on the website
                 # do that once a day*1.5 or so
                 status_ok = check_aux(_config=config, _logger=logger, _coll=coll, _coll_aux=coll_aux, _date=date,
-                                      _seeing_frames=[[k, None, None, None] for k in date_seeing], _n_days=1.5)
+                                      _seeing_frames=[[k, None, None, None, None, None] for k in date_seeing],
+                                      _n_days=1.5)
                 if not status_ok:
                     logger.error('Checking summaries failed for {:s}'.format(date))
 

@@ -183,9 +183,11 @@
                         {% if user == 'admin' %}
                             <li><a href="manage_users">Manage users</a></li>
                             {# Manage reobserving requests #}
-                            <li><a href="manage_requests">Manage requests</a></li>
+                            {#<li><a href="manage_requests">Manage requests</a></li> #}
+                            <li><a href="#">Manage requests</a></li>
                             {# View system logs #}
-                            <li><a href="view_logs">View logs</a></li>
+                            {#<li><a href="view_logs">View logs</a></li>#}
+                            <li><a href="#">View logs</a></li>
                         {% endif %}
                         <li><a href="logout">Log out</a></li>
                     </ul>
@@ -311,7 +313,31 @@
                             </div>
                             <div role="tabpanel" class="tab-pane" id="{{ date }}-preview">
                                 {% for program in programs %}
-                                    <h4>Program {{ program }}: images preview</h4>
+                                    <h4>Program {{ program }}</h4>
+                                    <div id="program_{{program}}_images">
+                                    {% for obs in programs[program] %}
+                                        <div class="img-wrapper">
+                                            <img src="/data/{{date}}/{{obs['_id']}}/automated/preview/{{obs['_id']}}_cropped.png"
+                                                 alt="{{ obs['_id'] }}"
+                                                 style="height:120px; cursor: pointer;">
+                                            <div class="overlay" data-toggle="modal" data-target="#sourceModal"
+                                                 data-date="{{date}}" data-source="{{ obs['_id'] }}"
+                                                 data-sou_name="{{ obs['name'] }}"
+                                                 data-lucky="{{ obs['pipelined']['automated']['preview']['done'] }}"
+                                                 data-lucky-strehl="{{ obs['pipelined']['automated']['strehl']['status']['done'] }}"
+                                                 data-lucky-pca="{{ obs['pipelined']['automated']['pca']['preview']['done'] }}"
+                                                 data-faint="{{ obs['pipelined']['faint']['preview']['done'] }}"
+                                                 data-faint-strehl="{{ obs['pipelined']['faint']['strehl']['status']['done'] }}"
+                                                 data-faint-pca="{{ obs['pipelined']['faint']['pca']['preview']['done'] }}"
+                                                 style="cursor: pointer;">
+                                                 {{obs['name']}}<br>
+                                                 Camera: {{obs['camera']}}<br>
+                                                 Filter: {{obs['filter']}}
+                                                <br>{{obs['date_utc']}}
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                    </div>
                                 {% endfor %}
                             </div>
                             <div role="tabpanel" class="tab-pane" id="{{ date }}-auxiliary">
@@ -329,69 +355,70 @@
                                                      alt="{{ aux_key }}" class="img-responsive pop"
                                                      style="cursor:pointer; cursor: hand;">
                                             </div>
-                                        {% endif %}
-                                    {% if aux_key == 'seeing' %}
-                                        <div class="col-md-6">
-                                            <h5>{{ aux_key }} movie [image, model, residuals]</h5>
-                                            <div id="seeingCarousel" class="carousel carousel-fade"
-                                                 data-interval="300" data-pause="false" style="width:100%"
-                                                 onmouseover="pauseCarouselShow();"
-                                                 onmouseleave="pauseCarouselHide();">
-                                                <div class="carousel-inner">
-                                                    <div class="item active">
-                                                        {% set fi0 = aux[date][aux_key]['frames'][0] %}
-                                                        {% set datestr = fi0[:fi0.index('.')].split('_')[-2:] %}
-                                                        {% set dat  = datestr[0][0:4]+'/'+
-                                                                            datestr[0][4:6]+'/'+datestr[0][6:] %}
-                                                        {% set time = datestr[1][0:2]+':'+
-                                                                            datestr[1][2:4]+':'+datestr[1][4:] %}
-                                                        <img src="/data/{{date}}/summary/seeing/{{fi0}}"
-                                                             alt="" class="img-responsive">
-                                                        <div class="carousel-caption"
-                                                             style="position:absolute !important; top:-5%;
-                                                                    padding-bottom: 0px;">
-                                                            {{dat}}&nbsp;{{time}}</div>
-                                                    </div>
-                                                    {% for fi in aux[date][aux_key]['frames'][1:] %}
-                                                        <div class="item">
-                                                            {% set datestr = fi[:fi.index('.')].split('_')[-2:] %}
-                                                            {% set dat  = datestr[0][0:4]+'/'+
-                                                                            datestr[0][4:6]+'/'+datestr[0][6:] %}
-                                                            {% set time = datestr[1][0:2]+':'+
-                                                                            datestr[1][2:4]+':'+datestr[1][4:] %}
-                                                            <img src="/data/{{date}}/summary/seeing/{{fi}}"
-                                                                 alt="" class="img-responsive">
-                                                            <div class="carousel-caption"
-                                                                 style="position:absolute !important; top:-5%">
-                                                                {{dat}}&nbsp;{{time}}</div>
+
+                                            {% if aux_key == 'seeing' %}
+                                                <div class="col-md-6">
+                                                    <h5>{{ aux_key }} movie [data, model, residuals]</h5>
+                                                    <div id="seeingCarousel" class="carousel carousel-fade"
+                                                         data-interval="300" data-pause="false" style="width:100%"
+                                                         onmouseover="pauseCarouselShow();"
+                                                         onmouseleave="pauseCarouselHide();">
+                                                        <div class="carousel-inner">
+                                                            <div class="item active">
+                                                                {% set fi0 = aux[date][aux_key]['frames'][0] %}
+                                                                {% set datestr = fi0[:fi0.index('.')].split('_')[-2:] %}
+                                                                {% set dat  = datestr[0][0:4]+'/'+
+                                                                                    datestr[0][4:6]+'/'+datestr[0][6:] %}
+                                                                {% set time = datestr[1][0:2]+':'+
+                                                                                    datestr[1][2:4]+':'+datestr[1][4:] %}
+                                                                <img src="/data/{{date}}/summary/seeing/{{fi0}}"
+                                                                     alt="" class="img-responsive">
+                                                                <div class="carousel-caption"
+                                                                     style="position:absolute !important; top:-5%;
+                                                                            padding-bottom: 0px;">
+                                                                    {{dat}}&nbsp;{{time}}</div>
+                                                            </div>
+                                                            {% for fi in aux[date][aux_key]['frames'][1:] %}
+                                                                <div class="item">
+                                                                    {% set datestr = fi[:fi.index('.')].split('_')[-2:] %}
+                                                                    {% set dat  = datestr[0][0:4]+'/'+
+                                                                                    datestr[0][4:6]+'/'+datestr[0][6:] %}
+                                                                    {% set time = datestr[1][0:2]+':'+
+                                                                                    datestr[1][2:4]+':'+datestr[1][4:] %}
+                                                                    <img src="/data/{{date}}/summary/seeing/{{fi}}"
+                                                                         alt="" class="img-responsive">
+                                                                    <div class="carousel-caption"
+                                                                         style="position:absolute !important; top:-5%">
+                                                                        {{dat}}&nbsp;{{time}}</div>
+                                                                </div>
+                                                            {% endfor %}
                                                         </div>
-                                                    {% endfor %}
+
+                                                        <a class="left carousel-control" href="#seeingCarousel"
+                                                           data-slide="prev">
+                                                            <span class="glyphicon glyphicon-chevron-left"></span>
+                                                        </a>
+                                                        <a class="right carousel-control" href="#seeingCarousel"
+                                                           data-slide="next">
+                                                            <span class="glyphicon glyphicon-chevron-right"></span>
+                                                        </a>
+
+                                                        <a id="carousel-play" class="carousel-control carouselButtons"
+                                                           onclick="playCarousel()">
+                                                                <span class="glyphicon glyphicon-play"
+                                                                      style="font-size: 40px !important;"></span>
+                                                        </a>
+                                                        <a id="carousel-pause" class="carousel-control carouselButtons"
+                                                           onclick="pauseCarousel()">
+                                                                <span class="glyphicon glyphicon-pause"
+                                                                      style="font-size: 40px !important;"></span>
+                                                        </a>
+                                                    </div>
                                                 </div>
-
-                                                <a class="left carousel-control" href="#seeingCarousel"
-                                                   data-slide="prev">
-                                                    <span class="glyphicon glyphicon-chevron-left"></span>
-                                                </a>
-                                                <a class="right carousel-control" href="#seeingCarousel"
-                                                   data-slide="next">
-                                                    <span class="glyphicon glyphicon-chevron-right"></span>
-                                                </a>
-
-                                                <a id="carousel-play" class="carousel-control carouselButtons"
-                                                   onclick="playCarousel()">
-                                                        <span class="glyphicon glyphicon-play"
-                                                              style="font-size: 40px !important;"></span>
-                                                </a>
-                                                <a id="carousel-pause" class="carousel-control carouselButtons"
-                                                   onclick="pauseCarousel()">
-                                                        <span class="glyphicon glyphicon-pause"
-                                                              style="font-size: 40px !important;"></span>
-                                                </a>
-                                            </div>
-                                        </div>
-                                        {# pull seeing data together: #}
-                                        </div>
-                                    {% endif %}
+                                                {# pull seeing data together: #}
+                                                </div>
+                                            {% endif %}
+                                        {% endif %}
                                     {% endfor %}
                                 {% else %}
                                     <h5>No data to show.</h5>
@@ -420,7 +447,7 @@
 </footer>
 
 
-<!-- Modal to display aux images -->
+<!-- Modal template to display aux images -->
 <div class="modal fade" id="aux_image_modal" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -436,6 +463,117 @@
 {#            <div class="modal-footer">#}
 {#                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>#}
 {#            </div>#}
+        </div>
+    </div>
+</div>
+
+
+<!-- Modal template to display preview images -->
+<div class="modal fade" id="sourceModal" tabindex="-1" role="dialog" aria-labelledby="ModalLabel">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal"
+                        aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title" id="ModalLabel">Object name</h4>
+            </div>
+            <div class="modal-body">
+                <div id="sourceTabs">
+                    <!-- Nav tabs -->
+                    <ul class="nav nav-tabs" role="tablist">
+                        <li role="presentation" class="active">
+                            <a href="#luckyImagesTab" aria-controls="luckyImagesTab"
+                               role="tab" data-toggle="tab">Lucky pipeline</a>
+                        </li>
+                        <li role="presentation">
+                            <a href="#faintImagesTab" aria-controls="faintImagesTab"
+                               role="tab" data-toggle="tab">Faint pipeline</a>
+                        </li>
+                        <li role="presentation">
+                            <a href="#headerTab" aria-controls="headerTab" role="tab" data-toggle="tab">Header</a>
+                        </li>
+                    </ul>
+
+                    <!-- Tab panes -->
+                    <div class="tab-content">
+                        <!--Lucky data-->
+                        <div role="tabpanel" class="tab-pane active" id="luckyImagesTab">
+                            <div class="row" id="luckyImagesTabContent" style="display:none;">
+                                <div class="col-md-6">
+                                    <h5>Full-size</h5>
+                                    <img id="lucky_sou_full" src="" style="width: 100%;" data-toggle="magnify">
+                                    <br><br>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="col-xs-6">
+                                        <h5 id="lucky_sou_cropped_label">Cropped</h5>
+                                        <img id="lucky_sou_cropped" src="" style="width:100%;" data-toggle="magnify">
+                                    </div>
+                                    <div class="col-xs-6">
+                                        <h5 id="lucky_sou_pca_label" style="display:none;">PSF-subtracted</h5>
+                                        <img id="lucky_sou_pca" src="" style="display:none; width:100%;" 
+                                             data-toggle="magnify">
+                                    </div>
+                                    <img id="lucky_sou_cc" src="" style="display:none; width:100%;">
+                                </div>
+                            </div>
+                            <div class="row" id="luckyImagesTabEmpty" style="display: none">
+                                <div class="col-md-12">
+                                    <h4>No data to show</h4>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!--Faint data-->
+                        <div role="tabpanel" class="tab-pane" id="faintImagesTab">
+                            <div class="row" id="faintImagesTabContent" style="display:none;">
+                                <div class="col-md-6">
+                                    <h5>Full-size</h5>
+                                    <img id="faint_sou_full" src="" style="width: 100%;" data-toggle="magnify">
+                                    <br><br>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="col-xs-6">
+                                        <h5 id="faint_sou_cropped_label">Cropped</h5>
+                                        <img id="faint_sou_cropped" src="" style="width:100%;" data-toggle="magnify">
+                                    </div>
+                                    <div class="col-xs-6">
+                                        <h5 id="faint_sou_pca_label" style="display:none;">PSF-subtracted</h5>
+                                        <img id="faint_sou_pca" src="" style="display:none; width:100%;"
+                                             data-toggle="magnify">
+                                    </div>
+                                    <img id="faint_sou_cc" src="" style="display:none; width:100%;">
+                                </div>
+                            </div>
+                            <div class="row" id="faintImagesTabEmpty" style="display: none">
+                                <div class="col-md-12">
+                                    <h4>No data to show</h4>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!--FITS header-->
+                        <div role="tabpanel" class="tab-pane" id="headerTab">
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <h5>FITS header</h5>
+                                    <table class="table table-striped table-hover table-condensed"
+                                           id="headerTable">
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+
+
+            </div>
+            <div class="modal-footer">
+                <a href="#" id="previewModalDonloadLink" style="float: left">Download all source data</a>
+                <button type="button" class="btn btn-success" data-dismiss="modal">Close</button>
+            </div>
         </div>
     </div>
 </div>
@@ -533,6 +671,149 @@ function pauseCarouselShow() {
 function pauseCarouselHide() {
     $('#carousel-pause').hide();
 }
+</script>
+
+<script>
+    // clear table with FITS header (in case it's not empty) before displaying current table
+    function clearTable() {
+        $('#headerTable').html('');
+    }
+
+    // send AJAX GET request to server to get source FITS header
+    function getHeader(source) {
+        $.getJSON($SCRIPT_ROOT + '/_get_fits_header', {
+            source: source
+        }, function(data) {
+            var header = data.result;
+            for (var key in header) {
+                if (key != 'COMMENT') {
+                    var $formrow = '<tr><td>'+key+'</td>'+
+                            '<td>'+header[key][0]+'</td>'+
+                            '<td>'+header[key][1]+'</td>'+'</tr>';
+                    $('#headerTable').append($formrow);
+                }
+            }
+        });
+        return false;
+    }
+
+    // Build modal with source data on-the-fly
+    $('#sourceModal').on('show.bs.modal', function (event) {
+        // show images tab by default:
+        $('#sourceTabs a[href="#luckyImagesTab"]').tab('show'); // Select tab by name
+
+        var trigger = $(event.relatedTarget); // Who triggered the modal? [to extract source info]
+        // Extract info from data-* attributes
+        var date = trigger.data('date'); // date of observation
+        var source = trigger.data('source'); // full source name (including prog_num, filt etc)
+        var lucky = trigger.data('lucky'); // lucky data?
+        var lucky_strehl = trigger.data('lucky-strehl'); // lucky data?
+        var lucky_pca = trigger.data('lucky-pca'); // lucky data?
+        var faint = trigger.data('faint'); // lucky data?
+        var faint_strehl = trigger.data('faint-strehl'); // lucky data?
+        var faint_pca = trigger.data('faint-pca'); // lucky data?
+
+        // download link:
+        $('#previewModalDonloadLink').attr('href', '/data/' + date + '/' +
+                    source + '/' + source + '.tar.bz2');
+
+        //var cc = trigger.data('cc'); // type of contrast curve
+        // Strehl
+        //var core = trigger.data('core'); // type of contrast curve
+        //var halo = trigger.data('halo'); // type of contrast curve
+        //var fwhm = trigger.data('fwhm'); // type of contrast curve
+        //var sr_flag = trigger.data('sr_flag'); // type of contrast curve
+        // If necessary, you could initiate an AJAX request here (and then do the updating in a callback).
+        // Update the modal's content. We'll use jQuery here,
+        // but one could use a data binding library or other methods instead.
+        var modal = $(this);
+        modal.find('.modal-title').text(source);
+        // lucky pipeline
+        if (JSON.parse(lucky.toLowerCase())) {
+            $('#luckyImagesTabContent').show();
+            $('#luckyImagesTabEmpty').hide();
+            modal.find('#lucky_sou_full').attr('src', '/data/' + date + '/' +
+                    source + '/automated/preview/' + source + '_full.png');
+            modal.find('#lucky_sou_cropped').attr('src', '/data/' + date + '/' +
+                    source + '/automated/preview/' + source + '_cropped.png');
+            // pca
+            if (lucky_pca) {
+                $('#lucky_sou_pca_label').show();
+                $('#lucky_sou_pca').show();
+                modal.find('#lucky_sou_pca').attr('src', '/data/' + date + '/' +
+                    source + '/automated/pca/' + source + '_pca.png');
+                $('#lucky_sou_cc').show();
+                modal.find('#lucky_sou_cc').attr('src', '/data/' + date + '/' +
+                    source + '/automated/pca/' + source + '_contrast_curve.png');
+            }
+            else {
+                $('#lucky_sou_pca_label').hide();
+                $('#lucky_sou_pca').hide();
+                modal.find('#lucky_sou_pca').attr('src', '');
+                $('#lucky_sou_cc').hide();
+                modal.find('#lucky_sou_cc').attr('src', '');
+            }
+            // strehl
+            if (lucky_strehl) {
+
+            }
+            else {
+
+            }
+        }
+        else {
+            $('#luckyImagesTabContent').hide();
+            $('#luckyImagesTabEmpty').show();
+        }
+
+        // faint pipeline
+        if (JSON.parse(faint.toLowerCase())) {
+            $('#faintImagesTabContent').show();
+            $('#faintImagesTabEmpty').hide();
+            modal.find('#faint_sou_full').attr('src', '/data/'+date+'/'+
+                    source+'/faint/preview/'+source+'_full.png');
+            modal.find('#faint_sou_cropped').attr('src', '/data/'+date+'/'+
+                    source+'/faint/preview/'+source+'_cropped.png');
+            // pca
+            if (faint_pca) {
+                $('#faint_sou_pca_label').show();
+                $('#faint_sou_pca').show();
+                modal.find('#faint_sou_pca').attr('src', '/data/' + date + '/' +
+                    source + '/faint/pca/' + source + '_pca.png');
+                $('#faint_sou_cc').show();
+                modal.find('#faint_sou_cc').attr('src', '/data/' + date + '/' +
+                    source + '/faint/pca/' + source + '_contrast_curve.png');
+            }
+            else {
+                $('#faint_sou_pca_label').hide();
+                $('#faint_sou_pca').hide();
+                modal.find('#faint_sou_pca').attr('src', '');
+                $('#faint_sou_cc').hide();
+                modal.find('#faint_sou_cc').attr('src', '');
+            }
+            // strehl
+            if (faint_strehl) {
+
+            }
+            else {
+
+            }
+        }
+        else {
+            $('#faintImagesTabContent').hide();
+            $('#faintImagesTabEmpty').show();
+        }
+
+        // generate table with header data
+        clearTable();
+        getHeader(source);
+    });
+    // tabs in the modal
+    $('#sourceTabs a').click(function (e) {
+        e.preventDefault();
+        $(this).tab('show')
+    });
+
 </script>
 
 <!-- Scroll to top -->

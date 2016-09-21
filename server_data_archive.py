@@ -58,6 +58,37 @@ def get_config(config_file='config.ini'):
         raise Exception('Failed to read in the config file')
 
 
+def parse_obs_name(_obs, _program_pi):
+    """
+        Parse Robo-AO observation name
+    :param _obs:
+    :param _program_pi: dict program_num -> PI
+    :return:
+    """
+    # parse name:
+    _tmp = _obs.split('_')
+    # program num. it will be a string in the future
+    _prog_num = str(_tmp[0])
+    # who's pi?
+    if _prog_num in _program_pi.keys():
+        _prog_pi = _program_pi[_prog_num]
+    else:
+        # play safe if pi's unknown:
+        _prog_pi = 'admin'
+    # stack name together if necessary (if contains underscores):
+    _sou_name = '_'.join(_tmp[1:-5])
+    # code of the filter used:
+    _filt = _tmp[-4:-3][0]
+    # date and time of obs:
+    _date_utc = datetime.datetime.strptime(_tmp[-2] + _tmp[-1], '%Y%m%d%H%M%S.%f')
+    # camera:
+    _camera = _tmp[-5:-4][0]
+    # marker:
+    _marker = _tmp[-3:-2][0]
+
+    return _prog_num, _prog_pi, _sou_name, _filt, _date_utc, _camera, _marker
+
+
 def connect_to_db(_config):
     """ Connect to the mongodb database
 
@@ -314,7 +345,7 @@ def get_dates(user_id, coll, start=None, stop=None):
                             'distributed.status': True})
 
     # iterate over query result:
-    for obs in cursor:
+    for obs in cursor.sort([('date_utc', -1)]):
         date = obs['date_utc'].strftime('%Y%m%d')
         # add key to dict if it is not there already:
         if date not in dates:
@@ -350,6 +381,41 @@ def get_aux(dates, coll_aux):
                         aux[date][key]['frames'].append(frame[0] + '.png')
 
     return aux
+
+
+@app.route('/_get_fits_header')
+@flask_login.login_required
+def get_fits_header():
+    """
+        Get FITS header for a _source_ observed on a _date_
+    :return: jsonified dictionary with the header / empty dict if failed
+    """
+    user_id = flask_login.current_user.id
+
+    # get parameters from the AJAX GET request
+    _obs = flask.request.args.get('source', 0, type=str)
+
+    _, _, coll, _, _, _, _program_pi = get_db(config)
+
+    # trying to steal stuff?
+    _program, _, _, _, _, _, _ = parse_obs_name(_obs, _program_pi)
+    if user_id != 'admin' and _program_pi[_program] != user_id:
+        # flask.abort(403)
+        return flask.jsonify(result={})
+
+    cursor = coll.find({'_id': _obs})
+
+    try:
+        if cursor.count() == 1:
+            for obs in cursor:
+                header = obs['pipelined']['automated']['fits_header']
+            return flask.jsonify(result=OrderedDict(header))
+        # not found in the database?
+        else:
+            return flask.jsonify(result={})
+    except Exception as _e:
+        print(_e)
+        return flask.jsonify(result={})
 
 
 @app.route('/get_data', methods=['GET'])
