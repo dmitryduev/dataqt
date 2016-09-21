@@ -316,27 +316,46 @@
                                     <h4>Program {{ program }}</h4>
                                     <div id="program_{{program}}_images">
                                     {% for obs in programs[program] %}
-                                        <div class="img-wrapper">
-                                            <img src="/data/{{date}}/{{obs['_id']}}/automated/preview/{{obs['_id']}}_cropped.png"
-                                                 alt="{{ obs['_id'] }}"
-                                                 style="height:120px; cursor: pointer;">
-                                            <div class="overlay" data-toggle="modal" data-target="#sourceModal"
-                                                 data-date="{{date}}" data-source="{{ obs['_id'] }}"
-                                                 data-sou_name="{{ obs['name'] }}"
-                                                 data-lucky="{{ obs['pipelined']['automated']['preview']['done'] }}"
-                                                 data-lucky-strehl="{{ obs['pipelined']['automated']['strehl']['status']['done'] }}"
-                                                 data-lucky-pca="{{ obs['pipelined']['automated']['pca']['preview']['done'] }}"
-                                                 data-faint="{{ obs['pipelined']['faint']['preview']['done'] }}"
-                                                 data-faint-strehl="{{ obs['pipelined']['faint']['strehl']['status']['done'] }}"
-                                                 data-faint-pca="{{ obs['pipelined']['faint']['pca']['preview']['done'] }}"
-                                                 style="cursor: pointer;">
-                                                 {{obs['name']}}<br>
-                                                 Camera: {{obs['camera']}}<br>
-                                                 Filter: {{obs['filter']}}
-                                                <br>{{obs['date_utc']}}
+                                        {% if (obs['pipelined']['automated']['status']['done'] and
+                                                obs['pipelined']['automated']['classified_as'] != 'failed') or
+                                                obs['pipelined']['faint']['status']['done'] %}
+                                            <div class="img-wrapper">
+                                                {% if obs['pipelined']['automated']['status']['done'] %}
+                                                    <img src="/data/{{date}}/{{obs['_id']}}/automated/preview/{{obs['_id']}}_cropped.png"
+                                                         alt="{{ obs['_id'] }}"
+                                                         style="height:120px; cursor: pointer;">
+                                                {% elif obs['pipelined']['faint']['status']['done'] %}
+                                                    <img src="/data/{{date}}/{{obs['_id']}}/faint/preview/{{obs['_id']}}_cropped.png"
+                                                         alt="{{ obs['_id'] }}"
+                                                         style="height:120px; cursor: pointer;">
+                                                {% endif %}
+                                                <div class="overlay" data-toggle="modal" data-target="#sourceModal"
+                                                     data-date="{{date}}" data-source="{{ obs['_id'] }}"
+                                                     data-sou_name="{{ obs['name'] }}"
+                                                     data-lucky="{{ obs['pipelined']['automated']['preview']['done'] }}"
+                                                     data-lucky-strehl="{{ obs['pipelined']['automated']['strehl']['status']['done'] }}"
+                                                     data-lucky-pca="{{ obs['pipelined']['automated']['pca']['preview']['done'] }}"
+                                                     data-faint="{{ obs['pipelined']['faint']['preview']['done'] }}"
+                                                     data-faint-strehl="{{ obs['pipelined']['faint']['strehl']['status']['done'] }}"
+                                                     data-faint-pca="{{ obs['pipelined']['faint']['pca']['preview']['done'] }}"
+                                                     style="cursor: pointer;">
+                                                     {{obs['name']}}<br>
+                                                     Camera: {{obs['camera']}}<br>
+                                                     Filter: {{obs['filter']}}
+                                                    <br>{{obs['date_utc']}}
+                                                </div>
                                             </div>
-                                        </div>
+                                        {% endif %}
                                     {% endfor %}
+                                    <br>
+                                    <p style="margin-top: 10px;">
+                                    {% for obs in programs[program] %}
+                                        {% if obs['pipelined']['automated']['status']['done'] and
+                                                obs['pipelined']['automated']['classified_as'] == 'failed' %}
+                                            {{ obs['_id'] }}: failed
+                                        {% endif %}
+                                    {% endfor %}
+                                    </p>
                                     </div>
                                 {% endfor %}
                             </div>
@@ -737,7 +756,7 @@ function pauseCarouselHide() {
             modal.find('#lucky_sou_cropped').attr('src', '/data/' + date + '/' +
                     source + '/automated/preview/' + source + '_cropped.png');
             // pca
-            if (lucky_pca) {
+            if (JSON.parse(lucky_pca.toLowerCase())) {
                 $('#lucky_sou_pca_label').show();
                 $('#lucky_sou_pca').show();
                 modal.find('#lucky_sou_pca').attr('src', '/data/' + date + '/' +
@@ -754,7 +773,7 @@ function pauseCarouselHide() {
                 modal.find('#lucky_sou_cc').attr('src', '');
             }
             // strehl
-            if (lucky_strehl) {
+            if (JSON.parse(lucky_strehl.toLowerCase())) {
 
             }
             else {
@@ -775,7 +794,7 @@ function pauseCarouselHide() {
             modal.find('#faint_sou_cropped').attr('src', '/data/'+date+'/'+
                     source+'/faint/preview/'+source+'_cropped.png');
             // pca
-            if (faint_pca) {
+            if (JSON.parse(faint_pca.toLowerCase())) {
                 $('#faint_sou_pca_label').show();
                 $('#faint_sou_pca').show();
                 modal.find('#faint_sou_pca').attr('src', '/data/' + date + '/' +
@@ -792,7 +811,7 @@ function pauseCarouselHide() {
                 modal.find('#faint_sou_cc').attr('src', '');
             }
             // strehl
-            if (faint_strehl) {
+            if (JSON.parse(faint_strehl.toLowerCase())) {
 
             }
             else {

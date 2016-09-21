@@ -2244,8 +2244,8 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
                     {'_id': _obs},
                     {
                         '$set': {
-                            'exposure': float(header['EXPOSURE'][0]),
-                            'magnitude': float(header['MAGNITUD'][0]),
+                            'exposure': float(header['EXPOSURE'][0]) if tag != 'failed' else None,
+                            'magnitude': float(header['MAGNITUD'][0]) if tag != 'failed' else None,
                             'pipelined.automated.status.done': True,
                             'pipelined.automated.classified_as': tag,
                             'pipelined.automated.last_modified': time_tag,
@@ -2882,8 +2882,14 @@ def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automate
                     # Strehl ratio (if available, otherwise will be None)
                     SR = _select['pipelined'][_pipe]['strehl']['ratio_percent']
 
-                    _pix_x = int(re.search(r'(:)(\d+)',
-                                   _select['pipelined'][_pipe]['fits_header']['DETSIZE'][0]).group(2))
+                    fits_header = get_fits_header(f_fits)
+                    try:
+                        # _pix_x = int(re.search(r'(:)(\d+)',
+                        #                        _select['pipelined'][_pipe]['fits_header']['DETSIZE'][0]).group(2))
+                        _pix_x = int(re.search(r'(:)(\d+)', fits_header['DETSIZE'][0]).group(2))
+                    except KeyError:
+                        # this should be there, even if it's sum.fits
+                        _pix_x = int(fits_header['NAXIS1'][0])
 
                     _status = generate_pipe_preview(path_out, _obs, preview_img, preview_img_cropped,
                                                     SR, _fow_x=36, _pix_x=_pix_x, _drizzled=_drizzled,
