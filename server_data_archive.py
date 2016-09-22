@@ -20,6 +20,15 @@ import flask
 import flask_login
 from werkzeug.security import generate_password_hash, check_password_hash
 from urlparse import urlparse
+from astropy.coordinates import SkyCoord
+from astropy import units
+import pyvo as vo
+from PIL import Image
+import urllib2
+from cStringIO import StringIO
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+import matplotlib.pyplot as plt
+import numpy as np
 
 
 def get_config(config_file='config.ini'):
@@ -50,6 +59,9 @@ def get_config(config_file='config.ini'):
         ''' server location '''
         conf['server_host'] = _config.get('Server', 'host')
         conf['server_port'] = _config.get('Server', 'port')
+
+        # VO server:
+        conf['vo_server'] = _config.get('Misc', 'vo_url')
 
         return conf
 
@@ -417,6 +429,82 @@ def get_fits_header():
             for obs in cursor:
                 header = obs['pipelined']['automated']['fits_header']
             return flask.jsonify(result=OrderedDict(header))
+        # not found in the database?
+        else:
+            return flask.jsonify(result={})
+    except Exception as _e:
+        print(_e)
+        return flask.jsonify(result={})
+
+
+@app.route('/_get_vo_image', methods=['GET'])
+@flask_login.login_required
+def get_vo_image():
+    user_id = flask_login.current_user.id
+
+    # get parameters from the AJAX GET request
+    _obs = flask.request.args.get('source', 0, type=str)
+
+    _, _, coll, _, _, _, _program_pi = get_db(config)
+
+    # trying to steal stuff?
+    _program, _, _, _, _, _, _ = parse_obs_name(_obs, _program_pi)
+    if user_id != 'admin' and _program_pi[_program] != user_id:
+        # flask.abort(403)
+        return flask.jsonify(result={})
+
+    # print(_obs)
+    cursor = coll.find({'_id': _obs})
+
+    try:
+        if cursor.count() == 1:
+            for obs in cursor:
+                header = obs['pipelined']['automated']['fits_header']
+                if 'TELDEC' in header and 'TELRA' in header:
+                    c = SkyCoord(header['TELRA'][0], header['TELDEC'][0],
+                                 unit=(units.hourangle, units.deg), frame='icrs')
+                    # print(c)
+                    # print(c.ra.deg, c.dec.deg)
+
+                    vo_url = config['vo_server']
+
+                    survey_filter = {'dss2': 'r', '2mass': 'h'}
+                    output = {}
+
+                    for survey in survey_filter:
+
+                        # TODO: use image size + scale from config. For now it's 36"x36" times 2 (0.02 deg^2)
+                        previews = vo.imagesearch(vo_url, pos=(c.ra.deg, c.dec.deg),
+                                                  size=(0.01*2, 0.01*2), format='image/png',
+                                                  survey=survey)
+                        if previews.nrecs == 0:
+                            continue
+                        # get url:
+                        image_url = [image.getdataurl() for image in previews
+                                     if image.title == survey + survey_filter[survey]][0]
+
+                        _file = StringIO(urllib2.urlopen(image_url).read())
+                        survey_image = np.array(Image.open(_file))
+
+                        fig = plt.figure(figsize=(3, 3))
+                        ax = fig.add_subplot(111)
+                        ax.imshow(survey_image, origin='lower', interpolation='nearest', cmap=plt.cm.magma)
+                        ax.grid('off')
+                        ax.set_axis_off()
+                        fig.subplots_adjust(wspace=0, hspace=0, top=1, bottom=0, right=1, left=0)
+                        plt.margins(0, 0)
+                        # flip x axis for it to look like our images:
+                        plt.gca().invert_xaxis()
+                        plt.gca().invert_yaxis()
+
+                        canvas = FigureCanvas(fig)
+                        png_output = StringIO()
+                        canvas.print_png(png_output)
+                        png_output = png_output.getvalue().encode('base64')
+
+                        output['{:s}_{:s}'.format(survey, survey_filter[survey])] = png_output
+
+            return flask.jsonify(result=output)
         # not found in the database?
         else:
             return flask.jsonify(result={})

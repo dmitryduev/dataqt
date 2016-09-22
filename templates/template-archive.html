@@ -248,6 +248,7 @@
                         <li class="dropdown-submenu">
                             <a tabindex="0" style="cursor: pointer; cursor: hand;">Select range</a>
                             <ul class="dropdown-menu" style="padding: 5px 10px 0px 10px;">
+                                {# TODO: select range #}
                                 <li>From: [under construction]</li>
                                 <li>To: [under construction]</li>
                             </ul>
@@ -509,7 +510,12 @@
                                role="tab" data-toggle="tab">Faint pipeline</a>
                         </li>
                         <li role="presentation">
-                            <a href="#headerTab" aria-controls="headerTab" role="tab" data-toggle="tab">Header</a>
+                            <a href="#headerTab" aria-controls="headerTab"
+                               role="tab" data-toggle="tab">Header</a>
+                        </li>
+                        <li role="presentation">
+                            <a href="#externalImagesTab" aria-controls="externalImagesTab"
+                               role="tab" data-toggle="tab">External images of the field</a>
                         </li>
                     </ul>
 
@@ -579,6 +585,20 @@
                                     <table class="table table-striped table-hover table-condensed"
                                            id="headerTable">
                                     </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!--FITS header-->
+                        <div role="tabpanel" class="tab-pane" id="externalImagesTab">
+                            <div class="row">
+                                <div class="col-md-6" id="dss2_r" style="display: none">
+                                    <h5>DSS2 (r filter):</h5>
+                                    <img id="dss2_r_image" src="" style="width:100%;" data-toggle="magnify">
+                                </div>
+                                <div class="col-md-6" id="2mass_h" style="display: none">
+                                    <h5>2MASS (H filter):</h5>
+                                    <img id="2mass_h_image" src="" style="width:100%;" data-toggle="magnify">
                                 </div>
                             </div>
                         </div>
@@ -716,6 +736,26 @@ function pauseCarouselHide() {
         return false;
     }
 
+    // clear tab with external images
+    function clearExternalImages() {
+        $('#dss2_r').hide();
+        $('#2mass_h').hide();
+    }
+
+    // send AJAX GET request to server to get source FITS header
+    function getExternalImages(source) {
+        $.getJSON($SCRIPT_ROOT + '/_get_vo_image', {
+            source: source
+        }, function(data) {
+            var images = data.result;
+            for (var key in images) {
+                $('#'+key).show();
+                $('#'+key+'_image').attr('src', 'data:image/png;base64,' + images[key])
+            }
+        });
+        return false;
+    }
+
     // Build modal with source data on-the-fly
     $('#sourceModal').on('show.bs.modal', function (event) {
         // show images tab by default:
@@ -826,6 +866,10 @@ function pauseCarouselHide() {
         // generate table with header data
         clearTable();
         getHeader(source);
+
+        // fetch external vo images of the field
+        clearExternalImages();
+        getExternalImages(source);
     });
     // tabs in the modal
     $('#sourceTabs a').click(function (e) {
