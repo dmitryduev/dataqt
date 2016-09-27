@@ -291,21 +291,26 @@
                                             program_{{ program }}_{{ date }}.wget.sh
                                         </a><br>
                                     </abbr>
-                                    Individual compressed tarballs:
-                                    <blockquote style="font-size: 14px;">
-                                        <p>
-                                            {% for obs in programs[program] %}
-                                                {# check if bz2 exists: #}
-                                                {% if obs['distributed']['status'] %}
-                                                    <a href="/data/{{ date }}/{{ obs['_id'] }}/{{ obs['_id'] }}.tar.bz2">
-                                                        {{ obs['_id'] }}.tar.bz2
-                                                    </a><br>
-                                                {% else %}
-                                                    {{ obs['_id'] }}: not ready yet<br>
-                                                {% endif %}
-                                            {% endfor %}
-                                        </p>
-                                    </blockquote>
+                                    <a data-toggle="collapse" href="#collapse_{{ date }}_{{ program }}"
+                                       aria-expanded="false" aria-controls="collapse_{{ date }}_{{ program }}">
+                                        Individual compressed tarballs
+                                    </a>
+                                    <div class="collapse" id="collapse_{{ date }}_{{ program }}">
+                                        <blockquote style="font-size: 14px;">
+                                            <p>
+                                                {% for obs in programs[program] %}
+                                                    {# check if bz2 exists: #}
+                                                    {% if obs['distributed']['status'] %}
+                                                        <a href="/data/{{ date }}/{{ obs['_id'] }}/{{ obs['_id'] }}.tar.bz2">
+                                                            {{ obs['_id'] }}.tar.bz2
+                                                        </a><br>
+                                                    {% else %}
+                                                        {{ obs['_id'] }}: not ready yet<br>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </p>
+                                        </blockquote>
+                                    </div>
                                 {% endfor %}
                             </div>
                             <div role="tabpanel" class="tab-pane" id="{{ date }}-preview">
