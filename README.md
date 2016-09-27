@@ -187,10 +187,10 @@ huey = RedisHuey(name='roboao.archive', host='127.0.0.1', port='6379', result_st
 
 Start the task consumer with 4 parallel workers in the quiet mode polling stuff every 10 seconds without a crontab:
 ```bash
-pm2 start huey_consumer.py -- /path/to/module.huey -k process -w 4 -d 10 -n -q
+pm2 start huey_consumer.py --interpreter=/path/to/python -- /path/to/module.huey -k process -w 4 -d 10 -n -q
 ```
 ```
-pm2 start huey_consumer.py -- /Users/dmitryduev/web/roboao-archive/archive.huey -k process -w 4 -d 10 -n -q
+pm2 start huey_consumer.py --interpreter=/path/to/python -- /Users/dmitryduev/web/roboao-archive/archive.huey -k process -w 4 -d 10 -n -q
 ```
 
 Check its status with ```pm2 status```. (saw errors a couple of times)
