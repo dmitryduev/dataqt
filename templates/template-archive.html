@@ -283,7 +283,7 @@
                         <!-- Tab panes -->
                         <div class="tab-content">
                             <div role="tabpanel" class="tab-pane active" id="{{ date }}-data">
-                                {% for program in programs %}
+                                {% for program in programs|sort %}
                                     <h4>Program {{ program }}</h4>
                                     Master wget-script to fetch all data:
                                     <abbr title="Dont't forget to 'chmod u+x'">
@@ -309,7 +309,7 @@
                                 {% endfor %}
                             </div>
                             <div role="tabpanel" class="tab-pane" id="{{ date }}-preview">
-                                {% for program in programs %}
+                                {% for program in programs|sort %}
                                     <h4>Program {{ program }}</h4>
                                     <div id="program_{{program}}_images">
                                     {% for obs in programs[program] %}
