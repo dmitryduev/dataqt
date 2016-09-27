@@ -423,6 +423,8 @@ def job_faint_pipeline(_config, _raws_zipped, _date, _obs, _path_out):
                 get_xy_from_pipeline_settings_txt(os.path.join(_path_lucky, tag, _obs))
 
             win = int(np.min([_config['faint']['win'], x_lock, y_lock]))
+            # use highest-Strehl frame to align individual frames to:
+            pivot = get_best_pipe_frame(os.path.join(_path_lucky, tag, _obs))
         else:
             # zero flux or failed? try the whole (square) image (or the largest square subset of it)
             with fits.open(os.path.join(_path_tmp, raws[0])) as tmp_fits:
@@ -432,6 +434,9 @@ def job_faint_pipeline(_config, _raws_zipped, _date, _obs, _path_out):
                 y_lock = tmp_header.get('NAXIS2') // 2
             # window must be square:
             win = int(np.min([x_lock, y_lock]))
+            # use seeing-limited image to align individual frames to:
+            pivot = (-1, -1)
+
         # print('Initial lock position: ', x_lock, y_lock)
 
         # parse observation name
@@ -442,6 +447,7 @@ def job_faint_pipeline(_config, _raws_zipped, _date, _obs, _path_out):
         reduce_faint_object_noram(_path_in=_path_tmp, _files=raws,
                                   _path_calib=_path_calib, _path_out=_path_out,
                                   _obs=_obs, _mode=_mode, _filt=_filt, _win=win, cy0=y_lock, cx0=x_lock,
+                                  _pivot=pivot,
                                   _nthreads=_config['faint']['n_threads'],
                                   _remove_tmp=True, _v=True, _interactive_plot=False)
 
@@ -1051,7 +1057,7 @@ def image_center(_path, _fits_name, _x0=None, _y0=None, _win=None):
 
 
 def reduce_faint_object_noram(_path_in, _files, _path_calib, _path_out, _obs,
-                              _mode, _filt, _win, cy0, cx0,
+                              _mode, _filt, _win, cy0, cx0, _pivot=(-1, -1),
                               _nthreads=1, _remove_tmp=True, _v=False, _interactive_plot=False):
     """
 
@@ -1065,6 +1071,8 @@ def reduce_faint_object_noram(_path_in, _files, _path_calib, _path_out, _obs,
     :param _win: window size in pixels
     :param cy0: cut a window [+-_win] around this position to
     :param cx0: do image registration
+    :param _pivot: raw file number (starting from zero) and frame number to align to
+                  default: (-1, -1) means align to a seeing limited image
     :param _nthreads: number of threads to use in image registration
     :param _remove_tmp: remove unzipped fits-files if successfully finished processing?
     :param _v: verbose? [display progress bars and print statements]
@@ -1121,8 +1129,20 @@ def reduce_faint_object_noram(_path_in, _files, _path_calib, _path_out, _obs,
         summed_frame = np.zeros_like(summed_seeing_limited_frame, dtype=np.float)
 
         # Pick a frame to align to
-        # try the seeing-limited sum of all frames:
-        im1 = deepcopy(summed_seeing_limited_frame)
+        # seeing-limited sum of all frames:
+        print(_pivot)
+        if _pivot == (-1, -1):
+            im1 = deepcopy(summed_seeing_limited_frame)
+            print('using seeing-limited image as pivot frame')
+        else:
+            try:
+                with fits.open(os.path.join(_path_in, _files_list[_pivot[0]])) as _hdulist:
+                    im1 = _hdulist[_pivot[1]].data
+                print('using frame {:d} from raw fits-file #{:d} as pivot frame'.format(*_pivot))
+            except Exception as _e:
+                print(_e)
+                im1 = deepcopy(summed_seeing_limited_frame)
+                print('using seeing-limited image as pivot frame')
 
         if _interactive_plot:
             plt.axes([0., 0., 1., 1.])
@@ -1488,6 +1508,30 @@ def get_xy_from_pipeline_settings_txt(_path, _first=True):
                 break
 
     return _x, _y
+
+
+def get_best_pipe_frame(_path):
+    """
+        Get file and frame numbers with the highest Strehl for lucky-pipelined data
+    :param _path:
+    :return:
+    """
+    try:
+        with open(os.path.join(_path, 'sorted.txt'), 'r') as _f:
+            f_lines = _f.readlines()
+        _tmp = f_lines[1].split()[-1]
+        frame_num = int(re.search(r'.fits\[(\d+)\]', _tmp).group(1))
+        file_num_pattern = re.search(r'_(\d+).fits', _tmp)
+        # is it the first file? its number 0:
+        if file_num_pattern is None:
+            file_num = 0
+        # no? then from blabla_n.fits its number is n+1
+        else:
+            file_num = int(file_num_pattern.group(1)) + 1
+        return file_num, frame_num
+    except Exception as _e:
+        print(_e)
+        return -1, -1
 
 
 # detect observations, which are bad because of being too faint

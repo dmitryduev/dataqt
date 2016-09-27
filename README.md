@@ -237,6 +237,31 @@ pm2 start server_data_archive.py --interpreter=/path/to/python
 
 ---
 
+## How to work with the database
+
+Mark all observations as not distributed (this will force):
+```python
+db.getCollection('objects').update({}, 
+    { $set: 
+        {'distributed.status': False,
+         'distributed.last_modified': utc_now()}
+    }, 
+    {multi: true}
+)
+```
+
+Force faint pipeline on a target:
+```python
+db.getCollection('objects').update_one({'_id': '4_351_Yrsa_VIC_lp600_o_20160925_110427.040912'}, 
+    { $set: 
+        {'pipelined.faint.status.force_redo': True,
+         'pipelined.faint.last_modified': utc_now()}
+    }
+)
+```
+
+---
+
 ## Archive structure
 The processed data are structured in the way described below. It should be straightforward to restore the database in case of a 'database disaster' keeping this structure in mind (in fact, **archive.py** will take care of that automatically once the database is up and running).
 
