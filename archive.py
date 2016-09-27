@@ -3159,7 +3159,11 @@ def check_distributed(_config, _logger, _coll, _select, _date, _obs, _n_days=1.0
                       == _config['max_pipelining_retries'] or
                      _select['pipelined']['automated']['strehl']['flag'] == 'OK')
 
-            if done:
+            # make sure nothing's enqueued for the _obs
+            enqueued = inqueue('job_faint_pipeline', _obs) and inqueue('job_strehl', _obs) \
+                        and inqueue('job_pca', _obs)
+
+            if done and not enqueued:
                 _path_obs = os.path.join(_config['path_archive'], _date, _obs)
                 last_modified = datetime.datetime.utcfromtimestamp(
                                     os.stat(os.path.join(_path_obs)).st_mtime)
