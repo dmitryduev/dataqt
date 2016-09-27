@@ -345,7 +345,7 @@ def get_dates(user_id, coll, start=None, stop=None):
             stop = datetime.datetime.utcnow()
 
     # dictionary: {date: {program_N: [observations]}}
-    dates = dict()
+    dates = OrderedDict()
     # programs = []
     if user_id == 'admin':
         # get everything;
@@ -361,7 +361,7 @@ def get_dates(user_id, coll, start=None, stop=None):
         date = obs['date_utc'].strftime('%Y%m%d')
         # add key to dict if it is not there already:
         if date not in dates:
-            dates[date] = dict()
+            dates[date] = OrderedDict()
         # add key for program if it is not there yet
         program_id = obs['science_program']['program_id']
         if program_id not in dates[date]:

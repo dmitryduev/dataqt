@@ -103,12 +103,6 @@
             text-align: center;
             cursor: pointer;
         }
-        #carousel-play {
-            display: block;
-        }
-        #carousel-pause {
-            display: none;
-        }
         .img-wrapper {
             position: relative;
             display:inline-block;
@@ -269,7 +263,7 @@
         {% else %}
             <div class="container">
                 <div class="col-md-12">
-                    <h3>{{ date }}</h3>
+                    <h3 style="color: #286090">{{ date[:4]+'/' + date[4:6]+'/' + date[6:] }}</h3>
 
                     <div class="data-tabs">
 
@@ -306,6 +300,8 @@
                                                     <a href="/data/{{ date }}/{{ obs['_id'] }}/{{ obs['_id'] }}.tar.bz2">
                                                         {{ obs['_id'] }}.tar.bz2
                                                     </a><br>
+                                                {% else %}
+                                                    {{ obs['_id'] }}: not ready yet
                                                 {% endif %}
                                             {% endfor %}
                                         </p>
@@ -379,10 +375,10 @@
                                             {% if aux_key == 'seeing' %}
                                                 <div class="col-md-6">
                                                     <h5>{{ aux_key }} movie [data, model, residuals]</h5>
-                                                    <div id="seeingCarousel" class="carousel carousel-fade"
+                                                    <div id="seeingCarousel{{ date }}" class="carousel carousel-fade"
                                                          data-interval="300" data-pause="false" style="width:100%"
-                                                         onmouseover="pauseCarouselShow();"
-                                                         onmouseleave="pauseCarouselHide();">
+                                                         onmouseover="pauseCarouselShow('{{ date }}');"
+                                                         onmouseleave="pauseCarouselHide('{{ date }}');">
                                                         <div class="carousel-inner">
                                                             <div class="item active">
                                                                 {% set fi0 = aux[date][aux_key]['frames'][0] %}
@@ -414,22 +410,26 @@
                                                             {% endfor %}
                                                         </div>
 
-                                                        <a class="left carousel-control" href="#seeingCarousel"
+                                                        <a class="left carousel-control" href="#seeingCarousel{{ date }}"
                                                            data-slide="prev">
                                                             <span class="glyphicon glyphicon-chevron-left"></span>
                                                         </a>
-                                                        <a class="right carousel-control" href="#seeingCarousel"
+                                                        <a class="right carousel-control" href="#seeingCarousel{{ date }}"
                                                            data-slide="next">
                                                             <span class="glyphicon glyphicon-chevron-right"></span>
                                                         </a>
 
-                                                        <a id="carousel-play" class="carousel-control carouselButtons"
-                                                           onclick="playCarousel()">
+                                                        <a id="carousel-play{{ date }}"
+                                                           class="carousel-control carouselButtons"
+                                                           onclick="playCarousel('{{ date }}')"
+                                                           style="display: block">
                                                                 <span class="glyphicon glyphicon-play"
                                                                       style="font-size: 40px !important;"></span>
                                                         </a>
-                                                        <a id="carousel-pause" class="carousel-control carouselButtons"
-                                                           onclick="pauseCarousel()">
+                                                        <a id="carousel-pause{{ date }}"
+                                                           class="carousel-control carouselButtons"
+                                                           onclick="pauseCarousel('{{ date }}')"
+                                                           style="display: none">
                                                                 <span class="glyphicon glyphicon-pause"
                                                                       style="font-size: 40px !important;"></span>
                                                         </a>
@@ -593,11 +593,11 @@
                         <div role="tabpanel" class="tab-pane" id="externalImagesTab">
                             <div class="row">
                                 <div class="col-md-6" id="dss2_r" style="display: none">
-                                    <h5>DSS2 (r filter):</h5>
+                                    <h5>DSS2 (r filter) [1'x1']:</h5>
                                     <img id="dss2_r_image" src="" style="width:100%;" data-toggle="magnify">
                                 </div>
                                 <div class="col-md-6" id="2mass_h" style="display: none">
-                                    <h5>2MASS (H filter):</h5>
+                                    <h5>2MASS (H filter) [1'x1']:</h5>
                                     <img id="2mass_h_image" src="" style="width:100%;" data-toggle="magnify">
                                 </div>
                             </div>
@@ -693,22 +693,24 @@ $(".pop").on("click", function() {
 });
 </script>
 <script>
-function playCarousel() {
-    $('.carousel').carousel('cycle');
-    $('#carousel-play').hide();
+function playCarousel(date) {
+{#    $('.carousel').carousel('cycle');#}
+    $('#seeingCarousel'+date).carousel('cycle');
+    $('#carousel-play'+date).hide();
 }
-function pauseCarousel() {
-    $('.carousel').carousel('pause');
-    $('#carousel-pause').hide();
-    $('#carousel-play').show();
+function pauseCarousel(date) {
+{#    $('.carousel').carousel('pause');#}
+    $('#seeingCarousel'+date).carousel('pause');
+    $('#carousel-pause'+date).hide();
+    $('#carousel-play'+date).show();
 }
-function pauseCarouselShow() {
-    if ($('#carousel-play').css('display') == 'none') {
-        $('#carousel-pause').show();
+function pauseCarouselShow(date) {
+    if ($('#carousel-play'+date).css('display') == 'none') {
+        $('#carousel-pause'+date).show();
     }
 }
-function pauseCarouselHide() {
-    $('#carousel-pause').hide();
+function pauseCarouselHide(date) {
+    $('#carousel-pause'+date).hide();
 }
 </script>
 

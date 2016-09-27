@@ -894,15 +894,19 @@ def get_mode(_fits):
     return str(header['MODE_NUM'][0])
 
 
-def load_darks_and_flats(_path_calib, _mode, _filt):
+def load_darks_and_flats(_path_calib, _mode, _filt, image_size_x=1024):
     """
         Load darks and flats
     :param _path_calib:
     :param _mode:
     :param _filt:
+    :param image_size:
     :return:
     """
-    dark_image = os.path.join(_path_calib, 'dark_{:s}.fits'.format(str(_mode)))
+    if image_size_x == 256:
+        dark_image = os.path.join(_path_calib, 'dark_{:s}4.fits'.format(str(_mode)))
+    else:
+        dark_image = os.path.join(_path_calib, 'dark_{:s}.fits'.format(str(_mode)))
     flat_image = os.path.join(_path_calib, 'flat_{:s}.fits'.format(_filt))
 
     if not os.path.exists(dark_image) or not os.path.exists(flat_image):
@@ -910,15 +914,22 @@ def load_darks_and_flats(_path_calib, _mode, _filt):
     else:
         with fits.open(dark_image) as dark, fits.open(flat_image) as flat:
             # replace NaNs if necessary
-            return np.nan_to_num(dark[0].data), np.nan_to_num(flat[0].data)
+            if image_size_x == 256:
+                return np.nan_to_num(dark[0].data), np.nan_to_num(flat[0].data[384:640, 384:640])
+            else:
+                return np.nan_to_num(dark[0].data), np.nan_to_num(flat[0].data)
 
 
-@jit
+# @jit
 def calibrate_frame(im, _dark, _flat, _iter=3):
     im_BKGD = deepcopy(im)
     for j in range(int(_iter)):  # do 3 iterations of sigma-clipping
-        temp = sigmaclip(im_BKGD, 3.0, 3.0)
-        im_BKGD = temp[0]  # return arr is 1st element
+        try:
+            temp = sigmaclip(im_BKGD, 3.0, 3.0)
+            im_BKGD = temp[0]  # return arr is 1st element
+        except Exception as _e:
+            print(_e)
+            pass
     sum_BKGD = np.mean(im_BKGD)  # average CCD BKGD
     im -= sum_BKGD
     im -= _dark
@@ -1099,7 +1110,7 @@ def reduce_faint_object_noram(_path_in, _files, _path_calib, _path_out, _obs,
         # load darks and flats
         if _v:
             print('Loading darks and flats')
-        dark, flat = load_darks_and_flats(_path_calib, _mode, _filt)
+        dark, flat = load_darks_and_flats(_path_calib, _mode, _filt, image_size[0])
         if dark is None or flat is None:
             raise Exception('Could not open darks and flats')
 
@@ -1120,6 +1131,7 @@ def reduce_faint_object_noram(_path_in, _files, _path_calib, _path_out, _obs,
             plt.axis('off')
             plt.show()
 
+        # print(im1.shape, dark.shape, flat.shape)
         im1 = calibrate_frame(im1, dark, flat, _iter=3)
         im1 = gaussian_filter(im1, sigma=5)  # 5, 10
         im1 = im1[cy0 - _win: cy0 + _win, cx0 - _win: cx0 + _win]
@@ -1758,21 +1770,16 @@ def Strehl_calculator(image_data, _Strehl_factor, _plate_scale, _boxsize):
     # print("Strehl ratio", Strehl_ratio * 100, '%')
     # print("----------------------------------")
 
-    y, x = np.mgrid[:len(box_roboao), :len(box_roboao)]
     max_inds = np.where(box_roboao == np.max(box_roboao))
 
-    g_init = models.Gaussian2D(amplitude=1., x_mean=max_inds[1][0], y_mean=max_inds[0][0],
-                               x_stddev=1., y_stddev=1.)
-    fit_g = fitting.LevMarLSQFitter()
-    g = fit_g(g_init, x, y, box_roboao)
-
-    sig_x = g.x_stddev[0]
-    sig_y = g.y_stddev[0]
-
-    FWHM = 2.3548 * np.mean([sig_x, sig_y])
+    centroid = Star(max_inds[1][0], max_inds[0][0], box_roboao)
+    FWHM, FWHM_x, FWHM_y = centroid.fwhm
     fwhm_arcsec = FWHM * _plate_scale
-
+    # print(FWHM, FWHM_x, FWHM_y)
     # print('image FWHM: {:.5f}\"\n'.format(fwhm_arcsec))
+
+    # model = centroid.model()(centroid._XGrid, centroid._YGrid)
+    # export_fits('1.fits', model)
 
     return Strehl_ratio, fwhm_arcsec, box_roboao
 
@@ -2363,7 +2370,8 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
                 (_select['pipelined']['automated']['status']['done'] and
                  _select['pipelined']['automated']['strehl']['status']['done'] and
                      (_select['pipelined']['automated']['strehl']['core_arcsec'] < _config['core_min'] or
-                      _select['pipelined']['automated']['strehl']['halo_arcsec'] > _config['halo_max'])):
+                      _select['pipelined']['automated']['strehl']['halo_arcsec'] > _config['halo_max']))\
+                or (_select['pipelined']['faint']['status']['retries'] > 0):
             _logger.debug('{:s} suitable for faint pipeline'.format(_obs))
 
             # following structure.md:
@@ -2379,7 +2387,7 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
                     # load shifts.txt:
                     f_shifts = [f for f in os.listdir(path_faint) if f == 'shifts.txt'][0]
                     # lock position + shifts (frame_number x y ex ey)
-                    x, y, shifts = load_faint_shifts(os.path.join(path_faint, f_shifts))
+                    y, x, shifts = load_faint_shifts(os.path.join(path_faint, f_shifts))
                     # get fits header:
                     f_fits = os.path.join(path_faint, '{:s}_summed.fits'.format(_obs))
                     header = get_fits_header(f_fits)
@@ -3900,7 +3908,7 @@ if __name__ == '__main__':
                     # compress everything with bzip2, store and TODO: transfer over to Caltech
                     status_ok = check_distributed(_config=config, _logger=logger, _coll=coll,
                                                   _select=coll.find_one({'_id': obs}),
-                                                  _date=date, _obs=obs, _n_days=0.1)
+                                                  _date=date, _obs=obs, _n_days=2.1)
                     if not status_ok:
                         logger.error('Checking failed if distributed: {:s}'.format(obs))
 

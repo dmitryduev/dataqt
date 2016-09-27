@@ -21,7 +21,7 @@ This repository contains code that is used for the [Robo-AO](http://roboao.calte
 
 Clone the repository:
 ```bash
-git clone https://github.com/dmitryduev/dataqt.git
+git clone https://github.com/dmitryduev/roboao-archive.git
 ```
 
 ---
@@ -33,26 +33,57 @@ git clone https://github.com/dmitryduev/dataqt.git
 ---
 
 ### Set up and use MongoDB with authentication
-Install (yum on Fedora; homebrew on MacOS)
+Install MongoDB 3.2
+(yum on Fedora; homebrew on MacOS)
+On Mac OS use ```homebrew```. No need to use root privileges.
+```
+brew install mongodb
+```
+On Fedora, you would likely need to do these manipulation under root (```su -```)
+ Create a file ```/etc/yum.repos.d/mongodb.repo```, add the following:  
+```
+[mongodb]
+name=MongoDB Repository
+baseurl=https://repo.mongodb.org/yum/redhat/7/mongodb-org/3.2/x86_64/ 
+gpgcheck=0
+enabled=1
+```
+ Install with yum:
+```
+yum install -y mongodb-org
+```
+
 Edit the config file. Config file location:  
 ```bash
 /usr/local/etc/mongod.conf (Mac OS brewed)
-/etc/mongodb.conf (Linux)
+/etc/mongod.conf (Linux)
 ```
+
 Comment out:
 ```bash
 #  bindIp: 127.0.0.1
 ```
-Add:
+Add: _(this is actually unnecessary)_
 ```bash
 setParameter:
     enableLocalhostAuthBypass: true
 ```
+
+Create (a new) folder to store the databases:
+```bash
+mkdir /Users/dmitryduev/web/mongodb/ 
+```
+In mongod.conf, replace the standard path with the custom one:
+```bash
+dbpath: /Users/dmitryduev/web/mongodb/
+```
+
+**On Mac (on Fedora, will start as a daemon on the next boot)**
 Start mongod without authorization requirement:
 ```bash
 mongod --dbpath /Users/dmitryduev/web/mongodb/ 
 ```
-Connect to mongodb with mongo and create superuser:
+Connect to mongodb with mongo and create superuser (on Fedora, proceed as root):
 ```bash
 # Create your superuser
 $ mongo
@@ -64,7 +95,7 @@ $ mongo
         roles: [{role: "userAdminAnyDatabase", db: "admin"}]})
 > exit 
 ```
-Connect to mongodb
+Connect to mongodb (now not necessary as root)
 ```bash
 mongo -u "admin" -p "roboaokicksass" --authenticationDatabase "admin" 
 ```
@@ -90,10 +121,9 @@ $ mongo
 If you get locked out, start over (on Linux)
 ```bash
 sudo service mongod stop
-sudo mv /data/admin.* .  # for backup
 sudo service mongod start
 ```
-To run manually (i.e. not as a service):
+To run the database manually (i.e. not as a service):
 ```bash
 mongod --auth --dbpath /Users/dmitryduev/web/mongodb/
 ```
@@ -104,7 +134,7 @@ client = MongoClient('ip_address_or_uri')
 db = client.roboao
 db.authenticate('roboao', 'roboaokicksass')
 ```
-Check it out:
+Check it out (optional):
 ```python
 db['some_collection'].find_one()
 ```
@@ -138,24 +168,32 @@ Useful tip: check [this](https://docs.mongodb.com/manual/tutorial/enable-authent
 Install the _huey_ task queue with 2 patches from DAD (see utils.py and consumer.py):
 ```bash
 git clone https://github.com/dmitryduev/huey.git
+cd huey
 python setup.py install --record files.txt
 ```
+Install redis-server if necessary.
 Start Redis server on the standard port 6379 with pm2:
 ```bash
 pm2 start redis-server -- --port 6379
 ```
 In archive.py, make sure the Redis server is started with correct settings:
 ```python
-    huey = RedisHuey(name='roboao.archive', host='127.0.0.1', port='6379', result_store=True)
+from huey import RedisHuey
+huey = RedisHuey(name='roboao.archive', host='127.0.0.1', port='6379', result_store=True)
 ```
+(this should not raise any exceptions)
 
 **With pm2, everything that's after '--' is passed to the script**
 
 Start the task consumer with 4 parallel workers in the quiet mode polling stuff every 10 seconds without a crontab:
 ```bash
 pm2 start huey_consumer.py -- /path/to/module.huey -k process -w 4 -d 10 -n -q
-pm2 start huey_consumer.py -- /Users/dmitryduev/web/dataqt/archive.huey -k process -w 4 -d 10 -n -q
 ```
+```
+pm2 start huey_consumer.py -- /Users/dmitryduev/web/roboao-archive/archive.huey -k process -w 4 -d 10 -n -q
+```
+
+Check its status with ```pm2 status```. (saw errors a couple of times)
 
 **It's a good idea to allocate ~half the number of the available cores**
 _The Redis server and the task consumer are paused or stopped during daily nap time, which might be unnecessary_
@@ -163,19 +201,31 @@ _The Redis server and the task consumer are paused or stopped during daily nap t
 pm2 stop redis-server
 pm2 stop huey_consumer.py
 ```
-start MongoDB:
+start MongoDB (if not running already):
 ```bash
 mongod --auth --dbpath /Users/dmitryduev/web/mongodb/
 ```
 
+**Run the archiver!**
+```python
+python archive.py config.ini
+```
+
 ### Data access via the web-server
+
+Make sure to install python dependencies:
+```
+git clone https://github.com/pyvirtobs/pyvo.git
+cd pyvo && /path/to/python setup.py install
+pip install flask-login
+```
 
 Run the data access web-server using the pm2 process manager:
 ```bash
 pm2 start server_data_archive.py --interpreter=/path/to/python
 ```
 
-#### Little tutorial on how to use the web-site (once it's ready)
+#### A short tutorial on how to use the web-site (once it's ready)
 
 ---
 
