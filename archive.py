@@ -1137,7 +1137,7 @@ def reduce_faint_object_noram(_path_in, _files, _path_calib, _path_out, _obs,
         else:
             try:
                 with fits.open(os.path.join(_path_in, _files_list[_pivot[0]])) as _hdulist:
-                    im1 = _hdulist[_pivot[1]].data
+                    im1 = np.array(_hdulist[_pivot[1]].data, dtype=np.float)
                 print('using frame {:d} from raw fits-file #{:d} as pivot frame'.format(*_pivot))
             except Exception as _e:
                 print(_e)
