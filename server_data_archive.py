@@ -327,13 +327,13 @@ def get_dates(user_id, coll, start=None, stop=None):
         # this is ~when we moved to KP:
         # start = datetime.datetime(2015, 10, 1)
         # by default -- last 30 days:
-        start = datetime.datetime.utcnow() - datetime.timedelta(days=30)
+        start = datetime.datetime.utcnow() - datetime.timedelta(days=10)
     else:
         try:
             start = datetime.datetime.strptime(start, '%Y%m%d')
         except Exception as _e:
             print(_e)
-            start = datetime.datetime.utcnow() - datetime.timedelta(days=30)
+            start = datetime.datetime.utcnow() - datetime.timedelta(days=10)
 
     if stop is None:
         stop = datetime.datetime.utcnow()

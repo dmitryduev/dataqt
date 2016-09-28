@@ -3585,7 +3585,9 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
                     cc_mean = []
                     for contrast_curve in contrast_curves:
                         ax.plot(contrast_curve[:, 0], contrast_curve[:, 1], '-', c=plt.cm.Greys(0.27), linewidth=1.1)
-                        cc_mean.append(np.interp(sep_mean, contrast_curve[:, 0], contrast_curve[:, 1]))
+                        cc_tmp = np.interp(sep_mean, contrast_curve[:, 0], contrast_curve[:, 1])
+                        if not np.isnan(cc_tmp).any():
+                            cc_mean.append(cc_tmp)
                     if len(cc_mean) > 0:
                         # add median to plot:
                         ax.plot(sep_mean, np.median(np.array(cc_mean).T, axis=1), '-',
@@ -3595,7 +3597,9 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
                     cc_mean = []
                     for contrast_curve in contrast_curves_faint:
                         ax.plot(contrast_curve[:, 0], contrast_curve[:, 1], '--', c=plt.cm.Blues(0.27), linewidth=1.1)
-                        cc_mean.append(np.interp(sep_mean, contrast_curve[:, 0], contrast_curve[:, 1]))
+                        cc_tmp = np.interp(sep_mean, contrast_curve[:, 0], contrast_curve[:, 1])
+                        if not np.isnan(cc_tmp).any():
+                            cc_mean.append(cc_tmp)
 
                     if len(cc_mean) > 0:
                         # add median to plot:
@@ -3621,7 +3625,7 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
                     lucky_line_median = mlines.Line2D([], [], color=plt.cm.Oranges(0.7), linestyle='-',
                                                       label='Median lucky contrast curve')
                     faint_line_median = mlines.Line2D([], [], color=plt.cm.Oranges(0.5), linestyle='--',
-                                                      markersize=15, label='Individual faint contrast curve')
+                                                      markersize=15, label='Median faint contrast curve')
                     plt.legend(loc='best', handles=[lucky_line, faint_line, lucky_line_median, faint_line_median],
                                prop={'size': 6})
 
