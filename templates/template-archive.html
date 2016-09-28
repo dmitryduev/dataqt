@@ -153,259 +153,7 @@
     <script src="/static/js/moment.min.js"></script>
     <script src="/static/js/bootstrap-datetimepicker.min.js"></script>
     <script src="/static/js/bootstrap-submenu.min.js"></script>
-    <script type="text/javascript">
-        $('[data-submenu]').submenupicker();
-        $(function () {
-            $('#datetimepicker').datetimepicker({format : "YYYY/MM/DD",
-                                                 inline: true
-                                                 });
-            $("#datetimepicker").on("dp.hide",function (e) {
-                var m = moment(e.date);
-                window.location.href = "?start=" + m.format('YYYYMMDD') +
-                        "&stop=" + m.add(1, 'days').format('YYYYMMDD');
-            });
-            $("#datetimepicker").on("dp.change",function (e) {
-                var m = moment(e.date);
-                window.location.href = "?start=" + m.format('YYYYMMDD') +
-                        "&stop=" + m.add(1, 'days').format('YYYYMMDD');
-            });
-        });
-    </script>
-    <script>
-        // for AJAX requests [absolute website's uri]:
-        $SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
 
-        // switch tabs
-        $('.data-tabs li a').click(function (e) {
-            e.preventDefault();
-            $(this).tab('show')
-        });
-
-        // switch tabs
-        function showAll(tabn) {
-            var arr = $("[id$=-nav-tabs]");
-            for (var i=0; i<arr.length; i++) {
-                $('#' + arr[i].id + ' li:eq(' + tabn + ') a').tab('show');
-            }
-        }
-    </script>
-    <script>
-    $(document).ready(function(){
-        $(window).scroll(function () {
-            if ($(this).scrollTop() > 50) {
-                $('#back-to-top').fadeIn();
-            }
-            else {
-                $('#back-to-top').fadeOut();
-            }
-        });
-        // scroll body to 0px on click
-        $('#back-to-top').click(function () {
-            $('#back-to-top').tooltip('hide');
-            $('body,html').animate({
-                scrollTop: 0
-            }, 600);
-            return false;
-        });
-
-        $('#back-to-top').tooltip('show');
-
-    });
-    </script>
-    <script>
-    $(".pop").on("click", function() {
-        $('#aux_image_preview').attr('src', $(this).attr('src'));
-        $('#aux_image_modal').modal('show');
-    });
-    </script>
-    <script>
-    function playCarousel(date) {
-    {#    $('.carousel').carousel('cycle');#}
-        $('#seeingCarousel'+date).carousel('cycle');
-        $('#carousel-play'+date).hide();
-    }
-    function pauseCarousel(date) {
-    {#    $('.carousel').carousel('pause');#}
-        $('#seeingCarousel'+date).carousel('pause');
-        $('#carousel-pause'+date).hide();
-        $('#carousel-play'+date).show();
-    }
-    function pauseCarouselShow(date) {
-        if ($('#carousel-play'+date).css('display') == 'none') {
-            $('#carousel-pause'+date).show();
-        }
-    }
-    function pauseCarouselHide(date) {
-        $('#carousel-pause'+date).hide();
-    }
-    </script>
-
-    <script>
-        // clear table with FITS header (in case it's not empty) before displaying current table
-        function clearTable() {
-            $('#headerTable').html('');
-        }
-
-        // send AJAX GET request to server to get source FITS header
-        function getHeader(source) {
-            $.getJSON($SCRIPT_ROOT + '/_get_fits_header', {
-                source: source
-            }, function(data) {
-                var header = data.result;
-                for (var key in header) {
-                    if (key != 'COMMENT') {
-                        var $formrow = '<tr><td>'+key+'</td>'+
-                                '<td>'+header[key][0]+'</td>'+
-                                '<td>'+header[key][1]+'</td>'+'</tr>';
-                        $('#headerTable').append($formrow);
-                    }
-                }
-            });
-            return false;
-        }
-
-        // clear tab with external images
-        function clearExternalImages() {
-            $('#dss2_r').hide();
-            $('#2mass_h').hide();
-        }
-
-        // send AJAX GET request to server to get source FITS header
-        function getExternalImages(source) {
-            $.getJSON($SCRIPT_ROOT + '/_get_vo_image', {
-                source: source
-            }, function(data) {
-                var images = data.result;
-                for (var key in images) {
-                    $('#'+key).show();
-                    $('#'+key+'_image').attr('src', 'data:image/png;base64,' + images[key])
-                }
-            });
-            return false;
-        }
-
-        // Build modal with source data on-the-fly
-        $('#sourceModal').on('show.bs.modal', function (event) {
-            // show images tab by default:
-            $('#sourceTabs a[href="#luckyImagesTab"]').tab('show'); // Select tab by name
-
-            var trigger = $(event.relatedTarget); // Who triggered the modal? [to extract source info]
-            // Extract info from data-* attributes
-            var date = trigger.data('date'); // date of observation
-            var source = trigger.data('source'); // full source name (including prog_num, filt etc)
-            var lucky = trigger.data('lucky'); // lucky data?
-            var lucky_strehl = trigger.data('lucky-strehl'); // lucky data?
-            var lucky_pca = trigger.data('lucky-pca'); // lucky data?
-            var faint = trigger.data('faint'); // lucky data?
-            var faint_strehl = trigger.data('faint-strehl'); // lucky data?
-            var faint_pca = trigger.data('faint-pca'); // lucky data?
-
-            // download link:
-            $('#previewModalDonloadLink').attr('href', '/data/' + date + '/' +
-                        source + '/' + source + '.tar.bz2');
-
-            //var cc = trigger.data('cc'); // type of contrast curve
-            // Strehl
-            //var core = trigger.data('core'); // type of contrast curve
-            //var halo = trigger.data('halo'); // type of contrast curve
-            //var fwhm = trigger.data('fwhm'); // type of contrast curve
-            //var sr_flag = trigger.data('sr_flag'); // type of contrast curve
-            // If necessary, you could initiate an AJAX request here (and then do the updating in a callback).
-            // Update the modal's content. We'll use jQuery here,
-            // but one could use a data binding library or other methods instead.
-            var modal = $(this);
-            modal.find('.modal-title').text(source);
-            // lucky pipeline
-            if (JSON.parse(lucky.toLowerCase())) {
-                $('#luckyImagesTabContent').show();
-                $('#luckyImagesTabEmpty').hide();
-                modal.find('#lucky_sou_full').attr('src', '/data/' + date + '/' +
-                        source + '/automated/preview/' + source + '_full.png');
-                modal.find('#lucky_sou_cropped').attr('src', '/data/' + date + '/' +
-                        source + '/automated/preview/' + source + '_cropped.png');
-                // pca
-                if (JSON.parse(lucky_pca.toLowerCase())) {
-                    $('#lucky_sou_pca_label').show();
-                    $('#lucky_sou_pca').show();
-                    modal.find('#lucky_sou_pca').attr('src', '/data/' + date + '/' +
-                        source + '/automated/pca/' + source + '_pca.png');
-                    $('#lucky_sou_cc').show();
-                    modal.find('#lucky_sou_cc').attr('src', '/data/' + date + '/' +
-                        source + '/automated/pca/' + source + '_contrast_curve.png');
-                }
-                else {
-                    $('#lucky_sou_pca_label').hide();
-                    $('#lucky_sou_pca').hide();
-                    modal.find('#lucky_sou_pca').attr('src', '');
-                    $('#lucky_sou_cc').hide();
-                    modal.find('#lucky_sou_cc').attr('src', '');
-                }
-                // strehl
-                if (JSON.parse(lucky_strehl.toLowerCase())) {
-
-                }
-                else {
-
-                }
-            }
-            else {
-                $('#luckyImagesTabContent').hide();
-                $('#luckyImagesTabEmpty').show();
-            }
-
-            // faint pipeline
-            if (JSON.parse(faint.toLowerCase())) {
-                $('#faintImagesTabContent').show();
-                $('#faintImagesTabEmpty').hide();
-                modal.find('#faint_sou_full').attr('src', '/data/'+date+'/'+
-                        source+'/faint/preview/'+source+'_full.png');
-                modal.find('#faint_sou_cropped').attr('src', '/data/'+date+'/'+
-                        source+'/faint/preview/'+source+'_cropped.png');
-                // pca
-                if (JSON.parse(faint_pca.toLowerCase())) {
-                    $('#faint_sou_pca_label').show();
-                    $('#faint_sou_pca').show();
-                    modal.find('#faint_sou_pca').attr('src', '/data/' + date + '/' +
-                        source + '/faint/pca/' + source + '_pca.png');
-                    $('#faint_sou_cc').show();
-                    modal.find('#faint_sou_cc').attr('src', '/data/' + date + '/' +
-                        source + '/faint/pca/' + source + '_contrast_curve.png');
-                }
-                else {
-                    $('#faint_sou_pca_label').hide();
-                    $('#faint_sou_pca').hide();
-                    modal.find('#faint_sou_pca').attr('src', '');
-                    $('#faint_sou_cc').hide();
-                    modal.find('#faint_sou_cc').attr('src', '');
-                }
-                // strehl
-                if (JSON.parse(faint_strehl.toLowerCase())) {
-
-                }
-                else {
-
-                }
-            }
-            else {
-                $('#faintImagesTabContent').hide();
-                $('#faintImagesTabEmpty').show();
-            }
-
-            // generate table with header data
-            clearTable();
-            getHeader(source);
-
-            // fetch external vo images of the field
-            clearExternalImages();
-            getExternalImages(source);
-        });
-        // tabs in the modal
-        $('#sourceTabs a').click(function (e) {
-            e.preventDefault();
-            $(this).tab('show')
-        });
-
-    </script>
 </head>
 
 <body>
@@ -891,6 +639,260 @@
    data-toggle="tooltip" data-placement="left">
     <span class="glyphicon glyphicon-chevron-up"></span>
 </a>
+
+<script type="text/javascript">
+    $('[data-submenu]').submenupicker();
+    $(function () {
+        $('#datetimepicker').datetimepicker({format : "YYYY/MM/DD",
+                                             inline: true
+                                             });
+        $("#datetimepicker").on("dp.hide",function (e) {
+            var m = moment(e.date);
+            window.location.href = "?start=" + m.format('YYYYMMDD') +
+                    "&stop=" + m.add(1, 'days').format('YYYYMMDD');
+        });
+        $("#datetimepicker").on("dp.change",function (e) {
+            var m = moment(e.date);
+            window.location.href = "?start=" + m.format('YYYYMMDD') +
+                    "&stop=" + m.add(1, 'days').format('YYYYMMDD');
+        });
+    });
+</script>
+<script>
+    // for AJAX requests [absolute website's uri]:
+    $SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
+
+    // switch tabs
+    $('.data-tabs li a').click(function (e) {
+        e.preventDefault();
+        $(this).tab('show')
+    });
+
+    // switch tabs
+    function showAll(tabn) {
+        var arr = $("[id$=-nav-tabs]");
+        for (var i=0; i<arr.length; i++) {
+            $('#' + arr[i].id + ' li:eq(' + tabn + ') a').tab('show');
+        }
+    }
+</script>
+<script>
+$(document).ready(function(){
+    $(window).scroll(function () {
+        if ($(this).scrollTop() > 50) {
+            $('#back-to-top').fadeIn();
+        }
+        else {
+            $('#back-to-top').fadeOut();
+        }
+    });
+    // scroll body to 0px on click
+    $('#back-to-top').click(function () {
+        $('#back-to-top').tooltip('hide');
+        $('body,html').animate({
+            scrollTop: 0
+        }, 600);
+        return false;
+    });
+
+    $('#back-to-top').tooltip('show');
+
+});
+</script>
+<script>
+$(".pop").on("click", function() {
+    $('#aux_image_preview').attr('src', $(this).attr('src'));
+    $('#aux_image_modal').modal('show');
+});
+</script>
+<script>
+function playCarousel(date) {
+{#    $('.carousel').carousel('cycle');#}
+    $('#seeingCarousel'+date).carousel('cycle');
+    $('#carousel-play'+date).hide();
+}
+function pauseCarousel(date) {
+{#    $('.carousel').carousel('pause');#}
+    $('#seeingCarousel'+date).carousel('pause');
+    $('#carousel-pause'+date).hide();
+    $('#carousel-play'+date).show();
+}
+function pauseCarouselShow(date) {
+    if ($('#carousel-play'+date).css('display') == 'none') {
+        $('#carousel-pause'+date).show();
+    }
+}
+function pauseCarouselHide(date) {
+    $('#carousel-pause'+date).hide();
+}
+</script>
+
+<script>
+    // clear table with FITS header (in case it's not empty) before displaying current table
+    function clearTable() {
+        $('#headerTable').html('');
+    }
+
+    // send AJAX GET request to server to get source FITS header
+    function getHeader(source) {
+        $.getJSON($SCRIPT_ROOT + '/_get_fits_header', {
+            source: source
+        }, function(data) {
+            var header = data.result;
+            for (var key in header) {
+                if (key != 'COMMENT') {
+                    var $formrow = '<tr><td>'+key+'</td>'+
+                            '<td>'+header[key][0]+'</td>'+
+                            '<td>'+header[key][1]+'</td>'+'</tr>';
+                    $('#headerTable').append($formrow);
+                }
+            }
+        });
+        return false;
+    }
+
+    // clear tab with external images
+    function clearExternalImages() {
+        $('#dss2_r').hide();
+        $('#2mass_h').hide();
+    }
+
+    // send AJAX GET request to server to get source FITS header
+    function getExternalImages(source) {
+        $.getJSON($SCRIPT_ROOT + '/_get_vo_image', {
+            source: source
+        }, function(data) {
+            var images = data.result;
+            for (var key in images) {
+                $('#'+key).show();
+                $('#'+key+'_image').attr('src', 'data:image/png;base64,' + images[key])
+            }
+        });
+        return false;
+    }
+
+    // Build modal with source data on-the-fly
+    $('#sourceModal').on('show.bs.modal', function (event) {
+        // show images tab by default:
+        $('#sourceTabs a[href="#luckyImagesTab"]').tab('show'); // Select tab by name
+
+        var trigger = $(event.relatedTarget); // Who triggered the modal? [to extract source info]
+        // Extract info from data-* attributes
+        var date = trigger.data('date'); // date of observation
+        var source = trigger.data('source'); // full source name (including prog_num, filt etc)
+        var lucky = trigger.data('lucky'); // lucky data?
+        var lucky_strehl = trigger.data('lucky-strehl'); // lucky data?
+        var lucky_pca = trigger.data('lucky-pca'); // lucky data?
+        var faint = trigger.data('faint'); // lucky data?
+        var faint_strehl = trigger.data('faint-strehl'); // lucky data?
+        var faint_pca = trigger.data('faint-pca'); // lucky data?
+
+        // download link:
+        $('#previewModalDonloadLink').attr('href', '/data/' + date + '/' +
+                    source + '/' + source + '.tar.bz2');
+
+        //var cc = trigger.data('cc'); // type of contrast curve
+        // Strehl
+        //var core = trigger.data('core'); // type of contrast curve
+        //var halo = trigger.data('halo'); // type of contrast curve
+        //var fwhm = trigger.data('fwhm'); // type of contrast curve
+        //var sr_flag = trigger.data('sr_flag'); // type of contrast curve
+        // If necessary, you could initiate an AJAX request here (and then do the updating in a callback).
+        // Update the modal's content. We'll use jQuery here,
+        // but one could use a data binding library or other methods instead.
+        var modal = $(this);
+        modal.find('.modal-title').text(source);
+        // lucky pipeline
+        if (JSON.parse(lucky.toLowerCase())) {
+            $('#luckyImagesTabContent').show();
+            $('#luckyImagesTabEmpty').hide();
+            modal.find('#lucky_sou_full').attr('src', '/data/' + date + '/' +
+                    source + '/automated/preview/' + source + '_full.png');
+            modal.find('#lucky_sou_cropped').attr('src', '/data/' + date + '/' +
+                    source + '/automated/preview/' + source + '_cropped.png');
+            // pca
+            if (JSON.parse(lucky_pca.toLowerCase())) {
+                $('#lucky_sou_pca_label').show();
+                $('#lucky_sou_pca').show();
+                modal.find('#lucky_sou_pca').attr('src', '/data/' + date + '/' +
+                    source + '/automated/pca/' + source + '_pca.png');
+                $('#lucky_sou_cc').show();
+                modal.find('#lucky_sou_cc').attr('src', '/data/' + date + '/' +
+                    source + '/automated/pca/' + source + '_contrast_curve.png');
+            }
+            else {
+                $('#lucky_sou_pca_label').hide();
+                $('#lucky_sou_pca').hide();
+                modal.find('#lucky_sou_pca').attr('src', '');
+                $('#lucky_sou_cc').hide();
+                modal.find('#lucky_sou_cc').attr('src', '');
+            }
+            // strehl
+            if (JSON.parse(lucky_strehl.toLowerCase())) {
+
+            }
+            else {
+
+            }
+        }
+        else {
+            $('#luckyImagesTabContent').hide();
+            $('#luckyImagesTabEmpty').show();
+        }
+
+        // faint pipeline
+        if (JSON.parse(faint.toLowerCase())) {
+            $('#faintImagesTabContent').show();
+            $('#faintImagesTabEmpty').hide();
+            modal.find('#faint_sou_full').attr('src', '/data/'+date+'/'+
+                    source+'/faint/preview/'+source+'_full.png');
+            modal.find('#faint_sou_cropped').attr('src', '/data/'+date+'/'+
+                    source+'/faint/preview/'+source+'_cropped.png');
+            // pca
+            if (JSON.parse(faint_pca.toLowerCase())) {
+                $('#faint_sou_pca_label').show();
+                $('#faint_sou_pca').show();
+                modal.find('#faint_sou_pca').attr('src', '/data/' + date + '/' +
+                    source + '/faint/pca/' + source + '_pca.png');
+                $('#faint_sou_cc').show();
+                modal.find('#faint_sou_cc').attr('src', '/data/' + date + '/' +
+                    source + '/faint/pca/' + source + '_contrast_curve.png');
+            }
+            else {
+                $('#faint_sou_pca_label').hide();
+                $('#faint_sou_pca').hide();
+                modal.find('#faint_sou_pca').attr('src', '');
+                $('#faint_sou_cc').hide();
+                modal.find('#faint_sou_cc').attr('src', '');
+            }
+            // strehl
+            if (JSON.parse(faint_strehl.toLowerCase())) {
+
+            }
+            else {
+
+            }
+        }
+        else {
+            $('#faintImagesTabContent').hide();
+            $('#faintImagesTabEmpty').show();
+        }
+
+        // generate table with header data
+        clearTable();
+        getHeader(source);
+
+        // fetch external vo images of the field
+        clearExternalImages();
+        getExternalImages(source);
+    });
+    // tabs in the modal
+    $('#sourceTabs a').click(function (e) {
+        e.preventDefault();
+        $(this).tab('show')
+    });
+
+</script>
 
 </body>
 </html>
