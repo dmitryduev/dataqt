@@ -3869,12 +3869,12 @@ if __name__ == '__main__':
 
             ''' check all raw data starting from config['archiving_start_date'] '''
             # get all dates with some raw data
-            dates = [p for p in os.listdir(config['path_raw'])
-                     if os.path.isdir(os.path.join(config['path_raw'], p))
-                     and datetime.datetime.strptime(p, '%Y%m%d') >= config['archiving_start_date']]
+            dates = sorted([p for p in os.listdir(config['path_raw'])
+                            if os.path.isdir(os.path.join(config['path_raw'], p))
+                            and datetime.datetime.strptime(p, '%Y%m%d') >= config['archiving_start_date']])
             print(dates)
             # for each date get all unique obs names (used as _id 's in the db)
-            for date in dates:
+            for date in dates[::-1]:
                 date_files = os.listdir(os.path.join(config['path_raw'], date))
                 # check the endings (\Z) and skip _N.fits.bz2:
                 # must start with program number (e.g. 24_ or 24.1_)
