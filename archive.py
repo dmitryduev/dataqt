@@ -2511,7 +2511,7 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
                      _select['pipelined']['faint']['status']['retries'] <
                      _config['max_pipelining_retries']):
                 # prepare stuff for job execution
-                _raws_zipped = _select['raw_data']['data']
+                _raws_zipped = sorted(_select['raw_data']['data'])
                 # put a job into the queue
                 if not inqueue('job_faint_pipeline', _obs, path_faint):
                     job_faint_pipeline(_config=_config, _raws_zipped=_raws_zipped, _date=_date,
@@ -3114,7 +3114,7 @@ def check_raws(_config, _logger, _coll, _select, _date, _obs, _date_files):
                 {'_id': _obs},
                 {
                     '$set': {
-                        'raw_data.data': _raws,
+                        'raw_data.data': sorted(_raws),
                         'raw_data.last_modified': time_tag
                     }
                 }
@@ -3789,7 +3789,7 @@ def init_db_entry(_config, _path_obs, _date_files, _obs,
         _config['analysis_machine_external_host'],
         _config['analysis_machine_external_port']),
         _config['path_raw']])
-    _entry['raw_data']['data'] = _raws
+    _entry['raw_data']['data'] = sorted(_raws)
     # use the 'freshest' timetag for 'last_modified'
     time_tags = [datetime.datetime.utcfromtimestamp(os.stat(os.path.join(_path_obs, _s)).st_mtime)
                  for _s in _raws]
