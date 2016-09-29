@@ -213,9 +213,9 @@
                         Toggle view <span class="caret"></span>
                     </button>
                     <ul class="dropdown-menu">
-                        <li><a href="#" onclick="showAll(0)">Data</a></li>
-                        <li><a href="#" onclick="showAll(1)">Preview</a></li>
-                        <li><a href="#" onclick="showAll(2)">Auxiliary data</a></li>
+                        <li><a href="#" onclick="showAll(0)">Data preview</a></li>
+                        <li><a href="#" onclick="showAll(1)">Auxiliary data</a></li>
+                        <li><a href="#" onclick="showAll(2)">Download</a></li>
                     </ul>
                 </div>
                 <div class="btn-group">
@@ -243,9 +243,24 @@
                         <li class="dropdown-submenu">
                             <a tabindex="0" style="cursor: pointer; cursor: hand;">Select range</a>
                             <ul class="dropdown-menu" style="padding: 5px 10px 0px 10px;">
-                                {# TODO: select range #}
-                                <li>From: [under construction]</li>
-                                <li>To: [under construction]</li>
+                                <li>
+                                    <div class="row">
+                                        <div class='col-md-12'>
+                                            From:<br>
+                                            <div class="form-group">
+                                                <div class='input-group date' id='datetimepicker6'></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class='col-md-12'>
+                                            To:<br>
+                                            <div class="form-group">
+                                                <div class='input-group date' id='datetimepicker7'></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </li>
                             </ul>
                         </li>
                     </ul>
@@ -271,50 +286,22 @@
                         <!-- Nav tabs -->
                         <ul class="nav nav-tabs" role="tablist" id="{{ date }}-nav-tabs">
                             <li role="presentation" class="active">
-                                <a href="#{{ date }}-data" aria-controls="{{ date }}-data"
-                                   role="tab" data-toggle="tab">Data</a></li>
-                            <li role="presentation">
                                 <a href="#{{ date }}-preview" aria-controls="{{ date }}-preview"
-                                   role="tab" data-toggle="tab">Preview</a></li>
+                                   role="tab" data-toggle="tab">Data preview</a>
+                            </li>
                             <li role="presentation">
                                 <a href="#{{ date }}-auxiliary" aria-controls="{{ date }}-auxiliary"
-                                   role="tab" data-toggle="tab">Auxiliary data</a></li>
+                                   role="tab" data-toggle="tab">Auxiliary data</a>
+                            </li>
+                            <li role="presentation">
+                                <a href="#{{ date }}-data" aria-controls="{{ date }}-data"
+                                   role="tab" data-toggle="tab">Download</a>
+                            </li>
                         </ul>
 
                         <!-- Tab panes -->
                         <div class="tab-content">
-                            <div role="tabpanel" class="tab-pane active" id="{{ date }}-data">
-                                {% for program in programs|sort %}
-                                    <h4>Program {{ program }}</h4>
-                                    Master wget-script to fetch all data:
-                                    <abbr title="Dont't forget to 'chmod u+x'">
-                                        <a href="/get_data?date={{ date }}&program={{ program }}">
-                                            program_{{ program }}_{{ date }}.wget.sh
-                                        </a><br>
-                                    </abbr>
-                                    <a data-toggle="collapse" href="#collapse_{{ date }}_{{ program }}"
-                                       aria-expanded="false" aria-controls="collapse_{{ date }}_{{ program }}">
-                                        Individual compressed tarballs
-                                    </a>
-                                    <div class="collapse" id="collapse_{{ date }}_{{ program }}">
-                                        <blockquote style="font-size: 14px;">
-                                            <p>
-                                                {% for obs in programs[program] %}
-                                                    {# check if bz2 exists: #}
-                                                    {% if obs['distributed']['status'] %}
-                                                        <a href="/data/{{ date }}/{{ obs['_id'] }}/{{ obs['_id'] }}.tar.bz2">
-                                                            {{ obs['_id'] }}.tar.bz2
-                                                        </a><br>
-                                                    {% else %}
-                                                        {{ obs['_id'] }}: not ready yet<br>
-                                                    {% endif %}
-                                                {% endfor %}
-                                            </p>
-                                        </blockquote>
-                                    </div>
-                                {% endfor %}
-                            </div>
-                            <div role="tabpanel" class="tab-pane" id="{{ date }}-preview">
+                            <div role="tabpanel" class="tab-pane active" id="{{ date }}-preview">
                                 {% for program in programs|sort %}
                                     <h4>Program {{ program }}</h4>
                                     <div id="program_{{program}}_images">
@@ -449,6 +436,37 @@
                                 {% else %}
                                     <h5>No data to show.</h5>
                                 {% endif %}
+                            </div>
+                            <div role="tabpanel" class="tab-pane" id="{{ date }}-data">
+                                {% for program in programs|sort %}
+                                    <h4>Program {{ program }}</h4>
+                                    Master wget-script to fetch all data:
+                                    <abbr title="Dont't forget to 'chmod u+x'">
+                                        <a href="/get_data?date={{ date }}&program={{ program }}">
+                                            program_{{ program }}_{{ date }}.wget.sh
+                                        </a><br>
+                                    </abbr>
+                                    <a data-toggle="collapse" href="#collapse_{{ date }}_{{ program }}"
+                                       aria-expanded="false" aria-controls="collapse_{{ date }}_{{ program }}">
+                                        Individual compressed tarballs
+                                    </a>
+                                    <div class="collapse" id="collapse_{{ date }}_{{ program }}">
+                                        <blockquote style="font-size: 14px;">
+                                            <p>
+                                                {% for obs in programs[program] %}
+                                                    {# check if bz2 exists: #}
+                                                    {% if obs['distributed']['status'] %}
+                                                        <a href="/data/{{ date }}/{{ obs['_id'] }}/{{ obs['_id'] }}.tar.bz2">
+                                                            {{ obs['_id'] }}.tar.bz2
+                                                        </a><br>
+                                                    {% else %}
+                                                        {{ obs['_id'] }}: not ready yet<br>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </p>
+                                        </blockquote>
+                                    </div>
+                                {% endfor %}
                             </div>
                         </div>
 
@@ -655,6 +673,29 @@
             var m = moment(e.date);
             window.location.href = "?start=" + m.format('YYYYMMDD') +
                     "&stop=" + m.add(1, 'days').format('YYYYMMDD');
+        });
+    });
+</script>
+<script type="text/javascript">
+    $(function () {
+        $('#datetimepicker6').datetimepicker({
+            format : "YYYY/MM/DD",
+            inline: true
+        });
+        $('#datetimepicker7').datetimepicker({
+            useCurrent: false, //Important! See issue #1075
+            format : "YYYY/MM/DD",
+            inline: true
+        });
+        $("#datetimepicker6").on("dp.change", function (e) {
+            $('#datetimepicker7').data("DateTimePicker").minDate(e.date);
+        });
+        $("#datetimepicker7").on("dp.change", function (e) {
+            $('#datetimepicker6').data("DateTimePicker").maxDate(e.date);
+            var start = moment($('#datetimepicker6').data("DateTimePicker").date());
+            var stop = moment($('#datetimepicker7').data("DateTimePicker").date());
+            window.location.href = "?start=" + start.format('YYYYMMDD') +
+                    "&stop=" + stop.add(1, 'days').format('YYYYMMDD');
         });
     });
 </script>
