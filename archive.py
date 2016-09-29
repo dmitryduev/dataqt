@@ -3034,12 +3034,20 @@ def check_pca_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='auto
                 # contrast_curve:
                 _cc = _select['pipelined'][_pipe]['pca']['contrast_curve']
 
+                # number of pixels in X on the detector
                 _pix_x = int(re.search(r'(:)(\d+)',
                                    _select['pipelined'][_pipe]['fits_header']['DETSIZE'][0]).group(2))
 
+                if _pipe == 'automated':
+                    _drizzled = True
+                elif _pipe == 'faint':
+                    _drizzled = False
+                else:
+                    raise NotImplementedError
+
                 _status = generate_pca_images(_path_out=path_pca,
                                               _obs=_obs, _preview_img=preview_img,
-                                              _cc=_cc, _fow_x=36, _pix_x=_pix_x, _drizzled=True)
+                                              _cc=_cc, _fow_x=36, _pix_x=_pix_x, _drizzled=_drizzled)
 
                 _coll.update_one(
                     {'_id': _obs},
