@@ -1585,11 +1585,11 @@ def bad_obs_check(p, return_halo=True, ps=0.0175797):
     try:
         if return_halo:
             p0 = [0.0, np.max(pix_vals), 20.0, 2.0]
-            p = fmin(residuals, p0, args=(pix_rad, pix_vals), maxiter=1000000, maxfun=1000000,
+            p = fmin(residuals, p0, args=(pix_rad, pix_vals), maxiter=1000, maxfun=1000,
                      ftol=1e-3, xtol=1e-3, disp=False)
 
         p0 = [0.0, np.max(core_pix_vals), 5.0, 2.0]
-        core_p = fmin(residuals, p0, args=(core_pix_rad, core_pix_vals), maxiter=1000000, maxfun=1000000,
+        core_p = fmin(residuals, p0, args=(core_pix_rad, core_pix_vals), maxiter=1000, maxfun=1000,
                       ftol=1e-3, xtol=1e-3, disp=False)
 
         # Palomar PS = 0.021, KP PS = 0.0175797
