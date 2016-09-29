@@ -3565,13 +3565,17 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
                 _pipe = 'automated'
                 contrast_curves = np.array([np.array(_obs['pipelined'][_pipe]['pca']['contrast_curve'])
                                             for _obs in cursor
-                                            if _obs['pipelined'][_pipe]['pca']['status']['done']])
+                                            if _obs['pipelined'][_pipe]['pca']['status']['done']
+                                            and _obs['science_program']['program_id'] !=
+                                                _config['planets_prog_num']])
 
                 cursor = _coll.find({'date_utc': {'$gte': day, '$lt': day + datetime.timedelta(days=1)}})
                 _pipe = 'faint'
                 contrast_curves_faint = np.array([np.array(_obs['pipelined'][_pipe]['pca']['contrast_curve'])
                                                   for _obs in cursor
-                                                  if _obs['pipelined'][_pipe]['pca']['status']['done']])
+                                                  if _obs['pipelined'][_pipe]['pca']['status']['done']
+                                                  and _obs['science_program']['program_id'] !=
+                                                      _config['planets_prog_num']])
 
                 if len(contrast_curves) > 0 or len(contrast_curves_faint) > 0:
                     _logger.info('Generating contrast curve summary for {:s}'.format(_date))
