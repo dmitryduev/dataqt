@@ -344,6 +344,9 @@ def get_dates(user_id, coll, start=None, stop=None):
             print(_e)
             stop = datetime.datetime.utcnow()
 
+    # create index not to perform in-memory sorting:
+    coll.create_index([('date_utc', -1)])
+
     # dictionary: {date: {program_N: [observations]}}
     dates = OrderedDict()
     # programs = []
@@ -357,16 +360,19 @@ def get_dates(user_id, coll, start=None, stop=None):
                             'distributed.status': True})
 
     # iterate over query result:
-    for obs in cursor.sort([('date_utc', -1)]):
-        date = obs['date_utc'].strftime('%Y%m%d')
-        # add key to dict if it is not there already:
-        if date not in dates:
-            dates[date] = dict()
-        # add key for program if it is not there yet
-        program_id = obs['science_program']['program_id']
-        if program_id not in dates[date]:
-            dates[date][program_id] = []
-        dates[date][program_id].append(obs)
+    try:
+        for obs in cursor.sort([('date_utc', -1)]):
+            date = obs['date_utc'].strftime('%Y%m%d')
+            # add key to dict if it is not there already:
+            if date not in dates:
+                dates[date] = dict()
+            # add key for program if it is not there yet
+            program_id = obs['science_program']['program_id']
+            if program_id not in dates[date]:
+                dates[date][program_id] = []
+            dates[date][program_id].append(obs)
+    except Exception as _e:
+        print(_e)
 
     # print(dates)
     # latest obs - first

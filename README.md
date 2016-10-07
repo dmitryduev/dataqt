@@ -289,6 +289,16 @@ db.getCollection('objects').update_one({'_id': '4_351_Yrsa_VIC_lp600_o_20160925_
 )
 ```
 
+Change ownership (PI) of a program:
+```python
+db.getCollection('objects').update({'science_program.program_id':'4'}, 
+    { $set: 
+        {'science_program.program_PI': 'asteroids'}
+    }, 
+    {multi: true}
+)
+```
+
 ---
 
 ## Archive structure
