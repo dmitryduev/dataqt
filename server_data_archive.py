@@ -402,7 +402,9 @@ def get_aux(dates, coll_aux):
                 if key == 'seeing':
                     # for seeing data, fetch frame names to show in a 'movie'
                     aux[date][key]['frames'] = []
-                    for frame in date_data[key]['frames']:
+                    # sort by time, not by name:
+                    ind_sort = np.argsort([frame[1] for frame in date_data[key]['frames']])
+                    for frame in np.array(date_data[key]['frames'])[ind_sort]:
                         aux[date][key]['frames'].append(frame[0] + '.png')
 
     return aux
