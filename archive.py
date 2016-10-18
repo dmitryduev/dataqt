@@ -2312,16 +2312,16 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
                     }
                 )
 
-                # zero flux? try faint pipeline!
-                if tag == 'zero_flux':
-                    _coll.update_one(
-                        {'_id': _obs},
-                        {
-                            '$set': {
-                                'pipelined.faint.status.force_redo': True,
-                            }
-                        }
-                    )
+                # zero flux? try faint pipeline! update: don't do that! this never works, but takes a lot of time
+                # if tag == 'zero_flux':
+                #     _coll.update_one(
+                #         {'_id': _obs},
+                #         {
+                #             '$set': {
+                #                 'pipelined.faint.status.force_redo': True,
+                #             }
+                #         }
+                #     )
 
                 _logger.debug('Updated automated pipeline entry for {:s}'.format(_obs))
 
