@@ -17,6 +17,7 @@ This repository contains code that is used for the [Robo-AO](http://roboao.calte
   * huey (Dima's forked version with a few tweaks)
   * mongoclient
   * image_registration (Dima's forked version with a few tweaks)
+  * vip 
   ...
 
 - Install fftw3

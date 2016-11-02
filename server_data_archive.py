@@ -275,8 +275,12 @@ def request_loader(request):
     user = User()
     user.id = username
 
-    user.is_authenticated = check_password_hash(select['password'],
-                                                flask.request.form['password'])
+    try:
+        user.is_authenticated = check_password_hash(select['password'],
+                                                    flask.request.form['password'])
+    except Exception as _e:
+        print(_e)
+        return
 
     return user
 
