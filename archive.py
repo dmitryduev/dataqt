@@ -2004,7 +2004,7 @@ def set_up_logging(_path='logs', _name='archive', _level=logging.DEBUG, _mode='w
     # add handler to logger object
     _logger.addHandler(fh)
 
-    return _logger
+    return _logger, utc_now.strftime('%Y%m%d')
 
 
 def get_config(_abs_path=None, _config_file='config.ini'):
@@ -3837,9 +3837,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     ''' set up logging '''
-    logger = set_up_logging(_path='logs', _name='archive', _level=logging.DEBUG, _mode='a')
+    logger, logger_utc_date = set_up_logging(_path='logs', _name='archive', _level=logging.DEBUG, _mode='a')
 
     while True:
+        # check if a new log file needs to be started:
+        if datetime.datetime.utcnow().strftime('%Y%m%d') != logger_utc_date:
+            logger, logger_utc_date = set_up_logging(_path='logs', _name='archive', _level=logging.DEBUG, _mode='a')
+
         # if you start me up... if you start me up I'll never stop (hopefully not)
         logger.info('Started archiving cycle.')
 
