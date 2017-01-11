@@ -2295,8 +2295,10 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
                     {'_id': _obs},
                     {
                         '$set': {
-                            'exposure': float(header['EXPOSURE'][0]) if tag != 'failed' else None,
-                            'magnitude': float(header['MAGNITUD'][0]) if tag != 'failed' else None,
+                            'exposure': float(header['EXPOSURE'][0])
+                                          if ('EXPOSURE' in header and tag != 'failed') else None,
+                            'magnitude': float(header['MAGNITUD'][0])
+                                          if ('MAGNITUD' in header and tag != 'failed') else None,
                             'pipelined.automated.status.done': True,
                             'pipelined.automated.classified_as': tag,
                             'pipelined.automated.last_modified': time_tag,
