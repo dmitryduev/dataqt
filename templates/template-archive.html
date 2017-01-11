@@ -342,7 +342,7 @@
                                     {% for obs in programs[program] %}
                                         {% if obs['pipelined']['automated']['status']['done'] and
                                                 obs['pipelined']['automated']['classified_as'] == 'failed' %}
-                                            {{ obs['_id'] }}: failed
+                                            {{ obs['_id'] }}: failed<br>
                                         {% endif %}
                                     {% endfor %}
                                     </p>
