@@ -2877,10 +2877,10 @@ def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automate
                     < _config['max_pipelining_retries'])\
                 or (_select['pipelined'][_pipe]['status']['done'] and
                     _select['pipelined'][_pipe]['preview']['done'] and
-                    _select['pipelined'][_pipe]['strehl']['last_modified'] >
-                    _select['pipelined'][_pipe]['preview']['last_modified'] and
-                    _select['pipelined'][_pipe]['preview']['retries']
-                            < _config['max_pipelining_retries']):
+                        (_select['pipelined'][_pipe]['strehl']['last_modified'] >
+                         _select['pipelined'][_pipe]['preview']['last_modified']) and
+                        (_select['pipelined'][_pipe]['preview']['retries'] <
+                         _config['max_pipelining_retries'])):
             if _pipe == 'automated':
                 # check if actually processed through pipeline
                 path_obs_list = [os.path.join(_config['path_pipe'], _date, tag, _obs) for
@@ -2943,7 +2943,7 @@ def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automate
                     except KeyError:
                         # this should be there, even if it's sum.fits
                         _pix_x = int(fits_header['NAXIS1'][0])
-
+                    print('lala')
                     _status = generate_pipe_preview(path_out, _obs, preview_img, preview_img_cropped,
                                                     SR, _fow_x=36, _pix_x=_pix_x, _drizzled=_drizzled,
                                                     _x=_x, _y=_y)
