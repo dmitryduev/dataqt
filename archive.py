@@ -2280,14 +2280,10 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
 
             # check folder modified date:
             time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_obs).st_mtime)
-            print('^^^')
-            print(time_tag)
-            print(_select['pipelined']['automated']['last_modified'])
-            print('^^^')
 
             # make sure db reflects reality: not yet in db or had been modified
             if (not _select['pipelined']['automated']['status']['done']) or \
-                            _select['pipelined']['automated']['last_modified'] != time_tag:
+                    abs((_select['pipelined']['automated']['last_modified'] - time_tag).total_seconds()) < 1.0:
 
                 # get fits header:
                 fits100p = os.path.join(path_obs, '100p.fits')
@@ -2431,7 +2427,7 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
                 # check folder modified date:
                 time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_faint).st_mtime)
                 # new/changed? (re)load data from disk + update database entry + (re)make preview
-                if _select['pipelined']['faint']['last_modified'] != time_tag:
+                if abs((_select['pipelined']['faint']['last_modified'] - time_tag).total_seconds()) < 1.0:
                     # load data from disk
                     # load shifts.txt:
                     f_shifts = [f for f in os.listdir(path_faint) if f == 'shifts.txt'][0]
@@ -2581,7 +2577,7 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
             # check folder modified date:
             time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_strehl).st_mtime)
             # new/changed? (re)load data from disk + update database entry + (re)make preview
-            if _select['pipelined'][_pipe]['strehl']['last_modified'] != time_tag:
+            if abs((_select['pipelined'][_pipe]['strehl']['last_modified'] - time_tag).total_seconds()) < 1.0:
                 # load data from disk
                 f_strehl = os.path.join(path_strehl, '{:s}_strehl.txt'.format(_obs))
                 x, y, core, halo, SR, FWHM, flag = load_strehl(f_strehl)
@@ -2729,7 +2725,7 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe):
             # check folder modified date:
             time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_pca).st_mtime)
             # new/changed? (re)load data from disk + update database entry + (re)make preview
-            if _select['pipelined'][_pipe]['pca']['last_modified'] != time_tag:
+            if abs((_select['pipelined'][_pipe]['pca']['last_modified'] - time_tag).total_seconds()) < 1.0:
                 # load data from disk
                 # load contrast curve
                 f_cc = '{:s}_contrast_curve.txt'.format(_obs)
@@ -3125,7 +3121,7 @@ def check_raws(_config, _logger, _coll, _select, _date, _obs, _date_files):
         # print(_obs, _select['raw_data']['last_modified'], time_tag)
 
         # changed? update database entry then:
-        if _select['raw_data']['last_modified'] != time_tag:
+        if abs((_select['raw_data']['last_modified'] - time_tag).total_seconds()) < 1.0:
             _coll.update_one(
                 {'_id': _obs},
                 {
@@ -3264,7 +3260,7 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
                 time_tag = max(time_tags)
                 time_tag = time_tag.replace(tzinfo=pytz.utc)
                 # not done or new files appeared in the raw directory
-                if (not _select['seeing']['done'] or last_modified != time_tag) and \
+                if (not _select['seeing']['done'] or abs((last_modified - time_tag).total_seconds()) < 1.0) and \
                         (_select['seeing']['retries'] <= _config['max_pipelining_retries']):
 
                         # unbzip source file(s):
