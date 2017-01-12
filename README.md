@@ -63,7 +63,7 @@ git clone https://github.com/dmitryduev/roboao-archive.git
 ---
 
 ### Set up and use MongoDB with authentication
-Install MongoDB 3.2
+Install MongoDB 3.4
 (yum on Fedora; homebrew on MacOS)
 On Mac OS use ```homebrew```. No need to use root privileges.
 ```
@@ -74,7 +74,7 @@ On Fedora, you would likely need to do these manipulation under root (```su -```
 ```
 [mongodb]
 name=MongoDB Repository
-baseurl=https://repo.mongodb.org/yum/redhat/7/mongodb-org/3.2/x86_64/ 
+baseurl=https://repo.mongodb.org/yum/redhat/7/mongodb-org/3.4/x86_64/ 
 gpgcheck=0
 enabled=1
 ```

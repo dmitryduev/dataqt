@@ -514,8 +514,7 @@ def job_pca(_config, _path_in, _fits_name, _obs, _path_out,
 
         # Center the filtered frame
         centered_cube, shy, shx = \
-            (vip.calib.cube_recenter_gauss2d_fit(array=filtered_frame, pos_y=_win,
-                                                 pos_x=_win, fwhm=_fwhm,
+            (vip.calib.cube_recenter_gauss2d_fit(array=filtered_frame, xy=(_win, _win), fwhm=_fwhm,
                                                  subi_size=6, nproc=1, full_output=True))
 
         centered_frame = centered_cube[0]
