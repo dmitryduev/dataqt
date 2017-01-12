@@ -2636,7 +2636,7 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
         # will be different from the new folder modification date)
 
         if _select['pipelined'][_pipe]['strehl']['status']['force_redo'] or \
-                (not _select['pipelined'][_pipe]['strehl']['status']['done'] and
+                ((not _select['pipelined'][_pipe]['strehl']['status']['done']) and
                  _select['pipelined'][_pipe]['strehl']['status']['retries'] <
                  _config['max_pipelining_retries']):
             if _pipe == 'automated':
@@ -2871,7 +2871,7 @@ def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automate
         # preview_done = False, done = True, tried not too many times
         # OR preview_done = True, done = True, but a new Strehl is available, tried not too many times
         if _select['pipelined'][_pipe]['preview']['force_redo'] or \
-                (not _select['pipelined'][_pipe]['preview']['done'] and
+                ((not _select['pipelined'][_pipe]['preview']['done']) and
                 _select['pipelined'][_pipe]['status']['done'] and
                 _select['pipelined'][_pipe]['preview']['retries']
                     < _config['max_pipelining_retries'])\
@@ -3014,7 +3014,7 @@ def check_pca_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='auto
     try:
         # preview_done = False, done = True, tried not too many times
         if _select['pipelined'][_pipe]['pca']['preview']['force_redo'] or \
-                (not _select['pipelined'][_pipe]['pca']['preview']['done'] and
+                ((not _select['pipelined'][_pipe]['pca']['preview']['done']) and
                  _select['pipelined'][_pipe]['pca']['status']['done'] and
                  _select['pipelined'][_pipe]['pca']['preview']['retries']
                          < _config['max_pipelining_retries']):
@@ -3036,8 +3036,7 @@ def check_pca_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='auto
                 _cc = _select['pipelined'][_pipe]['pca']['contrast_curve']
 
                 # number of pixels in X on the detector
-                _pix_x = int(re.search(r'(:)(\d+)',
-                                   _select['pipelined'][_pipe]['fits_header']['DETSIZE'][0]).group(2))
+                _pix_x = int(re.search(r'(:)(\d+)', _select['pipelined'][_pipe]['fits_header']['DETSIZE'][0]).group(2))
 
                 if _pipe == 'automated':
                     _drizzled = True
@@ -3071,7 +3070,7 @@ def check_pca_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='auto
         path_pca = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'pca')
 
         # path does not exist? make sure it's not marked 'done'
-        if not os.path.exists(path_pca) and \
+        if (not os.path.exists(path_pca)) and \
                 _select['pipelined'][_pipe]['pca']['preview']['done']:
             # update database entry if incorrectly marked 'done'
             # (could not find the respective directory)
