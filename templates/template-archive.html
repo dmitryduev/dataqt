@@ -206,7 +206,7 @@
     <div class="container">
         <div class="col-md-12">
             <h2>
-                Science data
+                Nightly data
                 <div class="btn-group">
                     <button type="button" class="btn btn-info dropdown-toggle"
                             data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -224,8 +224,8 @@
                         Show dates <span class="caret"></span>
                     </button>
                     <ul class="dropdown-menu">
-                        <li><a href="/">Last 10 days</a></li>
-                        <li><a href="?start=20150901">Everything</a></li>
+                        <li><a href="/">Past 10 days</a></li>
+                        <li><a href="?start=20150901">Everything (careful, traffic!)</a></li>
                         <li class="dropdown-submenu">
                             <a tabindex="0" style="cursor: pointer; cursor: hand;">Select date</a>
                             <ul class="dropdown-menu" style="padding: 5px 10px 0px 10px;">
@@ -269,7 +269,8 @@
         </div>
     </div>
     {% for date, programs in dates %}
-        {% if None in (date, programs) %}
+        {# No science/aux data for the requested period at all #}
+        {% if None in (date, programs) and aux[date] | length == 0 %}
             <div class="container">
                 <div class="col-md-12">
                     <h3>No science data to show</h3>
@@ -301,172 +302,193 @@
 
                         <!-- Tab panes -->
                         <div class="tab-content">
-                            <div role="tabpanel" class="tab-pane active" id="{{ date }}-preview">
-                                {% for program in programs|sort %}
-                                    <h4>Program {{ program }}</h4>
-                                    <div id="program_{{program}}_images">
-                                    {% for obs in programs[program] %}
-                                        {% if (obs['pipelined']['automated']['status']['done'] and
-                                                obs['pipelined']['automated']['classified_as'] != 'failed') or
-                                                obs['pipelined']['faint']['status']['done'] %}
-                                            <div class="img-wrapper">
-                                                {% if obs['pipelined']['automated']['status']['done'] %}
-                                                    <img src="/data/{{date}}/{{obs['_id']}}/automated/preview/{{obs['_id']}}_cropped.png"
-                                                         alt="{{ obs['_id'] }}"
-                                                         style="height:120px; cursor: pointer;">
-                                                {% elif obs['pipelined']['faint']['status']['done'] %}
-                                                    <img src="/data/{{date}}/{{obs['_id']}}/faint/preview/{{obs['_id']}}_cropped.png"
-                                                         alt="{{ obs['_id'] }}"
-                                                         style="height:120px; cursor: pointer;">
-                                                {% endif %}
-                                                <div class="overlay" data-toggle="modal" data-target="#sourceModal"
-                                                     data-date="{{date}}" data-source="{{ obs['_id'] }}"
-                                                     data-sou_name="{{ obs['name'] }}"
-                                                     data-lucky="{{ obs['pipelined']['automated']['preview']['done'] }}"
-                                                     data-lucky-strehl="{{ obs['pipelined']['automated']['strehl']['status']['done'] }}"
-                                                     data-lucky-pca="{{ obs['pipelined']['automated']['pca']['preview']['done'] }}"
-                                                     data-faint="{{ obs['pipelined']['faint']['preview']['done'] }}"
-                                                     data-faint-strehl="{{ obs['pipelined']['faint']['strehl']['status']['done'] }}"
-                                                     data-faint-pca="{{ obs['pipelined']['faint']['pca']['preview']['done'] }}"
-                                                     style="cursor: pointer;">
-                                                     {{obs['name']}}<br>
-                                                     Camera: {{obs['camera']}}<br>
-                                                     Filter: {{obs['filter']}}
-                                                    <br>{{obs['date_utc']}}
-                                                </div>
-                                            </div>
-                                        {% endif %}
-                                    {% endfor %}
-                                    <br>
-                                    <p style="margin-top: 10px;">
-                                    {% for obs in programs[program] %}
-                                        {% if obs['pipelined']['automated']['status']['done'] and
-                                                obs['pipelined']['automated']['classified_as'] == 'failed' %}
-                                            {{ obs['_id'] }}: failed<br>
-                                        {% endif %}
-                                    {% endfor %}
-                                    </p>
-                                    </div>
-                                {% endfor %}
-                            </div>
-                            <div role="tabpanel" class="tab-pane" id="{{ date }}-auxiliary">
-                                <h4>System performance and meteo data</h4>
-                                {% if aux[date] | length > 0 %}
-                                    {% for aux_key in aux[date] %}
-                                        {% if aux[date][aux_key]['done'] %}
-                                            {# pull seeing data together #}
-                                            {% if aux_key == 'seeing' %}
-                                                <div class="col-md-12">
-                                            {% endif %}
-                                            <div class="col-md-6">
-                                                <h5>{{ aux_key }}</h5>
-                                                <img src="/data/{{date}}/summary/{{ aux_key }}.{{date}}.png"
-                                                     alt="{{ aux_key }}" class="img-responsive pop"
-                                                     style="cursor:pointer; cursor: hand;">
-                                            </div>
-
-                                            {% if aux_key == 'seeing' %}
-                                                <div class="col-md-6">
-                                                    <h5>{{ aux_key }} movie [data, model, residuals]</h5>
-                                                    <div id="seeingCarousel{{ date }}" class="carousel carousel-fade"
-                                                         data-interval="300" data-pause="false" style="width:100%"
-                                                         onmouseover="pauseCarouselShow('{{ date }}');"
-                                                         onmouseleave="pauseCarouselHide('{{ date }}');">
-                                                        <div class="carousel-inner">
-                                                            <div class="item active">
-                                                                {% set fi0 = aux[date][aux_key]['frames'][0] %}
-                                                                {% set datestr = fi0[:fi0.index('.')].split('_')[-2:] %}
-                                                                {% set dat  = datestr[0][0:4]+'/'+
-                                                                                    datestr[0][4:6]+'/'+datestr[0][6:] %}
-                                                                {% set time = datestr[1][0:2]+':'+
-                                                                                    datestr[1][2:4]+':'+datestr[1][4:] %}
-                                                                <img src="/data/{{date}}/summary/seeing/{{fi0}}"
-                                                                     alt="" class="img-responsive">
-                                                                <div class="carousel-caption"
-                                                                     style="position:absolute !important; top:-5%;
-                                                                            padding-bottom: 0px;">
-                                                                    {{dat}}&nbsp;{{time}}</div>
-                                                            </div>
-                                                            {% for fi in aux[date][aux_key]['frames'][1:] %}
-                                                                <div class="item">
-                                                                    {% set datestr = fi[:fi.index('.')].split('_')[-2:] %}
-                                                                    {% set dat  = datestr[0][0:4]+'/'+
-                                                                                    datestr[0][4:6]+'/'+datestr[0][6:] %}
-                                                                    {% set time = datestr[1][0:2]+':'+
-                                                                                    datestr[1][2:4]+':'+datestr[1][4:] %}
-                                                                    <img src="/data/{{date}}/summary/seeing/{{fi}}"
-                                                                         alt="" class="img-responsive">
-                                                                    <div class="carousel-caption"
-                                                                         style="position:absolute !important; top:-5%">
-                                                                        {{dat}}&nbsp;{{time}}</div>
-                                                                </div>
-                                                            {% endfor %}
-                                                        </div>
-
-                                                        <a class="left carousel-control" href="#seeingCarousel{{ date }}"
-                                                           data-slide="prev">
-                                                            <span class="glyphicon glyphicon-chevron-left"></span>
-                                                        </a>
-                                                        <a class="right carousel-control" href="#seeingCarousel{{ date }}"
-                                                           data-slide="next">
-                                                            <span class="glyphicon glyphicon-chevron-right"></span>
-                                                        </a>
-
-                                                        <a id="carousel-play{{ date }}"
-                                                           class="carousel-control carouselButtons"
-                                                           onclick="playCarousel('{{ date }}')"
-                                                           style="display: block">
-                                                                <span class="glyphicon glyphicon-play"
-                                                                      style="font-size: 40px !important;"></span>
-                                                        </a>
-                                                        <a id="carousel-pause{{ date }}"
-                                                           class="carousel-control carouselButtons"
-                                                           onclick="pauseCarousel('{{ date }}')"
-                                                           style="display: none">
-                                                                <span class="glyphicon glyphicon-pause"
-                                                                      style="font-size: 40px !important;"></span>
-                                                        </a>
+                            {% if programs | length == 0 %}
+                                <div role="tabpanel" class="tab-pane" id="{{ date }}-preview">
+                                    <h4>No science data</h4>
+                                </div>
+                            {% else %}
+                                <div role="tabpanel" class="tab-pane active" id="{{ date }}-preview">
+                                    {% for program in programs|sort %}
+                                        <h4>Program {{ program }}</h4>
+                                        <div id="program_{{program}}_images">
+                                        {% for obs in programs[program] %}
+                                            {% if (obs['pipelined']['automated']['status']['done'] and
+                                                    obs['pipelined']['automated']['classified_as'] != 'failed') or
+                                                    obs['pipelined']['faint']['status']['done'] %}
+                                                <div class="img-wrapper">
+                                                    {% if obs['pipelined']['automated']['status']['done'] %}
+                                                        <img src="/data/{{date}}/{{obs['_id']}}/automated/preview/{{obs['_id']}}_cropped.png"
+                                                             alt="{{ obs['_id'] }}"
+                                                             style="height:119px; cursor: pointer;">
+                                                    {% elif obs['pipelined']['faint']['status']['done'] %}
+                                                        <img src="/data/{{date}}/{{obs['_id']}}/faint/preview/{{obs['_id']}}_cropped.png"
+                                                             alt="{{ obs['_id'] }}"
+                                                             style="height:119px; cursor: pointer;">
+                                                    {% endif %}
+                                                    <div class="overlay" data-toggle="modal" data-target="#sourceModal"
+                                                         data-date="{{date}}" data-source="{{ obs['_id'] }}"
+                                                         data-sou_name="{{ obs['name'] }}"
+                                                         data-lucky="{{ obs['pipelined']['automated']['preview']['done'] }}"
+                                                         data-lucky-strehl="{{ obs['pipelined']['automated']['strehl']['status']['done'] }}"
+                                                         data-lucky-pca="{{ obs['pipelined']['automated']['pca']['preview']['done'] }}"
+                                                         data-faint="{{ obs['pipelined']['faint']['preview']['done'] }}"
+                                                         data-faint-strehl="{{ obs['pipelined']['faint']['strehl']['status']['done'] }}"
+                                                         data-faint-pca="{{ obs['pipelined']['faint']['pca']['preview']['done'] }}"
+                                                         style="cursor: pointer;">
+                                                         {{obs['name']}}<br>
+                                                         Camera: {{obs['camera']}}<br>
+                                                         Filter: {{obs['filter']}}
+                                                        <br>{{obs['date_utc']}}
                                                     </div>
                                                 </div>
-                                                {# pull seeing data together: #}
-                                                </div>
                                             {% endif %}
-                                        {% endif %}
+                                        {% endfor %}
+                                        <br>
+                                        <p style="margin-top: 10px;">
+                                        {% for obs in programs[program] %}
+                                            {% if obs['pipelined']['automated']['status']['done'] and
+                                                    obs['pipelined']['automated']['classified_as'] == 'failed' %}
+                                                {{ obs['_id'] }}: failed<br>
+                                            {% endif %}
+                                        {% endfor %}
+                                        </p>
+                                        </div>
                                     {% endfor %}
+                                </div>
+                            {% endif %}
+
+                            {% if aux[date] | length == 0 %}
+                                <div role="tabpanel" class="tab-pane" id="{{ date }}-preview">
+                                    <h4>No auxiliary data</h4>
+                                </div>
+                            {% else %}
+                                {% if programs | length == 0 %}
+                                    <div role="tabpanel" class="tab-pane active" id="{{ date }}-auxiliary">
                                 {% else %}
-                                    <h5>No data to show.</h5>
+                                    <div role="tabpanel" class="tab-pane" id="{{ date }}-auxiliary">
                                 {% endif %}
-                            </div>
+                                    <h4>System performance and meteo data</h4>
+                                    {% if aux[date] | length > 0 %}
+                                        {% for aux_key in aux[date] %}
+                                            {% if aux[date][aux_key]['done'] %}
+                                                {# pull seeing data together #}
+                                                {% if aux_key == 'seeing' %}
+                                                    <div class="col-md-12">
+                                                {% endif %}
+                                                <div class="col-md-6">
+                                                    <h5>{{ aux_key }}</h5>
+                                                    <img src="/data/{{date}}/summary/{{ aux_key }}.{{date}}.png"
+                                                         alt="{{ aux_key }}" class="img-responsive pop"
+                                                         style="cursor:pointer; cursor: hand;">
+                                                </div>
+
+                                                {% if aux_key == 'seeing' %}
+                                                    <div class="col-md-6">
+                                                        <h5>{{ aux_key }} movie [data, model, residuals]</h5>
+                                                        <div id="seeingCarousel{{ date }}" class="carousel carousel-fade"
+                                                             data-interval="300" data-pause="false" style="width:100%"
+                                                             onmouseover="pauseCarouselShow('{{ date }}');"
+                                                             onmouseleave="pauseCarouselHide('{{ date }}');">
+                                                            <div class="carousel-inner">
+                                                                <div class="item active">
+                                                                    {% set fi0 = aux[date][aux_key]['frames'][0] %}
+                                                                    {% set datestr = fi0[:fi0.index('.')].split('_')[-2:] %}
+                                                                    {% set dat  = datestr[0][0:4]+'/'+
+                                                                                        datestr[0][4:6]+'/'+datestr[0][6:] %}
+                                                                    {% set time = datestr[1][0:2]+':'+
+                                                                                        datestr[1][2:4]+':'+datestr[1][4:] %}
+                                                                    <img src="/data/{{date}}/summary/seeing/{{fi0}}"
+                                                                         alt="" class="img-responsive">
+                                                                    <div class="carousel-caption"
+                                                                         style="position:absolute !important; top:-5%;
+                                                                                padding-bottom: 0px;">
+                                                                        {{dat}}&nbsp;{{time}}</div>
+                                                                </div>
+                                                                {% for fi in aux[date][aux_key]['frames'][1:] %}
+                                                                    <div class="item">
+                                                                        {% set datestr = fi[:fi.index('.')].split('_')[-2:] %}
+                                                                        {% set dat  = datestr[0][0:4]+'/'+
+                                                                                        datestr[0][4:6]+'/'+datestr[0][6:] %}
+                                                                        {% set time = datestr[1][0:2]+':'+
+                                                                                        datestr[1][2:4]+':'+datestr[1][4:] %}
+                                                                        <img src="/data/{{date}}/summary/seeing/{{fi}}"
+                                                                             alt="" class="img-responsive">
+                                                                        <div class="carousel-caption"
+                                                                             style="position:absolute !important; top:-5%">
+                                                                            {{dat}}&nbsp;{{time}}</div>
+                                                                    </div>
+                                                                {% endfor %}
+                                                            </div>
+
+                                                            <a class="left carousel-control" href="#seeingCarousel{{ date }}"
+                                                               data-slide="prev">
+                                                                <span class="glyphicon glyphicon-chevron-left"></span>
+                                                            </a>
+                                                            <a class="right carousel-control" href="#seeingCarousel{{ date }}"
+                                                               data-slide="next">
+                                                                <span class="glyphicon glyphicon-chevron-right"></span>
+                                                            </a>
+
+                                                            <a id="carousel-play{{ date }}"
+                                                               class="carousel-control carouselButtons"
+                                                               onclick="playCarousel('{{ date }}')"
+                                                               style="display: block">
+                                                                    <span class="glyphicon glyphicon-play"
+                                                                          style="font-size: 40px !important;"></span>
+                                                            </a>
+                                                            <a id="carousel-pause{{ date }}"
+                                                               class="carousel-control carouselButtons"
+                                                               onclick="pauseCarousel('{{ date }}')"
+                                                               style="display: none">
+                                                                    <span class="glyphicon glyphicon-pause"
+                                                                          style="font-size: 40px !important;"></span>
+                                                            </a>
+                                                        </div>
+                                                    </div>
+                                                    {# pull seeing data together: #}
+                                                    </div>
+                                                {% endif %}
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% else %}
+                                        <h5>No data to show.</h5>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
                             <div role="tabpanel" class="tab-pane" id="{{ date }}-data">
-                                {% for program in programs|sort %}
-                                    <h4>Program {{ program }}</h4>
-                                    Master wget-script to fetch all data:
-                                    <abbr title="Dont't forget to 'chmod u+x'">
-                                        <a href="/get_data?date={{ date }}&program={{ program }}">
-                                            program_{{ program }}_{{ date }}.wget.sh
-                                        </a><br>
-                                    </abbr>
-                                    <a data-toggle="collapse" href="#collapse_{{ date }}_{{ program }}"
-                                       aria-expanded="false" aria-controls="collapse_{{ date }}_{{ program }}">
-                                        Individual compressed tarballs
-                                    </a>
-                                    <div class="collapse" id="collapse_{{ date }}_{{ program }}">
-                                        <blockquote style="font-size: 14px;">
-                                            <p>
-                                                {% for obs in programs[program] %}
-                                                    {# check if bz2 exists: #}
-                                                    {% if obs['distributed']['status'] %}
-                                                        <a href="/data/{{ date }}/{{ obs['_id'] }}/{{ obs['_id'] }}.tar.bz2">
-                                                            {{ obs['_id'] }}.tar.bz2
-                                                        </a><br>
-                                                    {% else %}
-                                                        {{ obs['_id'] }}: not ready yet<br>
-                                                    {% endif %}
-                                                {% endfor %}
-                                            </p>
-                                        </blockquote>
-                                    </div>
-                                {% endfor %}
+                                {% if programs | length == 0 %}
+                                    <h4>No science data for download</h4>
+                                {% else %}
+                                    {% for program in programs|sort %}
+                                        <h4>Program {{ program }}</h4>
+                                        Master wget-script to fetch all data:
+                                        <abbr title="Dont't forget to 'chmod u+x'">
+                                            <a href="/get_data?date={{ date }}&program={{ program }}">
+                                                program_{{ program }}_{{ date }}.wget.sh
+                                            </a><br>
+                                        </abbr>
+                                        <a data-toggle="collapse" href="#collapse_{{ date }}_{{ program }}"
+                                           aria-expanded="false" aria-controls="collapse_{{ date }}_{{ program }}">
+                                            Individual compressed tarballs
+                                        </a>
+                                        <div class="collapse" id="collapse_{{ date }}_{{ program }}">
+                                            <blockquote style="font-size: 14px;">
+                                                <p>
+                                                    {% for obs in programs[program] %}
+                                                        {# check if bz2 exists: #}
+                                                        {% if obs['distributed']['status'] %}
+                                                            <a href="/data/{{ date }}/{{ obs['_id'] }}/{{ obs['_id'] }}.tar.bz2">
+                                                                {{ obs['_id'] }}.tar.bz2
+                                                            </a><br>
+                                                        {% else %}
+                                                            {{ obs['_id'] }}: not ready yet<br>
+                                                        {% endif %}
+                                                    {% endfor %}
+                                                </p>
+                                            </blockquote>
+                                        </div>
+                                    {% endfor %}
+                                {% endif %}
                             </div>
                         </div>
 
