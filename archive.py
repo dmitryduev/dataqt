@@ -2280,6 +2280,10 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
 
             # check folder modified date:
             time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_obs).st_mtime)
+            print('^^^')
+            print(time_tag)
+            print(_select['pipelined']['automated']['last_modified'])
+            print('^^^')
 
             # make sure db reflects reality: not yet in db or had been modified
             if (not _select['pipelined']['automated']['status']['done']) or \
