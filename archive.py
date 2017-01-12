@@ -3255,6 +3255,9 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
                 time_tag = max(time_tags)
                 time_tag = time_tag.replace(tzinfo=pytz.utc)
                 # not done or new files appeared in the raw directory
+                print(last_modified)
+                print(time_tag)
+                print(abs((last_modified - time_tag).total_seconds()) < 1.0)
                 if (not _select['seeing']['done'] or abs((last_modified - time_tag).total_seconds()) < 1.0) and \
                         (_select['seeing']['retries'] <= _config['max_pipelining_retries']):
 
