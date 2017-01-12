@@ -2282,7 +2282,7 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
             time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_obs).st_mtime)
 
             # make sure db reflects reality: not yet in db or had been modified
-            if not _select['pipelined']['automated']['status']['done'] or \
+            if (not _select['pipelined']['automated']['status']['done']) or \
                             _select['pipelined']['automated']['last_modified'] != time_tag:
 
                 # get fits header:
@@ -2508,7 +2508,7 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
             # will be different from the new folder modification date)
 
             if _select['pipelined']['faint']['status']['force_redo'] or \
-                    (not _select['pipelined']['faint']['status']['done'] and
+                    ((not _select['pipelined']['faint']['status']['done']) and
                      _select['pipelined']['faint']['status']['retries'] <
                      _config['max_pipelining_retries']):
                 # prepare stuff for job execution
@@ -2951,7 +2951,7 @@ def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automate
                     _status = generate_pipe_preview(path_out, _obs, preview_img, preview_img_cropped,
                                                     SR, _fow_x=36, _pix_x=_pix_x, _drizzled=_drizzled,
                                                     _x=_x, _y=_y)
-
+                    print(_status)
                     _coll.update_one(
                         {'_id': _obs},
                         {
@@ -2978,7 +2978,7 @@ def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automate
         path_preview = os.path.join(_config['path_archive'], _date, _obs, _pipe, 'preview')
 
         # path does not exist? make sure it's not marked 'done'
-        if not os.path.exists(path_preview) and \
+        if (not os.path.exists(path_preview)) and \
                 _select['pipelined'][_pipe]['preview']['done']:
             # update database entry if incorrectly marked 'done'
             # (could not find the respective directory)
