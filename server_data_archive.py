@@ -186,6 +186,8 @@ def connect_to_db(_config):
 ''' initialize the Flask app '''
 app = flask.Flask(__name__)
 app.secret_key = 'roboaokicksass'
+# add 'do' statement to jinja environment (does the same as {{ }}, but return nothing):
+app.jinja_env.add_extension('jinja2.ext.do')
 
 
 def get_db(_config):
