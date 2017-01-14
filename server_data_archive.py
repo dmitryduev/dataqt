@@ -384,7 +384,7 @@ def get_dates(user_id, coll, coll_aux, start=None, stop=None):
                 dates[date] = {'data': {}, 'aux': {}}
             # add key for program if it is not there yet
             program_id = obs['science_program']['program_id']
-            if program_id not in dates[date]:
+            if program_id not in dates[date]['data']:
                 dates[date]['data'][program_id] = []
             dates[date]['data'][program_id].append(obs)
     except Exception as _e:
