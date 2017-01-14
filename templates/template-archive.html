@@ -269,22 +269,12 @@
         </div>
     </div>
 
-    {% for date, programs in dates %}
-
-        {# Check if there's aux data to be displayed #}
-        {% set dones = [] %}
-        {% for aux_key in aux[date] %}
-            {% do dones.append(aux[date][aux_key]['done']) %}
-        {% endfor %}
-        {% if True in dones %}
-            {% set no_aux = False %}
-        {% else %}
-            {% set no_aux = True %}
-        {% endif %}
+    {% for date, programs, aux in dates %}
 
         {# No science/aux data for the requested period at all #}
-        {% if None in (date, programs) and no_aux %}
+        {% if None in (date, programs, aux) %}
             <div class="container">
+                {# TODO: show closable alert instead #}
                 <div class="col-md-12">
                     <h3>No science data to show</h3>
                 </div>
@@ -299,15 +289,23 @@
 
                         <!-- Nav tabs -->
                         <ul class="nav nav-tabs" role="tablist" id="{{ date }}-nav-tabs">
-                            <li role="presentation" class="active">
+                            {% if programs | length == 0 and aux | length != 0 %}
+                                <li role="presentation" id="{{ date }}-nav-tabs-preview">
+                            {% else %}
+                                <li role="presentation" class="active" id="{{ date }}-nav-tabs-preview">
+                            {% endif %}
                                 <a href="#{{ date }}-preview" aria-controls="{{ date }}-preview"
                                    role="tab" data-toggle="tab">Data preview</a>
                             </li>
-                            <li role="presentation">
+                            {% if programs | length == 0 and aux | length != 0 %}
+                                <li role="presentation" class="active" id="{{ date }}-nav-tabs-auxiliary">
+                            {% else %}
+                                <li role="presentation" id="{{ date }}-nav-tabs-auxiliary">
+                            {% endif %}
                                 <a href="#{{ date }}-auxiliary" aria-controls="{{ date }}-auxiliary"
                                    role="tab" data-toggle="tab">Auxiliary data</a>
                             </li>
-                            <li role="presentation">
+                            <li role="presentation" id="{{ date }}-nav-tabs-data">
                                 <a href="#{{ date }}-data" aria-controls="{{ date }}-data"
                                    role="tab" data-toggle="tab">Download</a>
                             </li>
@@ -370,19 +368,20 @@
                                 </div>
                             {% endif %}
 
-                            {% if no_aux %}
+                            {% if aux | length == 0 %}
                                 <div role="tabpanel" class="tab-pane" id="{{ date }}-auxiliary">
                                     <h4>No system performance and meteo data</h4>
                                 </div>
                             {% else %}
+                                {# make pane active if there's no science data #}
                                 {% if programs | length == 0 %}
                                     <div role="tabpanel" class="tab-pane active" id="{{ date }}-auxiliary">
                                 {% else %}
                                     <div role="tabpanel" class="tab-pane" id="{{ date }}-auxiliary">
                                 {% endif %}
                                     <h4>System performance and meteo data</h4>
-                                    {% for aux_key in aux[date] %}
-                                        {% if aux[date][aux_key]['done'] %}
+                                    {% for aux_key in aux %}
+                                        {% if aux[aux_key]['done'] %}
                                             {# pull seeing data together #}
                                             {% if aux_key == 'seeing' %}
                                                 <div class="col-md-12">
@@ -403,7 +402,7 @@
                                                          onmouseleave="pauseCarouselHide('{{ date }}');">
                                                         <div class="carousel-inner">
                                                             <div class="item active">
-                                                                {% set fi0 = aux[date][aux_key]['frames'][0] %}
+                                                                {% set fi0 = aux[aux_key]['frames'][0] %}
                                                                 {% set datestr = fi0[:fi0.index('.')].split('_')[-2:] %}
                                                                 {% set dat  = datestr[0][0:4]+'/'+
                                                                                     datestr[0][4:6]+'/'+datestr[0][6:] %}
@@ -416,7 +415,7 @@
                                                                             padding-bottom: 0px;">
                                                                     {{dat}}&nbsp;{{time}}</div>
                                                             </div>
-                                                            {% for fi in aux[date][aux_key]['frames'][1:] %}
+                                                            {% for fi in aux[aux_key]['frames'][1:] %}
                                                                 <div class="item">
                                                                     {% set datestr = fi[:fi.index('.')].split('_')[-2:] %}
                                                                     {% set dat  = datestr[0][0:4]+'/'+

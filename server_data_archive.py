@@ -328,7 +328,16 @@ def stream_template(template_name, **context):
     return rv
 
 
-def get_dates(user_id, coll, start=None, stop=None):
+def get_dates(user_id, coll, coll_aux, start=None, stop=None):
+    """
+        Get science and auxiliary data from start to stop
+    :param user_id:
+    :param coll:
+    :param coll_aux:
+    :param start:
+    :param stop:
+    :return:
+    """
     if start is None:
         # this is ~when we moved to KP:
         # start = datetime.datetime(2015, 10, 1)
@@ -350,12 +359,13 @@ def get_dates(user_id, coll, start=None, stop=None):
             print(_e)
             stop = datetime.datetime.utcnow()
 
-    # create index not to perform in-memory sorting:
+    # create indeces not to perform in-memory sorting:
     coll.create_index([('date_utc', -1)])
+    coll_aux.create_index([('_id', -1)])
 
-    # dictionary: {date: {program_N: [observations]}}
-    dates = OrderedDict()
-    # programs = []
+    # dictionary: {date: {data: {program_N: [observations]}, aux: {}}}
+    dates = dict()
+
     if user_id == 'admin':
         # get everything;
         cursor = coll.find({'date_utc': {'$gte': start, '$lt': stop}})
@@ -365,18 +375,50 @@ def get_dates(user_id, coll, start=None, stop=None):
                             'science_program.program_PI': user_id,
                             'distributed.status': True})
 
-    # iterate over query result:
+    # iterate over query result for science data:
     try:
         for obs in cursor.sort([('date_utc', -1)]):
             date = obs['date_utc'].strftime('%Y%m%d')
             # add key to dict if it is not there already:
             if date not in dates:
-                dates[date] = dict()
+                dates[date] = {'data': {}, 'aux': {}}
             # add key for program if it is not there yet
             program_id = obs['science_program']['program_id']
             if program_id not in dates[date]:
-                dates[date][program_id] = []
-            dates[date][program_id].append(obs)
+                dates[date]['data'][program_id] = []
+            dates[date]['data'][program_id].append(obs)
+    except Exception as _e:
+        print(_e)
+
+    # get aux data
+    cursor_aux = coll_aux.find({'_id': {'$gte': start.strftime('%Y%m%d'), '$lt': stop.strftime('%Y%m%d')}})
+
+    # iterate over query result for aux data:
+    try:
+        for date_data in cursor_aux:
+            # string date
+            date = date_data['_id']
+
+            aux = OrderedDict()
+
+            for key in ('seeing', 'contrast_curve', 'strehl'):
+                if key in date_data and date_data[key]['done']:
+                    aux[key] = dict()
+                    aux[key]['done'] = True if (key in date_data and date_data[key]['done']) else False
+                    if key == 'seeing':
+                        # for seeing data, fetch frame names to show in a 'movie'
+                        aux[key]['frames'] = []
+                        # sort by time, not by name:
+                        ind_sort = np.argsort([frame[1] for frame in date_data[key]['frames']])
+                        for frame in np.array(date_data[key]['frames'])[ind_sort]:
+                            aux[key]['frames'].append(frame[0] + '.png')
+
+            if len(aux) > 0:
+                # init entry if no science
+                if date not in dates:
+                    dates[date] = {'data': {}, 'aux': {}}
+                # add to dates:
+                dates[date]['aux'] = aux
     except Exception as _e:
         print(_e)
 
@@ -385,35 +427,6 @@ def get_dates(user_id, coll, start=None, stop=None):
     # dates = sorted(list(set(dates)), reverse=True)
 
     return dates
-
-
-def get_aux(dates, coll_aux):
-    """
-        Get auxiliary data for a list of dates
-    :param dates:
-    :param coll_aux:
-    :return:
-    """
-
-    aux = dict()
-
-    for date in dates:
-        aux[date] = OrderedDict()
-
-        cursor = coll_aux.find({'_id': date})
-        for date_data in cursor:
-            for key in ('seeing', 'contrast_curve', 'strehl'):
-                aux[date][key] = dict()
-                aux[date][key]['done'] = True if (key in date_data and date_data[key]['done']) else False
-                if key == 'seeing':
-                    # for seeing data, fetch frame names to show in a 'movie'
-                    aux[date][key]['frames'] = []
-                    # sort by time, not by name:
-                    ind_sort = np.argsort([frame[1] for frame in date_data[key]['frames']])
-                    for frame in np.array(date_data[key]['frames'])[ind_sort]:
-                        aux[date][key]['frames'].append(frame[0] + '.png')
-
-    return aux
 
 
 @app.route('/_get_fits_header')
@@ -588,23 +601,20 @@ def root():
         :return:
         """
         if len(_dates) > 0:
-            for _date in _dates:
+            for _date in sorted(_dates.keys())[::-1]:
                 # print(_date, _dates[_date])
-                yield _date, _dates[_date]
+                yield _date, _dates[_date]['data'], _dates[_date]['aux']
         else:
-            yield None, None
+            yield None, None, None
 
     # get db connection
     client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
 
-    # get all dates:
-    dates = get_dates(user_id, coll, start=start, stop=stop)
-    # get aux info:
-    aux = get_aux(dates.keys(), coll_aux)
+    # get science and aux data for all dates:
+    dates = get_dates(user_id, coll, coll_aux, start=start, stop=stop)
 
     return flask.Response(stream_template('template-archive.html',
                                           user=user_id,
-                                          aux=aux,
                                           dates=iter_dates(dates)))
 
 
