@@ -355,6 +355,8 @@ def get_dates(user_id, coll, coll_aux, start=None, stop=None):
     else:
         try:
             stop = datetime.datetime.strptime(stop, '%Y%m%d')
+            # if stop < start:
+            #     stop = datetime.datetime.utcnow()
         except Exception as _e:
             print(_e)
             stop = datetime.datetime.utcnow()
@@ -614,7 +616,7 @@ def root():
     dates = get_dates(user_id, coll, coll_aux, start=start, stop=stop)
 
     return flask.Response(stream_template('template-archive.html',
-                                          user=user_id,
+                                          user=user_id, start=start, stop=stop,
                                           dates=iter_dates(dates)))
 
 

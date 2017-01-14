@@ -17,6 +17,8 @@
     <link rel="stylesheet" href="/static/css/bootstrap-datetimepicker.min.css">
     <link rel="stylesheet" href="/static/css/bootstrap-submenu.min.css">
 
+    <link rel="stylesheet" href="/static/css/animate.css">
+
     <style>
         html {
             position: relative;
@@ -224,7 +226,7 @@
                         Show dates <span class="caret"></span>
                     </button>
                     <ul class="dropdown-menu">
-                        <li><a href="/">Past 10 days</a></li>
+                        <li><a href="/">Last 10 days (default)</a></li>
                         <li><a href="?start=20150901">Everything (careful, traffic!)</a></li>
                         <li class="dropdown-submenu">
                             <a tabindex="0" style="cursor: pointer; cursor: hand;">Select date</a>
@@ -273,10 +275,15 @@
 
         {# No science/aux data for the requested period at all #}
         {% if None in (date, programs, aux) %}
+
             <div class="container">
-                {# TODO: show closable alert instead #}
                 <div class="col-md-12">
-                    <h3>No science data to show</h3>
+                    <div class="alert alert-warning alert-dismissible fade in" role="alert" id="alert-no-data">
+                        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                        No science data to show for the requested date(s).
+                    </div>
                 </div>
             </div>
             <br>
@@ -516,7 +523,7 @@
 
 <footer class="footer">
     <div class="container">
-        <p class="text-muted">&copy; Robo-AO data archive 2016</p>
+        <p class="text-muted" id="years">&copy; Robo-AO 2016</p>
     </div>
 </footer>
 
@@ -684,6 +691,7 @@
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
 <script src="/static/js/bootstrap.min.js"></script>
 <script src="/static/js/bootstrap-magnify.js"></script>
+<script src="/static/js/bootstrap-notify.js"></script>
 <script src="/static/js/moment.min.js"></script>
 <script src="/static/js/bootstrap-datetimepicker.min.js"></script>
 <script src="/static/js/bootstrap-submenu.min.js"></script>
@@ -965,5 +973,36 @@ function pauseCarouselHide(date) {
 
 </script>
 
+{# current year for solidnost'#}
+<script>
+$(document).ready(function() {
+    var ynow = moment().format('YYYY');
+    $('#years').append('-'+ynow);
+});
+</script>
+
+{# show info #}
+<script>
+$(document).ready(function() {
+    $.notify({
+        title: '<strong>Info:</strong>',
+        {% if start != None and stop != None %}
+            message: 'Displaying data from {{ start }} to {{ stop }}.',
+        {% elif start == None and stop == None %}
+            message: 'Displaying data from the last 10 days.',
+        {% elif start == None %}
+            message: 'Displaying data from now to {{ stop }}.',
+        {% elif stop == None %}
+            message: 'Displaying data from {{ start }} to now.'
+        {% endif %}
+    },{
+        type: 'info',
+        offset: {
+            x: 50,
+            y: 70
+        }
+    });
+});
+</script>
 </body>
 </html>
