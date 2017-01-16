@@ -13,6 +13,7 @@ from pymongo import MongoClient
 import json
 import datetime
 import ConfigParser
+import argparse
 import sys
 import inspect
 from collections import OrderedDict
@@ -212,8 +213,23 @@ login_manager = flask_login.LoginManager()
 
 login_manager.init_app(app)
 
+
+''' Create command line argument parser '''
+parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
+                                 description='Data archive for Robo-AO')
+
+parser.add_argument('config_file', metavar='config_file',
+                    action='store', help='path to config file.', type=str)
+
+args = parser.parse_args()
+config_file = args.config_file
+
+
 ''' get config data '''
-config = get_config(config_file='config.ini')
+try:
+    config = get_config(config_file=config_file)
+except IOError:
+    config = get_config(config_file='config.ini')
 # print(config)
 
 ''' serve additional static data (preview images, compressed source data)
