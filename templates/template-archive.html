@@ -987,13 +987,17 @@ $(document).ready(function() {
     $.notify({
         title: '<strong>Info:</strong>',
         {% if start != None and stop != None %}
-            message: 'Displaying data from {{ start }} to {{ stop }}.',
+            {% set start_str = start[:4]+'/' + start[4:6]+'/' + start[6:] %}
+            {% set stop_str = stop[:4]+'/' + stop[4:6]+'/' + stop[6:] %}
+            message: 'Displaying data from {{ start_str }} to {{ stop_str }}.',
         {% elif start == None and stop == None %}
             message: 'Displaying data from the last 10 days.',
         {% elif start == None %}
-            message: 'Displaying data from now to {{ stop }}.',
+            {% set stop_str = stop[:4]+'/' + stop[4:6]+'/' + stop[6:] %}
+            message: 'Displaying data from now to {{ stop_str }}.',
         {% elif stop == None %}
-            message: 'Displaying data from {{ start }} to now.'
+            {% set start_str = start[:4]+'/' + start[4:6]+'/' + start[6:] %}
+            message: 'Displaying data from {{ start_str }} to now.'
         {% endif %}
     },{
         type: 'info',

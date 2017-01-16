@@ -480,6 +480,7 @@ def job_pca(_config, _path_in, _fits_name, _obs, _path_out,
     :return:
     """
     try:
+        print('running PCA pipeline for {:s}/{:s}'.format(_path_in, _fits_name))
         with fits.open(_config['pca']['path_psf_reference_library']) as _lib:
             _library = _lib[0].data
         _library_names_short = np.genfromtxt(_config['pca']['path_psf_reference_library_short_names'],
@@ -492,18 +493,17 @@ def job_pca(_config, _path_in, _fits_name, _obs, _path_out,
 
         _trimmed_frame, x_lock, y_lock = trim_frame(_path_in, _fits_name=_fits_name,
                                                     _win=_win, _method=_method,
-                                                    _x=_x, _y=_x, _drizzled=_drizzled)
-        # print(x_lock, y_lock)
+                                                    _x=_x, _y=_y, _drizzled=_drizzled)
+        print(x_lock, y_lock)
 
         # Filter the trimmed frame with IUWT filter, 2 coeffs
         filtered_frame = (vip.var.cube_filter_iuwt(
-            np.reshape(_trimmed_frame, (1, np.shape(_trimmed_frame)[0],
-                                        np.shape(_trimmed_frame)[1])),
+            np.reshape(_trimmed_frame, (1, np.shape(_trimmed_frame)[0], np.shape(_trimmed_frame)[1])),
             coeff=5, rel_coeff=2))
+        print(filtered_frame.shape)
 
         mean_y, mean_x, fwhm_y, fwhm_x, amplitude, theta = \
-            (vip.var.fit_2dgaussian(filtered_frame[0], crop=True, cropsize=50,
-                                    debug=False, full_output=True))
+            (vip.var.fit_2dgaussian(filtered_frame[0], crop=True, cropsize=50, debug=False, full_output=True))
         _fwhm = np.mean([fwhm_y, fwhm_x])
 
         # Print the resolution element size
@@ -518,6 +518,7 @@ def job_pca(_config, _path_in, _fits_name, _obs, _path_out,
                                                  subi_size=6, nproc=1, full_output=True))
 
         centered_frame = centered_cube[0]
+
         if shy > 5 or shx > 5:
             raise TypeError('Centering failed: pixel shifts too big')
 
@@ -544,14 +545,15 @@ def job_pca(_config, _path_in, _fits_name, _obs, _path_out,
                                                                 key=operator.itemgetter(0), reverse=True))))
         index_sorted = np.int_(index_sorted)
         library = library_notmystar[index_sorted[0:_nrefs], :, :]
-        # print('Library correlations = ', cross_corr_sorted[0:_nrefs])
+        print('Library correlations = ', cross_corr_sorted[0:_nrefs])
 
         # Do PCA
         reshaped_frame = np.reshape(centered_frame, (1, centered_frame.shape[0], centered_frame.shape[1]))
-        pca_frame = vip.pca.pca(reshaped_frame, np.zeros(1), library, ncomp=_klip)
+        pca_frame = vip.pca.pca(cube=reshaped_frame, angle_list=np.zeros(1),
+                                cube_ref=library, ncomp=_klip, verbose=True)
 
         pca_file_name = os.path.join(_path_out, _obs + '_pca.fits')
-        # print(pca_file_name)
+        print(pca_file_name)
 
         # dump results to disk
         if not (os.path.exists(_path_out)):
@@ -563,20 +565,22 @@ def job_pca(_config, _path_in, _fits_name, _obs, _path_out,
         hdulist.writeto(pca_file_name, clobber=True)
 
         # Make contrast curve
-        [con, cont, sep] = (vip.phot.contrcurve.contrast_curve(cube=reshaped_frame, angle_list=np.zeros(1),
-                                                               psf_template=psf_template,
-                                                               cube_ref=library, fwhm=_fwhm,
-                                                               pxscale=_plate_scale,
-                                                               starphot=center_flux, sigma=_sigma,
-                                                               ncomp=_klip, algo='pca-rdi-fullfr',
-                                                               debug=False,
-                                                               plot=False, nbranch=3, scaling=None,
-                                                               mask_center_px=_fwhm, fc_rad_sep=6))
+        datafr = (vip.phot.contrcurve.contrast_curve(cube=reshaped_frame, angle_list=np.zeros(1),
+                                                     psf_template=psf_template,
+                                                     cube_ref=library, fwhm=_fwhm,
+                                                     pxscale=_plate_scale,
+                                                     starphot=center_flux, sigma=_sigma,
+                                                     ncomp=_klip, algo=vip.pca.pca,
+                                                     debug=False, plot=False, nbranch=3, scaling=None,
+                                                     mask_center_px=_fwhm, fc_rad_sep=6))
+        # con = datafr['sensitivity (Gauss)']
+        cont = datafr['sensitivity (Student)']
+        sep = datafr['distance']
 
         # save txt for nightly median calc/plot
         with open(os.path.join(_path_out, _obs + '_contrast_curve.txt'), 'w') as f:
             f.write('# lock position: {:d} {:d}\n'.format(x_lock, y_lock))
-            for _s, dm in zip(sep, -2.5 * np.log10(cont)):
+            for _s, dm in zip(sep*_plate_scale, -2.5 * np.log10(cont)):
                 f.write('{:.3f} {:.3f}\n'.format(_s, dm))
 
     except Exception as _e:
@@ -1170,6 +1174,7 @@ def reduce_faint_object_noram(_path_in, _files, _path_calib, _path_out, _obs,
             bar = pyprind.ProgBar(numFrames, stream=1, title='Registering frames')
 
         fn = 0
+        from time import time as _time
         for jj, _file in enumerate(_files_list):
             with fits.open(os.path.join(_path_in, _file)) as _hdulist:
                 # frames_before = sum(n_frames_files[:jj])
@@ -2100,7 +2105,7 @@ def get_config(_abs_path=None, _config_file='config.ini'):
     _config['archiving_start_date'] = datetime.datetime.strptime(
                             config.get('Misc', 'archiving_start_date'), '%Y/%m/%d')
     # how many times to try to rerun pipelines:
-    _config['max_pipelining_retries'] = config.get('Misc', 'max_pipelining_retries')
+    _config['max_pipelining_retries'] = int(config.get('Misc', 'max_pipelining_retries'))
 
     # nap time -- do not interfere with the nightly operations On/Off
     _config['nap_time'] = dict()
@@ -2283,7 +2288,7 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
 
             # make sure db reflects reality: not yet in db or had been modified
             if (not _select['pipelined']['automated']['status']['done']) or \
-                    abs((_select['pipelined']['automated']['last_modified'] - time_tag).total_seconds()) > 1.0:
+                    (time_tag - _select['pipelined']['automated']['last_modified']).total_seconds() > 1.0:
 
                 # get fits header:
                 fits100p = os.path.join(path_obs, '100p.fits')
@@ -2427,7 +2432,7 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
                 # check folder modified date:
                 time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_faint).st_mtime)
                 # new/changed? (re)load data from disk + update database entry + (re)make preview
-                if abs((_select['pipelined']['faint']['last_modified'] - time_tag).total_seconds()) > 1.0:
+                if (time_tag - _select['pipelined']['faint']['last_modified']).total_seconds() > 1.0:
                     # load data from disk
                     # load shifts.txt:
                     f_shifts = [f for f in os.listdir(path_faint) if f == 'shifts.txt'][0]
@@ -2515,21 +2520,21 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
                 _raws_zipped = sorted(_select['raw_data']['data'])
                 # put a job into the queue
                 if not inqueue('job_faint_pipeline', _obs, path_faint):
+                    # update database entry
+                    _coll.update_one(
+                        {'_id': _obs},
+                        {
+                            '$set': {
+                                'pipelined.faint.last_modified': utc_now()
+                            },
+                            '$inc': {
+                                'pipelined.faint.status.retries': 1
+                            }
+                        }
+                    )
+                    _logger.info('put a faint pipeline job into the queue for {:s}'.format(_obs))
                     job_faint_pipeline(_config=_config, _raws_zipped=_raws_zipped, _date=_date,
                                        _obs=_obs, _path_out=path_faint)
-                # update database entry
-                _coll.update_one(
-                    {'_id': _obs},
-                    {
-                        '$set': {
-                            'pipelined.faint.last_modified': utc_now()
-                        },
-                        '$inc': {
-                            'pipelined.faint.status.retries': 1
-                        }
-                    }
-                )
-                _logger.info('put a faint pipeline job into the queue for {:s}'.format(_obs))
 
     except Exception as _e:
         print(_e)
@@ -2577,7 +2582,7 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
             # check folder modified date:
             time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_strehl).st_mtime)
             # new/changed? (re)load data from disk + update database entry + (re)make preview
-            if abs((_select['pipelined'][_pipe]['strehl']['last_modified'] - time_tag).total_seconds()) > 1.0:
+            if (time_tag - _select['pipelined'][_pipe]['strehl']['last_modified']).total_seconds() > 1.0:
                 # load data from disk
                 f_strehl = os.path.join(path_strehl, '{:s}_strehl.txt'.format(_obs))
                 x, y, core, halo, SR, FWHM, flag = load_strehl(f_strehl)
@@ -2676,24 +2681,24 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
 
                 # put a job into the queue
                 if not inqueue('job_strehl', _obs, path_out):
+                    # update database entry
+                    _coll.update_one(
+                        {'_id': _obs},
+                        {
+                            '$set': {
+                                'pipelined.{:s}.strehl.last_modified'.format(_pipe): utc_now()
+                            },
+                            '$inc': {
+                                'pipelined.{:s}.strehl.status.retries'.format(_pipe): 1
+                            }
+                        }
+                    )
+                    _logger.info('put a Strehl job into the queue for {:s}'.format(_obs))
                     job_strehl(_path_in=path_obs, _fits_name=_fits_name,
                                _obs=_obs, _path_out=path_out,
                                _plate_scale=plate_scale, _Strehl_factor=Strehl_factor,
                                _method=_method, _drizzled=_drizzled,
                                _core_min=_config['core_min'], _halo_max=_config['halo_max'])
-                # update database entry
-                _coll.update_one(
-                    {'_id': _obs},
-                    {
-                        '$set': {
-                            'pipelined.{:s}.strehl.last_modified'.format(_pipe): utc_now()
-                        },
-                        '$inc': {
-                            'pipelined.{:s}.strehl.status.retries'.format(_pipe): 1
-                        }
-                    }
-                )
-                _logger.info('put a Strehl job into the queue for {:s}'.format(_obs))
 
     except Exception as _e:
         traceback.print_exc()
@@ -2725,7 +2730,7 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe):
             # check folder modified date:
             time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_pca).st_mtime)
             # new/changed? (re)load data from disk + update database entry + (re)make preview
-            if abs((_select['pipelined'][_pipe]['pca']['last_modified'] - time_tag).total_seconds()) > 1.0:
+            if (time_tag - _select['pipelined'][_pipe]['pca']['last_modified']).total_seconds() > 1.0:
                 # load data from disk
                 # load contrast curve
                 f_cc = '{:s}_contrast_curve.txt'.format(_obs)
@@ -2828,22 +2833,23 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe):
 
                 # put a job into the queue
                 if not inqueue('job_pca', _obs, path_out):
+                    # update database entry
+                    _coll.update_one(
+                        {'_id': _obs},
+                        {
+                            '$set': {
+                                'pipelined.{:s}.pca.last_modified'.format(_pipe): utc_now()
+                            },
+                            '$inc': {
+                                'pipelined.{:s}.pca.status.retries'.format(_pipe): 1
+                            }
+                        }
+                    )
+                    _logger.info('put a PCA job into the queue for {:s}'.format(_obs))
+                    # actually put into the queue
                     job_pca(_config=_config, _path_in=path_obs, _fits_name=_fits_name, _obs=_obs,
                             _path_out=path_out, _plate_scale=plate_scale,
                             _method=_method, _x=None, _y=None, _drizzled=_drizzled)
-                # update database entry
-                _coll.update_one(
-                    {'_id': _obs},
-                    {
-                        '$set': {
-                            'pipelined.{:s}.pca.last_modified'.format(_pipe): utc_now()
-                        },
-                        '$inc': {
-                            'pipelined.{:s}.pca.status.retries'.format(_pipe): 1
-                        }
-                    }
-                )
-                _logger.info('put a PCA job into the queue for {:s}'.format(_obs))
 
     except Exception as _e:
         traceback.print_exc()
@@ -3116,7 +3122,7 @@ def check_raws(_config, _logger, _coll, _select, _date, _obs, _date_files):
         # print(_obs, _select['raw_data']['last_modified'], time_tag)
 
         # changed? update database entry then:
-        if abs((_select['raw_data']['last_modified'] - time_tag).total_seconds()) > 1.0:
+        if (time_tag - _select['raw_data']['last_modified']).total_seconds() > 1.0:
             _coll.update_one(
                 {'_id': _obs},
                 {
@@ -3255,7 +3261,7 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
                 time_tag = max(time_tags)
                 time_tag = time_tag.replace(tzinfo=pytz.utc)
                 # not done or new files appeared in the raw directory
-                if (not _select['seeing']['done'] or abs((last_modified - time_tag).total_seconds()) > 1.0) and \
+                if (not _select['seeing']['done'] or (time_tag - last_modified).total_seconds() > 1.0) and \
                         (_select['seeing']['retries'] <= _config['max_pipelining_retries']):
 
                         # unbzip source file(s):
@@ -3599,26 +3605,23 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
                         cc_tmp = np.interp(sep_mean, contrast_curve[:, 0], contrast_curve[:, 1])
                         if not np.isnan(cc_tmp).any():
                             cc_mean.append(cc_tmp)
-                    if len(cc_mean) > 0:
-                        # add median to plot:
-                        ax.plot(sep_mean, np.median(np.array(cc_mean).T, axis=1), '-',
-                                c=plt.cm.Oranges(0.7), linewidth=2.1)
 
                     # faint-pipelined:
-                    cc_mean = []
+                    cc_mean_faint = []
                     for contrast_curve in contrast_curves_faint:
                         ax.plot(contrast_curve[:, 0], contrast_curve[:, 1], '--', c=plt.cm.Blues(0.27), linewidth=1.1)
                         cc_tmp = np.interp(sep_mean, contrast_curve[:, 0], contrast_curve[:, 1])
                         if not np.isnan(cc_tmp).any():
-                            cc_mean.append(cc_tmp)
+                            cc_mean_faint.append(cc_tmp)
 
-                    if len(cc_mean) > 0:
-                        # add median to plot:
-                        ax.plot(sep_mean, np.median(np.array(cc_mean).T, axis=1), '--',
+                    # add medians to plot:
+                    if len(cc_mean_faint) > 0:
+                        ax.plot(sep_mean, np.median(np.array(cc_mean_faint).T, axis=1), '--',
                                 c=plt.cm.Oranges(0.5), linewidth=2.1)
-                    # # add median to plot:
-                    # ax.plot(sep_mean, np.median(np.array(cc_mean).T, axis=1), '-',
-                    #         c=plt.cm.Oranges(0.7), linewidth=2.5)
+                    # done this way for proper overlaying
+                    if len(cc_mean) > 0:
+                        ax.plot(sep_mean, np.median(np.array(cc_mean).T, axis=1), '-',
+                                c=plt.cm.Oranges(0.7), linewidth=2.1)
 
                     # beautify and save:
                     ax.set_xlim([0.2, 1.45])
