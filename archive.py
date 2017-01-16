@@ -2729,33 +2729,49 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe):
         if os.path.exists(path_pca):
             # check folder modified date:
             time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_pca).st_mtime)
+
             # new/changed? (re)load data from disk + update database entry + (re)make preview
             if (time_tag - _select['pipelined'][_pipe]['pca']['last_modified']).total_seconds() > 1.0:
                 # load data from disk
                 # load contrast curve
                 f_cc = '{:s}_contrast_curve.txt'.format(_obs)
-                x, y, cc = load_cc(os.path.join(path_pca, f_cc))
-                # update database entry
-                _coll.update_one(
-                    {'_id': _obs},
-                    {
-                        '$set': {
-                            'pipelined.{:s}.pca.status.done'.format(_pipe): True,
-                            'pipelined.{:s}.pca.lock_position'.format(_pipe): [x, y],
-                            'pipelined.{:s}.pca.contrast_curve'.format(_pipe): cc,
-                            'pipelined.{:s}.pca.location'.format(_pipe): ['{:s}:{:s}'.format(
-                                _config['analysis_machine_external_host'],
-                                _config['analysis_machine_external_port']),
-                                _config['path_archive']],
-                            'pipelined.{:s}.pca.preview.done'.format(_pipe): False,
-                            'pipelined.{:s}.pca.preview.last_modified'.format(_pipe): utc_now(),
-                            'pipelined.{:s}.pca.last_modified'.format(_pipe): time_tag
+
+                # no cc-file? try making it again on the next main loop iteration
+                if not os.path.exists(os.path.join(path_pca, f_cc)):
+                    _select['pipelined'][_pipe]['pca']['status']['done'] = False
+                    # update database entry
+                    _coll.update_one(
+                        {'_id': _obs},
+                        {
+                            '$set': {
+                                'pipelined.{:s}.pca.status.done'.format(_pipe): False,
+                            }
                         }
-                    }
-                )
-                # reload entry from db:
-                _select = _coll.find_one({'_id': _obs})
-                _logger.info('Updated pca entry for {:s}'.format(_obs))
+                    )
+                else:
+                    # else load it
+                    x, y, cc = load_cc(os.path.join(path_pca, f_cc))
+                    # update database entry
+                    _coll.update_one(
+                        {'_id': _obs},
+                        {
+                            '$set': {
+                                'pipelined.{:s}.pca.status.done'.format(_pipe): True,
+                                'pipelined.{:s}.pca.lock_position'.format(_pipe): [x, y],
+                                'pipelined.{:s}.pca.contrast_curve'.format(_pipe): cc,
+                                'pipelined.{:s}.pca.location'.format(_pipe): ['{:s}:{:s}'.format(
+                                    _config['analysis_machine_external_host'],
+                                    _config['analysis_machine_external_port']),
+                                    _config['path_archive']],
+                                'pipelined.{:s}.pca.preview.done'.format(_pipe): False,
+                                'pipelined.{:s}.pca.preview.last_modified'.format(_pipe): utc_now(),
+                                'pipelined.{:s}.pca.last_modified'.format(_pipe): time_tag
+                            }
+                        }
+                    )
+                    # reload entry from db:
+                    _select = _coll.find_one({'_id': _obs})
+                    _logger.info('Updated pca entry for {:s}'.format(_obs))
             # (re)make preview images
             check_pca_preview(_config, _logger, _coll, _select, _date, _obs, _pipe=_pipe)
 
