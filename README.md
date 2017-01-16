@@ -252,7 +252,7 @@ pip install flask-login
 
 Run the data access web-server using the pm2 process manager:
 ```bash
-pm2 start server_data_archive.py --interpreter=/path/to/python
+pm2 start server_data_archive.py --interpreter=/path/to/python -- path/to/config.ini
 ```
 
 #### A short tutorial on how to use the web-site (once it's ready)
