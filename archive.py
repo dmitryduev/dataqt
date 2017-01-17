@@ -1919,8 +1919,7 @@ def empty_db_record():
                         'preview': {
                             'force_redo': False,
                             'done': False,
-                            'retries': 0,
-                            'last_modified': time_now_utc
+                            'retries': 0
                         },
                         'location': [],
                         'lock_position': None,
@@ -1968,8 +1967,7 @@ def empty_db_record():
                         'preview': {
                             'force_redo': False,
                             'done': False,
-                            'retries': 0,
-                            'last_modified': time_now_utc
+                            'retries': 0
                         },
                         'location': [],
                         'lock_position': None,
