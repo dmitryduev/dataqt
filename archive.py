@@ -265,6 +265,7 @@ class Star(object):
         bar_len = data.shape[0] * 0.1
         bar_len_str = '{:.1f}'.format(bar_len * self._fow_x / self._pix_x)
 
+        plt.close('all')
         fig = plt.figure(figsize=(9, 3))
         # data
         ax1 = fig.add_subplot(1, 3, 1)
@@ -3389,6 +3390,7 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
                                              'Si': plt.cm.Oranges(0.7),
                                              'Sz': plt.cm.Oranges(0.5)}
 
+                            plt.close('all')
                             fig = plt.figure('Seeing data for {:s}'.format(_date), figsize=(8, 3), dpi=200)
                             ax = fig.add_subplot(111)
 
@@ -3531,6 +3533,7 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
                 if max(map(len, (SR_good_lucky, SR_notgood_lucky, SR_good_faint, SR_notgood_faint))) > 0:
                     _logger.info('Generating summary Strehl plot for {:s}'.format(_date))
 
+                    plt.close('all')
                     fig = plt.figure('Strehls for {:s}'.format(_date), figsize=(7, 3.18), dpi=200)
                     ax = fig.add_subplot(111)
 
@@ -3678,6 +3681,7 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
 
                 if len(contrast_curves) > 0 or len(contrast_curves_faint) > 0:
                     _logger.info('Generating contrast curve summary for {:s}'.format(_date))
+
                     plt.close('all')
                     fig = plt.figure('Contrast curve', figsize=(8, 3.5), dpi=200)
                     ax = fig.add_subplot(111)
