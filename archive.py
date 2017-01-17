@@ -2783,7 +2783,7 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe):
                         {
                             '$set': {
                                 'pipelined.{:s}.pca.status.done'.format(_pipe): False,
-                                'pipelined.{:s}.pca.last_modified'.format(_pipe): time_tag
+                                'pipelined.{:s}.pca.last_modified'.format(_pipe): utc_now()
                             }
                         }
                     )
@@ -3678,6 +3678,7 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
 
                 if len(contrast_curves) > 0 or len(contrast_curves_faint) > 0:
                     _logger.info('Generating contrast curve summary for {:s}'.format(_date))
+                    plt.close('all')
                     fig = plt.figure('Contrast curve', figsize=(8, 3.5), dpi=200)
                     ax = fig.add_subplot(111)
 
