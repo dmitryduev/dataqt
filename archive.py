@@ -116,6 +116,29 @@ def memoize(f):
     return memf
 
 
+def mdate_walk(_path):
+    """
+        Inspect directory tree contents to get max mdate of all files within it
+    :param _path:
+    :return:
+    """
+    # modified time for the parent folder:
+    mtime = datetime.datetime.utcfromtimestamp(os.stat(_path).st_mtime)
+    # print(mtime)
+    for root, _, files in os.walk(_path, topdown=False):
+        # only check the files:
+        for _f in files:
+            path_f = os.path.join(root, _f)
+            mtime_f = datetime.datetime.utcfromtimestamp(os.stat(path_f).st_mtime)
+            if mtime_f > mtime:
+                mtime = mtime_f
+            # print(path_f, mtime_f)
+        # don't actually need to check dirs
+        # for _d in dirs:
+        #     print(os.path.join(root, _d))
+    return mtime
+
+
 class Star(object):
     """ Define a star by its coordinates and modelled FWHM
         Given the coordinates of a star within a 2D array, fit a model to the star and determine its
@@ -2296,7 +2319,8 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
             tag = path_obs_list[0][1]
 
             # check folder modified date:
-            time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_obs).st_mtime)
+            # time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_obs).st_mtime)
+            time_tag = mdate_walk(path_obs)
 
             # make sure db reflects reality: not yet in db or had been modified
             if (not _select['pipelined']['automated']['status']['done']) or \
@@ -2443,6 +2467,7 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
             if os.path.exists(path_faint):
                 # check folder modified date:
                 time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_faint).st_mtime)
+                # time_tag = mdate_walk(path_faint)
                 # new/changed? (re)load data from disk + update database entry + (re)make preview
                 if (time_tag - _select['pipelined']['faint']['last_modified']).total_seconds() > 1.0:
                     # load data from disk
@@ -2592,7 +2617,8 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
         # path exists? (if yes - it must have been created by job_strehl)
         if os.path.exists(path_strehl):
             # check folder modified date:
-            time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_strehl).st_mtime)
+            # time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_strehl).st_mtime)
+            time_tag = mdate_walk(path_strehl)
             # new/changed? (re)load data from disk + update database entry + (re)make preview
             if (time_tag - _select['pipelined'][_pipe]['strehl']['last_modified']).total_seconds() > 1.0:
                 # load data from disk
@@ -2740,7 +2766,9 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe):
         # path exists? (if yes - it must have been created by job_pca)
         if os.path.exists(path_pca):
             # check folder modified date:
-            time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_pca).st_mtime)
+            # time_tag = datetime.datetime.utcfromtimestamp(os.stat(path_pca).st_mtime)
+            time_tag = mdate_walk(path_pca)
+            # print(time_tag, _select['pipelined'][_pipe]['pca']['last_modified'])
 
             # new/changed? (re)load data from disk + update database entry + (re)make preview
             if (time_tag - _select['pipelined'][_pipe]['pca']['last_modified']).total_seconds() > 1.0:
@@ -2757,6 +2785,7 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe):
                         {
                             '$set': {
                                 'pipelined.{:s}.pca.status.done'.format(_pipe): False,
+                                'pipelined.{:s}.pca.last_modified'.format(_pipe): time_tag
                             }
                         }
                     )
@@ -2776,7 +2805,6 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe):
                                     _config['analysis_machine_external_port']),
                                     _config['path_archive']],
                                 'pipelined.{:s}.pca.preview.done'.format(_pipe): False,
-                                'pipelined.{:s}.pca.preview.last_modified'.format(_pipe): utc_now(),
                                 'pipelined.{:s}.pca.last_modified'.format(_pipe): time_tag
                             }
                         }
@@ -2800,7 +2828,6 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe):
                         'pipelined.{:s}.pca.contrast_curve'.format(_pipe): None,
                         'pipelined.{:s}.pca.location'.format(_pipe): None,
                         'pipelined.{:s}.pca.preview.done'.format(_pipe): False,
-                        'pipelined.{:s}.pca.preview.last_modified'.format(_pipe): utc_now(),
                         'pipelined.{:s}.pca.last_modified'.format(_pipe): utc_now()
                     }
                 }
@@ -3087,7 +3114,7 @@ def check_pca_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='auto
                     {
                         '$set': {
                             'pipelined.{:s}.pca.preview.done'.format(_pipe): _status,
-                            'pipelined.{:s}.pca.preview.last_modified'.format(_pipe): utc_now()
+                            'pipelined.{:s}.pca.last_modified'.format(_pipe): mdate_walk(path_pca)
                         },
                         '$inc': {
                             'pipelined.{:s}.pca.preview.retries'.format(_pipe): 1
@@ -3112,7 +3139,7 @@ def check_pca_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='auto
                 {
                     '$set': {
                         'pipelined.{:s}.pca.preview.done'.format(_pipe): False,
-                        'pipelined.{:s}.pca.preview.last_modified'.format(_pipe): utc_now()
+                        'pipelined.{:s}.pca.last_modified'.format(_pipe): utc_now()
                     }
                 }
             )
@@ -3250,15 +3277,17 @@ def check_distributed(_config, _logger, _coll, _select, _date, _obs, _n_days=1.0
             _path_obs = os.path.join(_config['path_archive'], _date, _obs)
             _path_zipped = os.path.join(_path_obs, '{:s}.tar.bz2'.format(_obs))
 
-            last_modified_dir = datetime.datetime.utcfromtimestamp(os.stat(os.path.join(_path_obs)).st_mtime)
+            # last_modified_dir = datetime.datetime.utcfromtimestamp(os.stat(_path_obs).st_mtime)
+            last_modified_dir = mdate_walk(_path_obs)
             last_modified_dir = last_modified_dir.replace(tzinfo=pytz.utc)
 
-            last_modified_zipped = datetime.datetime.utcfromtimestamp(os.stat(os.path.join(_path_zipped)).st_mtime)
+            last_modified_zipped = datetime.datetime.utcfromtimestamp(os.stat(_path_zipped).st_mtime)
+            # last_modified_zipped = mdate_walk(_path_zipped)
             last_modified_zipped = last_modified_zipped.replace(tzinfo=pytz.utc)
 
-            print(last_modified_dir, last_modified_zipped, last_modified_dir - last_modified_zipped)
+            # print(last_modified_dir, last_modified_zipped, last_modified_dir - last_modified_zipped)
 
-            if (last_modified_dir - last_modified_zipped).total_seconds() > 60:
+            if (last_modified_dir - last_modified_zipped).total_seconds() > 600:
                 # folder updated after archive was created?
                 _logger.error('{:s} marked distributed, detected more recent changes. will redo.'.format(_obs))
                 # remove zipped file:
@@ -4039,7 +4068,7 @@ if __name__ == '__main__':
                     # compress everything with bzip2, store and TODO: transfer over to Caltech
                     status_ok = check_distributed(_config=config, _logger=logger, _coll=coll,
                                                   _select=coll.find_one({'_id': obs}),
-                                                  _date=date, _obs=obs, _n_days=2.1)
+                                                  _date=date, _obs=obs, _n_days=1.1)
                     if not status_ok:
                         logger.error('Checking failed if distributed: {:s}'.format(obs))
 
