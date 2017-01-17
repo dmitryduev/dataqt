@@ -287,7 +287,7 @@
                 </div>
             </div>
             <br>
-        {% else %}
+        {% elif programs | length > 0 or aux | length > 0 %}
             <div class="container">
                 <div class="col-md-12">
                     <h3 style="color: #286090">{{ date[:4]+'/' + date[4:6]+'/' + date[6:] }}</h3>

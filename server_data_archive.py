@@ -432,11 +432,17 @@ def get_dates(user_id, coll, coll_aux, start=None, stop=None):
                             aux[key]['frames'].append(frame[0] + '.png')
 
             if len(aux) > 0:
-                # init entry if no science
-                if date not in dates:
-                    dates[date] = {'data': {}, 'aux': {}}
-                # add to dates:
-                dates[date]['aux'] = aux
+                # show aux data for the admin all the time
+                if user_id == 'admin':
+                    # init entry if no science
+                    if date not in dates:
+                        dates[date] = {'data': {}, 'aux': {}}
+                    # add to dates:
+                    dates[date]['aux'] = aux
+                # for regular users, only show aux data for dates with obs of user's programs
+                else:
+                    if date in dates:
+                        dates[date]['aux'] = aux
     except Exception as _e:
         print(_e)
 
