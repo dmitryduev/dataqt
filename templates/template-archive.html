@@ -110,7 +110,7 @@
             display:inline-block;
         }
         .overlay {
-            transition: opacity 0.3s ease-out;
+            transition: opacity 0.3s;
             opacity: 0;
             position:absolute;
             top:0;
@@ -120,23 +120,45 @@
             display:inline-block;
             padding:12px;
             font-size:10px;
-            text-align:left;
-        }
-
-        .img-wrapper:hover .overlay {
-            position:absolute;
-            top:0;
-            left:0;
-            opacity: 0.7;
-            width: 100%;
-            height: 100%;
-            display:inline-block;
             background:#ffffff;
             text-align:left;
             color:#111111;
+            {# prevent flicker on transition #}
+            -webkit-backface-visibility: hidden;
+        }
+
+        .overlay-show {
+            transition: opacity 0.3s ease-out;
+            opacity: 0.7;
+            position:absolute;
+            top:0;
+            left:0;
+            width: 100%;
+            height: 100%;
+            display:inline-block;
             padding:12px;
             font-size:10px;
+            background:#ffffff;
+            text-align:left;
+            color:#111111;
+            {# prevent flicker on transition #}
+            -webkit-backface-visibility: hidden;
         }
+
+{#        .img-wrapper:hover .overlay {#}
+{#            position:absolute;#}
+{#            top:0;#}
+{#            left:0;#}
+{#            opacity: 0.7;#}
+{#            width: 100%;#}
+{#            height: 100%;#}
+{#            display:inline-block;#}
+{#            background:#ffffff;#}
+{#            text-align:left;#}
+{#            color:#111111;#}
+{#            padding:12px;#}
+{#            font-size:10px;#}
+{#        }#}
         .back-to-top {
             cursor: pointer;
             position: fixed;
@@ -326,6 +348,11 @@
                                 </div>
                             {% else %}
                                 <div role="tabpanel" class="tab-pane active" id="{{ date }}-preview">
+                                    {# toggle summary info #}
+                                    <button type="button" class="btn btn-default btn-xs"
+                                            style="margin-top:10px;" onClick="toggle_summary({{ date }})">
+                                        Toggle summary
+                                    </button>
                                     {% for program in programs|sort %}
                                         <h4>Program {{ program }}</h4>
                                         <div id="program_{{program}}_images">
@@ -742,9 +769,11 @@
     $SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
 
     // switch tabs
-    $('.data-tabs li a').click(function (e) {
-        e.preventDefault();
-        $(this).tab('show')
+    $(document).ready(function() {
+        $('.data-tabs li a').click(function (e) {
+            e.preventDefault();
+            $(this).tab('show')
+        });
     });
 
     // switch tabs
@@ -754,6 +783,23 @@
             $('#' + arr[i].id + ' li:eq(' + tabn + ') a').tab('show');
         }
     }
+
+    // toggle summary info
+    function toggle_summary(date) {
+        $('div[data-date='+date+']').each(function() {
+            $(this).toggleClass('overlay overlay-show');
+        });
+        //$('[data-date]').toggleClass('overlay overlay-show');
+    }
+
+    $(document).ready(function() {
+        $(".img-wrapper").hover(
+            function () {
+                $(this).find('div[data-date]').toggleClass('overlay overlay-show');
+                //$(this).find('div[data-date]').toggle()
+            }
+        )
+    });
 </script>
 <script>
 $(document).ready(function(){
