@@ -2011,6 +2011,18 @@ def set_up_logging(_path='logs', _name='archive', _level=logging.DEBUG, _mode='w
     return _logger, utc_now.strftime('%Y%m%d')
 
 
+def shut_down_logger(_logger):
+    """
+        prevent writing to multiple log-files after 'manual rollover'
+    :param _logger:
+    :return:
+    """
+    handlers = _logger.handlers[:]
+    for handler in handlers:
+        handler.close()
+        _logger.removeHandler(handler)
+
+
 def get_config(_abs_path=None, _config_file='config.ini'):
     """ Get config data
 
@@ -3232,6 +3244,37 @@ def check_distributed(_config, _logger, _coll, _select, _date, _obs, _n_days=1.0
                             }
                         )
                         _logger.info('{:s} ready for distribution'.format(_obs))
+        else:
+            # TODO: test this
+            # check if was updated after distribution
+            _path_obs = os.path.join(_config['path_archive'], _date, _obs)
+            _path_zipped = os.path.join(_path_obs, '{:s}.tar.bz2'.format(_obs))
+
+            last_modified_dir = datetime.datetime.utcfromtimestamp(os.stat(os.path.join(_path_obs)).st_mtime)
+            last_modified_dir = last_modified_dir.replace(tzinfo=pytz.utc)
+
+            last_modified_zipped = datetime.datetime.utcfromtimestamp(os.stat(os.path.join(_path_zipped)).st_mtime)
+            last_modified_zipped = last_modified_zipped.replace(tzinfo=pytz.utc)
+
+            print(last_modified_dir, last_modified_zipped, last_modified_dir - last_modified_zipped)
+
+            if (last_modified_dir - last_modified_zipped).total_seconds() > 60:
+                # folder updated after archive was created?
+                _logger.error('{:s} marked distributed, detected more recent changes. will redo.'.format(_obs))
+                # remove zipped file:
+                _p = subprocess.Popen(['rm', '-f', _path_zipped])
+                _p.wait()
+                # update db entry:
+                _coll.update_one(
+                    {'_id': _obs},
+                    {
+                        '$set': {
+                            'distributed.status': False,
+                            'distributed.location': [],
+                            'distributed.last_modified': utc_now()
+                        }
+                    }
+                )
 
     except Exception as _e:
         print(_e)
@@ -3854,12 +3897,14 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    ''' set up logging '''
+    ''' set up logging at init '''
     logger, logger_utc_date = set_up_logging(_path='logs', _name='archive', _level=logging.DEBUG, _mode='a')
 
     while True:
         # check if a new log file needs to be started:
         if datetime.datetime.utcnow().strftime('%Y%m%d') != logger_utc_date:
+            # reset
+            shut_down_logger(logger)
             logger, logger_utc_date = set_up_logging(_path='logs', _name='archive', _level=logging.DEBUG, _mode='a')
 
         # if you start me up... if you start me up I'll never stop (hopefully not)
