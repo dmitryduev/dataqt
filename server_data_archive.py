@@ -642,6 +642,28 @@ def root():
                                           dates=iter_dates(dates)))
 
 
+# serve root
+@app.route('/search', methods=['GET'])
+@flask_login.login_required
+def search():
+    user_id = flask_login.current_user.id
+
+    # get db connection
+    client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
+
+    # program numbers available for searching:
+    # if user_id != 'admin' and _program_pi[_program] != user_id:
+    if user_id == 'admin':
+        program_ids = program_pi.keys() if len(program_pi.keys()) > 0 else []
+    else:
+        program_ids = [program_id for program_id in program_pi.keys() if program_pi[program_id] == user_id]
+
+    # execute query
+
+    return flask.Response(stream_template('template-search.html',
+                                          user=user_id, program_ids=program_ids))
+
+
 # manage users
 @app.route('/manage_users')
 @flask_login.login_required

@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
+    <meta name="description" content="">
+    <meta name="author" content="Dmitry A. Duev">
+    <link rel="icon" type="image/png" href="/static/robot-favicon.png">
+
+    <title>Robo-AO data archive: search</title>
+
+    <!-- Bootstrap core CSS -->
+    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/static/css/bootstrap-magnify.min.css">
+    <link rel="stylesheet" href="/static/css/bootstrap-datetimepicker.min.css">
+
+    <style>
+        html {
+            position: relative;
+            min-height: 100%;
+        }
+        body {
+            padding-top: 70px;
+            /* Margin bottom by footer height */
+            margin-bottom: 60px;
+        }
+        .footer {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            /* Set the fixed height of the footer here */
+            height: 60px;
+            background-color: #f5f5f5;
+        }
+        .footer > .container {
+            padding-top: 20px;
+            padding-right: 15px;
+            padding-left: 15px;
+            text-align: center;
+        }
+        .main-container {
+            padding: 40px 15px;
+            text-align: center;
+        }
+        .img-wrapper {
+            position: relative;
+            display:inline-block;
+        }
+        .overlay {
+            transition: opacity 0.3s;
+            opacity: 0;
+            position:absolute;
+            top:0;
+            left:0;
+            width: 100%;
+            height: 100%;
+            display:inline-block;
+            padding:12px;
+            font-size:10px;
+            background:#ffffff;
+            text-align:left;
+            color:#111111;
+        {# prevent flicker on transition #}
+            -webkit-backface-visibility: hidden;
+        }
+
+        .overlay-show {
+            transition: opacity 0.3s ease-out;
+            opacity: 0.7;
+            position:absolute;
+            top:0;
+            left:0;
+            width: 100%;
+            height: 100%;
+            display:inline-block;
+            padding:12px;
+            font-size:10px;
+            background:#ffffff;
+            text-align:left;
+            color:#111111;
+        {# prevent flicker on transition #}
+            -webkit-backface-visibility: hidden;
+        }
+
+        .back-to-top {
+            cursor: pointer;
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display:none;
+        }
+    </style>
+
+</head>
+<body>
+
+<!-- Fixed navbar -->
+<nav class="navbar navbar-default navbar-fixed-top">
+    <div class="container">
+        <div class="navbar-header">
+            <button type="button" class="navbar-toggle collapsed"
+                    data-toggle="collapse" data-target="#navbar"
+                    aria-expanded="false" aria-controls="navbar">
+                <span class="sr-only">Toggle navigation</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+            </button>
+            <a class="navbar-brand" href="/">Robo-AO data archive</a>
+        </div>
+        <div id="navbar" class="navbar-collapse collapse">
+            <ul class="nav navbar-nav">
+                <li class="active"><a href="/search">Search</a></li>
+            </ul>
+            <ul class="nav navbar-nav navbar-right">
+                <li class="dropdown">
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown"
+                       role="button" aria-haspopup="true" aria-expanded="false">Logged in as
+                        <strong><span class="text-info">{{ user }}</span></strong> <span class="caret"></span></a>
+                    <ul class="dropdown-menu">
+                        {# administration tasks #}
+                        {% if user == 'admin' %}
+                            <li><a href="manage_users">Manage users</a></li>
+                            {# Manage reobserving requests #}
+                            {#<li><a href="manage_requests">Manage requests</a></li> #}
+                            <li><a href="#">Manage requests</a></li>
+                            {# View system logs #}
+                            {#<li><a href="view_logs">View logs</a></li>#}
+                            <li><a href="#">View logs</a></li>
+                        {% endif %}
+                        <li><a href="logout">Log out</a></li>
+                    </ul>
+                </li>
+
+            </ul>
+        </div><!--/.nav-collapse -->
+    </div>
+</nav>
+
+<div class="container">
+    <div class="row">
+        <div class="col-md-12">
+            <h2>
+                Search the archive
+                <button type="button" class="btn btn-info" data-toggle="collapse" data-target="#filter-panel">
+                    <span class="glyphicon glyphicon-cog"></span> Advanced Search
+                </button>
+            </h2>
+
+            <div class="panel panel-default">
+                <div class="panel-body">
+                    <form class="form-horizontal">
+                        <div class="form-group">
+                            <label for="source_name" class="col-sm-2 control-label">Source name</label>
+                            <div class="col-sm-10">
+                                <input type="text" class="form-control" id="source_name"
+                                       placeholder="source_name contains name; default: find all if empty">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="program_id" class="col-sm-2 control-label">Program ID</label>
+                            <div class="col-sm-10">
+                                <select class="form-control" id="program_id">
+                                    <option>all</option>
+                                    {% for program_id in program_ids|sort %}
+                                        <option>{{ program_id }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="date_from" class="col-sm-2 control-label">From</label>
+                            <div class="col-sm-4">
+                                <div class='input-group date' id='date_from'>
+                                    <input type='text' class="form-control" id="date_from"/>
+                                    <span class="input-group-addon">
+                                        <span class="glyphicon glyphicon-calendar"></span>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <label for="date_to" class="col-sm-2 control-label">To</label>
+                            <div class="col-sm-4">
+                                <div class='input-group date' id='date_to'>
+                                    <input type='text' class="form-control" id="date_to"/>
+                                    <span class="input-group-addon">
+                                        <span class="glyphicon glyphicon-calendar"></span>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {# advanced search options #}
+                        <div id="filter-panel" class="collapse filter-panel">
+                            <div class="form-group">
+                                <label for="inputEmail3" class="col-sm-2 control-label">Email</label>
+                                <div class="col-sm-10">
+                                    <input type="text" class="form-control" id="__" placeholder="So Advanced!">
+                                </div>
+                            </div>
+                        </div>
+
+                        {# output formatting #}
+                        <div class="form-group">
+                            <label for="output_formatting" class="col-sm-2 control-label">Output formatting</label>
+                            <div class="col-sm-10" id="output_formatting">
+                                <label class="checkbox-inline">
+                                    <input type="checkbox" id="output_thumbnail" value="output_thumbnail"> thumbnail gallery
+                                </label>
+                                <label class="checkbox-inline">
+                                    <input type="checkbox" id="output_table" value="output_thumbnail" checked> table
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <div class="col-sm-offset-2 col-sm-10">
+                                <button type="submit" class="btn btn-success">Search</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<br>
+
+<footer class="footer">
+    <div class="container">
+        <p class="text-muted" id="years">&copy; Robo-AO 2016</p>
+    </div>
+</footer>
+
+
+<!-- Modal template to display aux images -->
+<div class="modal fade" id="aux_image_modal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal">
+                    <span aria-hidden="true">&times;</span><span class="sr-only">Close</span>
+                </button>
+                <h4 class="modal-title"></h4>
+            </div>
+            <div class="modal-body">
+                <img src="" id="aux_image_preview" style="width: 100%;" >
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- Modal template to display preview images -->
+<div class="modal fade" id="sourceModal" tabindex="-1" role="dialog" aria-labelledby="ModalLabel">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal"
+                        aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title" id="ModalLabel">Object name</h4>
+            </div>
+            <div class="modal-body">
+                <div id="sourceTabs">
+                    <!-- Nav tabs -->
+                    <ul class="nav nav-tabs" role="tablist">
+                        <li role="presentation" class="active">
+                            <a href="#luckyImagesTab" aria-controls="luckyImagesTab"
+                               role="tab" data-toggle="tab">Lucky pipeline</a>
+                        </li>
+                        <li role="presentation">
+                            <a href="#faintImagesTab" aria-controls="faintImagesTab"
+                               role="tab" data-toggle="tab">Faint pipeline</a>
+                        </li>
+                        <li role="presentation">
+                            <a href="#headerTab" aria-controls="headerTab"
+                               role="tab" data-toggle="tab">Header</a>
+                        </li>
+                        <li role="presentation">
+                            <a href="#externalImagesTab" aria-controls="externalImagesTab"
+                               role="tab" data-toggle="tab">External images of the field</a>
+                        </li>
+                    </ul>
+
+                    <!-- Tab panes -->
+                    <div class="tab-content">
+                        <!--Lucky data-->
+                        <div role="tabpanel" class="tab-pane active" id="luckyImagesTab">
+                            <div class="row" id="luckyImagesTabContent" style="display:none;">
+                                <div class="col-md-6">
+                                    <h5>Full-size</h5>
+                                    <img id="lucky_sou_full" src="" style="width: 100%;" data-toggle="magnify">
+                                    <br><br>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="col-xs-6">
+                                        <h5 id="lucky_sou_cropped_label">Cropped</h5>
+                                        <img id="lucky_sou_cropped" src="" style="width:100%;" data-toggle="magnify">
+                                    </div>
+                                    <div class="col-xs-6">
+                                        <h5 id="lucky_sou_pca_label" style="display:none;">PSF-subtracted</h5>
+                                        <img id="lucky_sou_pca" src="" style="display:none; width:100%;"
+                                             data-toggle="magnify">
+                                    </div>
+                                    <img id="lucky_sou_cc" src="" style="display:none; width:100%;">
+                                </div>
+                            </div>
+                            <div class="row" id="luckyImagesTabEmpty" style="display: none">
+                                <div class="col-md-12">
+                                    <h4>No data to show</h4>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!--Faint data-->
+                        <div role="tabpanel" class="tab-pane" id="faintImagesTab">
+                            <div class="row" id="faintImagesTabContent" style="display:none;">
+                                <div class="col-md-6">
+                                    <h5>Full-size</h5>
+                                    <img id="faint_sou_full" src="" style="width: 100%;" data-toggle="magnify">
+                                    <br><br>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="col-xs-6">
+                                        <h5 id="faint_sou_cropped_label">Cropped</h5>
+                                        <img id="faint_sou_cropped" src="" style="width:100%;" data-toggle="magnify">
+                                    </div>
+                                    <div class="col-xs-6">
+                                        <h5 id="faint_sou_pca_label" style="display:none;">PSF-subtracted</h5>
+                                        <img id="faint_sou_pca" src="" style="display:none; width:100%;"
+                                             data-toggle="magnify">
+                                    </div>
+                                    <img id="faint_sou_cc" src="" style="display:none; width:100%;">
+                                </div>
+                            </div>
+                            <div class="row" id="faintImagesTabEmpty" style="display: none">
+                                <div class="col-md-12">
+                                    <h4>No data to show</h4>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!--FITS header-->
+                        <div role="tabpanel" class="tab-pane" id="headerTab">
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <h5>FITS header</h5>
+                                    <table class="table table-striped table-hover table-condensed"
+                                           id="headerTable">
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!--FITS header-->
+                        <div role="tabpanel" class="tab-pane" id="externalImagesTab">
+                            <div class="row">
+                                <div class="col-md-6" id="dss2_r" style="display: none">
+                                    <h5>DSS2 (r filter) [1'x1']:</h5>
+                                    <img id="dss2_r_image" src="" style="width:100%;" data-toggle="magnify">
+                                </div>
+                                <div class="col-md-6" id="2mass_h" style="display: none">
+                                    <h5>2MASS (H filter) [1'x1']:</h5>
+                                    <img id="2mass_h_image" src="" style="width:100%;" data-toggle="magnify">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+
+
+            </div>
+            <div class="modal-footer">
+                <a href="#" id="previewModalDonloadLink" style="float: left">Download all source data</a>
+                <button type="button" class="btn btn-success" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Scroll to top -->
+<a id="back-to-top" href="#" class="btn btn-primary btn-lg back-to-top"
+   role="button" title="Click to return on the top page"
+   data-toggle="tooltip" data-placement="left">
+    <span class="glyphicon glyphicon-chevron-up"></span>
+</a>
+
+<!-- Bootstrap core JavaScript
+================================================== -->
+<!-- Placed at the end of the document so the pages load faster -->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+<script src="/static/js/bootstrap.min.js"></script>
+<script src="/static/js/bootstrap-magnify.js"></script>
+<script src="/static/js/bootstrap-notify.js"></script>
+<script src="/static/js/moment.min.js"></script>
+<script src="/static/js/bootstrap-datetimepicker.min.js"></script>
+
+{# current year for solidnost'#}
+<script>
+    $(document).ready(function() {
+        var ynow = moment().format('YYYY');
+        $('#years').append('-'+ynow);
+    });
+</script>
+
+{# output formatting - at least one checkbox must be checked #}
+<script>
+    $(':checkbox').change(function() {
+        if ($('#output_table').prop('checked')!= true && $('#output_thumbnail').prop('checked')!= true) {
+            $('#output_table').prop('checked', true);
+        }
+    });
+</script>
+
+<script type="text/javascript">
+    $(function () {
+        $('#date_from').datetimepicker({
+            format : "YYYY/MM/DD",
+            defaultDate: "2015/10/01"
+        });
+        $('#date_to').datetimepicker({
+            useCurrent: false, //Important! See issue #1075
+            format : "YYYY/MM/DD",
+            defaultDate: new Date()
+        });
+
+        // don't look back in anger (for too far. also forward):
+        $('#date_from').data("DateTimePicker").minDate("2015/10/01");
+        $('#date_to').data("DateTimePicker").minDate("2015/10/01");
+        $('#date_from').data("DateTimePicker").maxDate("2019/01/01");
+        $('#date_to').data("DateTimePicker").maxDate("2019/01/01");
+
+        // keep track of changes:
+        $("#date_from").on("dp.change", function (e) {
+            $('#date_to').data("DateTimePicker").minDate(e.date);
+        });
+        $("#date_to").on("dp.change", function (e) {
+            $('#date_from').data("DateTimePicker").maxDate(e.date);
+        });
+    });
+</script>
+
+</body>
+</html>

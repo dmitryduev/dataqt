@@ -188,9 +188,7 @@
         </div>
         <div id="navbar" class="navbar-collapse collapse">
             <ul class="nav navbar-nav">
-                <!--<li class="active"><a href="#">Calendar</a></li>-->
-{#                <li><a href="#">Calendar</a></li>#}
-                <li><a href="#">Search</a></li>
+                <li><a href="/search">Search</a></li>
             </ul>
             <ul class="nav navbar-nav navbar-right">
                 <li class="dropdown">
@@ -228,68 +226,70 @@
 {# content is streamed date by date from the server #}
 {% if dates %}
     <div class="container">
-        <div class="col-md-12">
-            <h2>
-                Nightly data
-                <div class="btn-group">
-                    <button type="button" class="btn btn-info dropdown-toggle"
-                            data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                        Toggle view <span class="caret"></span>
-                    </button>
-                    <ul class="dropdown-menu">
-                        <li><a href="#" onclick="showAll(0)">Data preview</a></li>
-                        <li><a href="#" onclick="showAll(1)">Auxiliary data</a></li>
-                        <li><a href="#" onclick="showAll(2)">Download</a></li>
-                    </ul>
-                </div>
-                <div class="btn-group">
-                    <button type="button" class="btn btn-primary dropdown-toggle"
-                            data-toggle="dropdown" data-submenu aria-haspopup="true" aria-expanded="false">
-                        Show dates <span class="caret"></span>
-                    </button>
-                    <ul class="dropdown-menu">
-                        <li><a href="/">Last 10 days (default)</a></li>
-                        <li><a href="?start=20150901">Everything (careful, traffic!)</a></li>
-                        <li class="dropdown-submenu">
-                            <a tabindex="0" style="cursor: pointer; cursor: hand;">Select date</a>
-                            <ul class="dropdown-menu" style="padding: 5px 10px 0px 10px;">
-                                <li>
-                                <div class="form-group">
-                                    <div class="row">
-                                        <div class="col-md-12">
-                                            <div id="datetimepicker"></div>
-                                        </div>
-                                    </div>
-                                </div>
-                                </li>
-                            </ul>
-                        </li>
-                        <li class="dropdown-submenu">
-                            <a tabindex="0" style="cursor: pointer; cursor: hand;">Select range</a>
-                            <ul class="dropdown-menu" style="padding: 5px 10px 0px 10px;">
-                                <li>
-                                    <div class="row">
-                                        <div class='col-md-12'>
-                                            From:<br>
-                                            <div class="form-group">
-                                                <div class='input-group date' id='datetimepicker6'></div>
+        <div class="row">
+            <div class="col-md-12">
+                <h2>
+                    Nightly data
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-info dropdown-toggle"
+                                data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                            Toggle view <span class="caret"></span>
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a href="#" onclick="showAll(0)">Data preview</a></li>
+                            <li><a href="#" onclick="showAll(1)">Auxiliary data</a></li>
+                            <li><a href="#" onclick="showAll(2)">Download</a></li>
+                        </ul>
+                    </div>
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-primary dropdown-toggle"
+                                data-toggle="dropdown" data-submenu aria-haspopup="true" aria-expanded="false">
+                            Show dates <span class="caret"></span>
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a href="/">Last 10 days (default)</a></li>
+                            <li><a href="?start=20150901">Everything (careful, traffic!)</a></li>
+                            <li class="dropdown-submenu">
+                                <a tabindex="0" style="cursor: pointer; cursor: hand;">Select date</a>
+                                <ul class="dropdown-menu" style="padding: 5px 10px 0px 10px;">
+                                    <li>
+                                    <div class="form-group">
+                                        <div class="row">
+                                            <div class="col-md-12">
+                                                <div id="datetimepicker"></div>
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="row">
-                                        <div class='col-md-12'>
-                                            To:<br>
-                                            <div class="form-group">
-                                                <div class='input-group date' id='datetimepicker7'></div>
+                                    </li>
+                                </ul>
+                            </li>
+                            <li class="dropdown-submenu">
+                                <a tabindex="0" style="cursor: pointer; cursor: hand;">Select range</a>
+                                <ul class="dropdown-menu" style="padding: 5px 10px 0px 10px;">
+                                    <li>
+                                        <div class="row">
+                                            <div class='col-md-12'>
+                                                From:<br>
+                                                <div class="form-group">
+                                                    <div class='input-group date' id='datetimepicker6'></div>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </li>
-                            </ul>
-                        </li>
-                    </ul>
-                </div>
-            </h2>
+                                        <div class="row">
+                                            <div class='col-md-12'>
+                                                To:<br>
+                                                <div class="form-group">
+                                                    <div class='input-group date' id='datetimepicker7'></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </li>
+                                </ul>
+                            </li>
+                        </ul>
+                    </div>
+                </h2>
+            </div>
         </div>
     </div>
 
@@ -299,241 +299,245 @@
         {% if None in (date, programs, aux) %}
 
             <div class="container">
-                <div class="col-md-12">
-                    <div class="alert alert-warning alert-dismissible fade in" role="alert" id="alert-no-data">
-                        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                            <span aria-hidden="true">&times;</span>
-                        </button>
-                        No science data to show for the requested date(s).
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="alert alert-warning alert-dismissible fade in" role="alert" id="alert-no-data">
+                            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                            No science data to show for the requested date(s).
+                        </div>
                     </div>
                 </div>
             </div>
             <br>
         {% elif programs | length > 0 or aux | length > 0 %}
             <div class="container">
-                <div class="col-md-12">
-                    <h3 style="color: #286090">{{ date[:4]+'/' + date[4:6]+'/' + date[6:] }}</h3>
+                <div class="row">
+                    <div class="col-md-12">
+                        <h3 style="color: #286090">{{ date[:4]+'/' + date[4:6]+'/' + date[6:] }}</h3>
 
-                    <div class="data-tabs">
+                        <div class="data-tabs">
 
-                        <!-- Nav tabs -->
-                        <ul class="nav nav-tabs" role="tablist" id="{{ date }}-nav-tabs">
-                            {% if programs | length == 0 and aux | length != 0 %}
-                                <li role="presentation" id="{{ date }}-nav-tabs-preview">
-                            {% else %}
-                                <li role="presentation" class="active" id="{{ date }}-nav-tabs-preview">
-                            {% endif %}
-                                <a href="#{{ date }}-preview" aria-controls="{{ date }}-preview"
-                                   role="tab" data-toggle="tab">Data preview</a>
-                            </li>
-                            {% if programs | length == 0 and aux | length != 0 %}
-                                <li role="presentation" class="active" id="{{ date }}-nav-tabs-auxiliary">
-                            {% else %}
-                                <li role="presentation" id="{{ date }}-nav-tabs-auxiliary">
-                            {% endif %}
-                                <a href="#{{ date }}-auxiliary" aria-controls="{{ date }}-auxiliary"
-                                   role="tab" data-toggle="tab">Auxiliary data</a>
-                            </li>
-                            <li role="presentation" id="{{ date }}-nav-tabs-data">
-                                <a href="#{{ date }}-data" aria-controls="{{ date }}-data"
-                                   role="tab" data-toggle="tab">Download</a>
-                            </li>
-                        </ul>
-
-                        <!-- Tab panes -->
-                        <div class="tab-content">
-                            {% if programs | length == 0 %}
-                                <div role="tabpanel" class="tab-pane" id="{{ date }}-preview">
-                                    <h4>No science data</h4>
-                                </div>
-                            {% else %}
-                                <div role="tabpanel" class="tab-pane active" id="{{ date }}-preview">
-                                    {# toggle summary info #}
-                                    <button type="button" class="btn btn-default btn-xs"
-                                            style="margin-top:10px;" onClick="toggle_summary({{ date }})">
-                                        Toggle summary
-                                    </button>
-                                    {% for program in programs|sort %}
-                                        <h4>Program {{ program }}</h4>
-                                        <div id="program_{{program}}_images">
-                                        {% for obs in programs[program] %}
-                                            {% if (obs['pipelined']['automated']['status']['done'] and
-                                                    obs['pipelined']['automated']['classified_as'] != 'failed') or
-                                                    obs['pipelined']['faint']['status']['done'] %}
-                                                <div class="img-wrapper">
-                                                    {% if obs['pipelined']['automated']['status']['done'] %}
-                                                        <img src="/data/{{date}}/{{obs['_id']}}/automated/preview/{{obs['_id']}}_cropped.png"
-                                                             alt="{{ obs['_id'] }}"
-                                                             style="height:119px; cursor: pointer;">
-                                                    {% elif obs['pipelined']['faint']['status']['done'] %}
-                                                        <img src="/data/{{date}}/{{obs['_id']}}/faint/preview/{{obs['_id']}}_cropped.png"
-                                                             alt="{{ obs['_id'] }}"
-                                                             style="height:119px; cursor: pointer;">
-                                                    {% endif %}
-                                                    <div class="overlay" data-toggle="modal" data-target="#sourceModal"
-                                                         data-date="{{date}}" data-source="{{ obs['_id'] }}"
-                                                         data-sou_name="{{ obs['name'] }}"
-                                                         data-lucky="{{ obs['pipelined']['automated']['preview']['done'] }}"
-                                                         data-lucky-strehl="{{ obs['pipelined']['automated']['strehl']['status']['done'] }}"
-                                                         data-lucky-pca="{{ obs['pipelined']['automated']['pca']['preview']['done'] }}"
-                                                         data-faint="{{ obs['pipelined']['faint']['preview']['done'] }}"
-                                                         data-faint-strehl="{{ obs['pipelined']['faint']['strehl']['status']['done'] }}"
-                                                         data-faint-pca="{{ obs['pipelined']['faint']['pca']['preview']['done'] }}"
-                                                         style="cursor: pointer;">
-                                                         {{obs['name']}}<br>
-                                                         Camera: {{obs['camera']}}<br>
-                                                         Filter: {{obs['filter']}}
-                                                        <br>{{obs['date_utc']}}
-                                                    </div>
-                                                </div>
-                                            {% endif %}
-                                        {% endfor %}
-                                        <br>
-                                        <p style="margin-top: 10px;">
-                                        {% for obs in programs[program] %}
-                                            {% if obs['pipelined']['automated']['status']['done'] and
-                                                    obs['pipelined']['automated']['classified_as'] == 'failed' %}
-                                                {{ obs['_id'] }}: failed<br>
-                                            {% endif %}
-                                        {% endfor %}
-                                        </p>
-                                        </div>
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
-
-                            {% if aux | length == 0 %}
-                                <div role="tabpanel" class="tab-pane" id="{{ date }}-auxiliary">
-                                    <h4>No system performance and meteo data</h4>
-                                </div>
-                            {% else %}
-                                {# make pane active if there's no science data #}
-                                {% if programs | length == 0 %}
-                                    <div role="tabpanel" class="tab-pane active" id="{{ date }}-auxiliary">
+                            <!-- Nav tabs -->
+                            <ul class="nav nav-tabs" role="tablist" id="{{ date }}-nav-tabs">
+                                {% if programs | length == 0 and aux | length != 0 %}
+                                    <li role="presentation" id="{{ date }}-nav-tabs-preview">
                                 {% else %}
-                                    <div role="tabpanel" class="tab-pane" id="{{ date }}-auxiliary">
+                                    <li role="presentation" class="active" id="{{ date }}-nav-tabs-preview">
                                 {% endif %}
-                                    <h4>System performance and meteo data</h4>
-                                    {% for aux_key in aux %}
-                                        {% if aux[aux_key]['done'] %}
-                                            {# pull seeing data together #}
-                                            {% if aux_key == 'seeing' %}
-                                                <div class="col-md-12">
-                                            {% endif %}
-                                            <div class="col-md-6">
-                                                <h5>{{ aux_key }}</h5>
-                                                <img src="/data/{{date}}/summary/{{ aux_key }}.{{date}}.png"
-                                                     alt="{{ aux_key }}" class="img-responsive pop"
-                                                     style="cursor:pointer; cursor: hand;">
-                                            </div>
+                                    <a href="#{{ date }}-preview" aria-controls="{{ date }}-preview"
+                                       role="tab" data-toggle="tab">Data preview</a>
+                                </li>
+                                {% if programs | length == 0 and aux | length != 0 %}
+                                    <li role="presentation" class="active" id="{{ date }}-nav-tabs-auxiliary">
+                                {% else %}
+                                    <li role="presentation" id="{{ date }}-nav-tabs-auxiliary">
+                                {% endif %}
+                                    <a href="#{{ date }}-auxiliary" aria-controls="{{ date }}-auxiliary"
+                                       role="tab" data-toggle="tab">Auxiliary data</a>
+                                </li>
+                                <li role="presentation" id="{{ date }}-nav-tabs-data">
+                                    <a href="#{{ date }}-data" aria-controls="{{ date }}-data"
+                                       role="tab" data-toggle="tab">Download</a>
+                                </li>
+                            </ul>
 
-                                            {% if aux_key == 'seeing' %}
+                            <!-- Tab panes -->
+                            <div class="tab-content">
+                                {% if programs | length == 0 %}
+                                    <div role="tabpanel" class="tab-pane" id="{{ date }}-preview">
+                                        <h4>No science data</h4>
+                                    </div>
+                                {% else %}
+                                    <div role="tabpanel" class="tab-pane active" id="{{ date }}-preview">
+                                        {# toggle summary info #}
+                                        <button type="button" class="btn btn-default btn-xs"
+                                                style="margin-top:10px;" onClick="toggle_summary({{ date }})">
+                                            Toggle summary
+                                        </button>
+                                        {% for program in programs|sort %}
+                                            <h4>Program {{ program }}</h4>
+                                            <div id="program_{{program}}_images">
+                                            {% for obs in programs[program] %}
+                                                {% if (obs['pipelined']['automated']['status']['done'] and
+                                                        obs['pipelined']['automated']['classified_as'] != 'failed') or
+                                                        obs['pipelined']['faint']['status']['done'] %}
+                                                    <div class="img-wrapper">
+                                                        {% if obs['pipelined']['automated']['status']['done'] %}
+                                                            <img src="/data/{{date}}/{{obs['_id']}}/automated/preview/{{obs['_id']}}_cropped.png"
+                                                                 alt="{{ obs['_id'] }}"
+                                                                 style="height:119px; cursor: pointer;">
+                                                        {% elif obs['pipelined']['faint']['status']['done'] %}
+                                                            <img src="/data/{{date}}/{{obs['_id']}}/faint/preview/{{obs['_id']}}_cropped.png"
+                                                                 alt="{{ obs['_id'] }}"
+                                                                 style="height:119px; cursor: pointer;">
+                                                        {% endif %}
+                                                        <div class="overlay" data-toggle="modal" data-target="#sourceModal"
+                                                             data-date="{{date}}" data-source="{{ obs['_id'] }}"
+                                                             data-sou_name="{{ obs['name'] }}"
+                                                             data-lucky="{{ obs['pipelined']['automated']['preview']['done'] }}"
+                                                             data-lucky-strehl="{{ obs['pipelined']['automated']['strehl']['status']['done'] }}"
+                                                             data-lucky-pca="{{ obs['pipelined']['automated']['pca']['preview']['done'] }}"
+                                                             data-faint="{{ obs['pipelined']['faint']['preview']['done'] }}"
+                                                             data-faint-strehl="{{ obs['pipelined']['faint']['strehl']['status']['done'] }}"
+                                                             data-faint-pca="{{ obs['pipelined']['faint']['pca']['preview']['done'] }}"
+                                                             style="cursor: pointer;">
+                                                             {{obs['name']}}<br>
+                                                             Camera: {{obs['camera']}}<br>
+                                                             Filter: {{obs['filter']}}
+                                                            <br>{{obs['date_utc']}}
+                                                        </div>
+                                                    </div>
+                                                {% endif %}
+                                            {% endfor %}
+                                            <br>
+                                            <p style="margin-top: 10px;">
+                                            {% for obs in programs[program] %}
+                                                {% if obs['pipelined']['automated']['status']['done'] and
+                                                        obs['pipelined']['automated']['classified_as'] == 'failed' %}
+                                                    {{ obs['_id'] }}: failed<br>
+                                                {% endif %}
+                                            {% endfor %}
+                                            </p>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+
+                                {% if aux | length == 0 %}
+                                    <div role="tabpanel" class="tab-pane" id="{{ date }}-auxiliary">
+                                        <h4>No system performance and meteo data</h4>
+                                    </div>
+                                {% else %}
+                                    {# make pane active if there's no science data #}
+                                    {% if programs | length == 0 %}
+                                        <div role="tabpanel" class="tab-pane active" id="{{ date }}-auxiliary">
+                                    {% else %}
+                                        <div role="tabpanel" class="tab-pane" id="{{ date }}-auxiliary">
+                                    {% endif %}
+                                        <h4>System performance and meteo data</h4>
+                                        {% for aux_key in aux %}
+                                            {% if aux[aux_key]['done'] %}
+                                                {# pull seeing data together #}
+                                                {% if aux_key == 'seeing' %}
+                                                    <div class="col-md-12">
+                                                {% endif %}
                                                 <div class="col-md-6">
-                                                    <h5>{{ aux_key }} movie [data, model, residuals]</h5>
-                                                    <div id="seeingCarousel{{ date }}" class="carousel carousel-fade"
-                                                         data-interval="300" data-pause="false" style="width:100%"
-                                                         onmouseover="pauseCarouselShow('{{ date }}');"
-                                                         onmouseleave="pauseCarouselHide('{{ date }}');">
-                                                        <div class="carousel-inner">
-                                                            <div class="item active">
-                                                                {% set fi0 = aux[aux_key]['frames'][0] %}
-                                                                {% set datestr = fi0[:fi0.index('.')].split('_')[-2:] %}
-                                                                {% set dat  = datestr[0][0:4]+'/'+
-                                                                                    datestr[0][4:6]+'/'+datestr[0][6:] %}
-                                                                {% set time = datestr[1][0:2]+':'+
-                                                                                    datestr[1][2:4]+':'+datestr[1][4:] %}
-                                                                <img src="/data/{{date}}/summary/seeing/{{fi0}}"
-                                                                     alt="" class="img-responsive">
-                                                                <div class="carousel-caption"
-                                                                     style="position:absolute !important; top:-5%;
-                                                                            padding-bottom: 0px;">
-                                                                    {{dat}}&nbsp;{{time}}</div>
-                                                            </div>
-                                                            {% for fi in aux[aux_key]['frames'][1:] %}
-                                                                <div class="item">
-                                                                    {% set datestr = fi[:fi.index('.')].split('_')[-2:] %}
+                                                    <h5>{{ aux_key }}</h5>
+                                                    <img src="/data/{{date}}/summary/{{ aux_key }}.{{date}}.png"
+                                                         alt="{{ aux_key }}" class="img-responsive pop"
+                                                         style="cursor:pointer; cursor: hand;">
+                                                </div>
+
+                                                {% if aux_key == 'seeing' %}
+                                                    <div class="col-md-6">
+                                                        <h5>{{ aux_key }} movie [data, model, residuals]</h5>
+                                                        <div id="seeingCarousel{{ date }}" class="carousel carousel-fade"
+                                                             data-interval="300" data-pause="false" style="width:100%"
+                                                             onmouseover="pauseCarouselShow('{{ date }}');"
+                                                             onmouseleave="pauseCarouselHide('{{ date }}');">
+                                                            <div class="carousel-inner">
+                                                                <div class="item active">
+                                                                    {% set fi0 = aux[aux_key]['frames'][0] %}
+                                                                    {% set datestr = fi0[:fi0.index('.')].split('_')[-2:] %}
                                                                     {% set dat  = datestr[0][0:4]+'/'+
-                                                                                    datestr[0][4:6]+'/'+datestr[0][6:] %}
+                                                                                        datestr[0][4:6]+'/'+datestr[0][6:] %}
                                                                     {% set time = datestr[1][0:2]+':'+
-                                                                                    datestr[1][2:4]+':'+datestr[1][4:] %}
-                                                                    <img src="/data/{{date}}/summary/seeing/{{fi}}"
+                                                                                        datestr[1][2:4]+':'+datestr[1][4:] %}
+                                                                    <img src="/data/{{date}}/summary/seeing/{{fi0}}"
                                                                          alt="" class="img-responsive">
                                                                     <div class="carousel-caption"
-                                                                         style="position:absolute !important; top:-5%">
+                                                                         style="position:absolute !important; top:-5%;
+                                                                                padding-bottom: 0px;">
                                                                         {{dat}}&nbsp;{{time}}</div>
                                                                 </div>
-                                                            {% endfor %}
+                                                                {% for fi in aux[aux_key]['frames'][1:] %}
+                                                                    <div class="item">
+                                                                        {% set datestr = fi[:fi.index('.')].split('_')[-2:] %}
+                                                                        {% set dat  = datestr[0][0:4]+'/'+
+                                                                                        datestr[0][4:6]+'/'+datestr[0][6:] %}
+                                                                        {% set time = datestr[1][0:2]+':'+
+                                                                                        datestr[1][2:4]+':'+datestr[1][4:] %}
+                                                                        <img src="/data/{{date}}/summary/seeing/{{fi}}"
+                                                                             alt="" class="img-responsive">
+                                                                        <div class="carousel-caption"
+                                                                             style="position:absolute !important; top:-5%">
+                                                                            {{dat}}&nbsp;{{time}}</div>
+                                                                    </div>
+                                                                {% endfor %}
+                                                            </div>
+
+                                                            <a class="left carousel-control" href="#seeingCarousel{{ date }}"
+                                                               data-slide="prev">
+                                                                <span class="glyphicon glyphicon-chevron-left"></span>
+                                                            </a>
+                                                            <a class="right carousel-control" href="#seeingCarousel{{ date }}"
+                                                               data-slide="next">
+                                                                <span class="glyphicon glyphicon-chevron-right"></span>
+                                                            </a>
+
+                                                            <a id="carousel-play{{ date }}"
+                                                               class="carousel-control carouselButtons"
+                                                               onclick="playCarousel('{{ date }}')"
+                                                               style="display: block">
+                                                                    <span class="glyphicon glyphicon-play"
+                                                                          style="font-size: 40px !important;"></span>
+                                                            </a>
+                                                            <a id="carousel-pause{{ date }}"
+                                                               class="carousel-control carouselButtons"
+                                                               onclick="pauseCarousel('{{ date }}')"
+                                                               style="display: none">
+                                                                    <span class="glyphicon glyphicon-pause"
+                                                                          style="font-size: 40px !important;"></span>
+                                                            </a>
                                                         </div>
-
-                                                        <a class="left carousel-control" href="#seeingCarousel{{ date }}"
-                                                           data-slide="prev">
-                                                            <span class="glyphicon glyphicon-chevron-left"></span>
-                                                        </a>
-                                                        <a class="right carousel-control" href="#seeingCarousel{{ date }}"
-                                                           data-slide="next">
-                                                            <span class="glyphicon glyphicon-chevron-right"></span>
-                                                        </a>
-
-                                                        <a id="carousel-play{{ date }}"
-                                                           class="carousel-control carouselButtons"
-                                                           onclick="playCarousel('{{ date }}')"
-                                                           style="display: block">
-                                                                <span class="glyphicon glyphicon-play"
-                                                                      style="font-size: 40px !important;"></span>
-                                                        </a>
-                                                        <a id="carousel-pause{{ date }}"
-                                                           class="carousel-control carouselButtons"
-                                                           onclick="pauseCarousel('{{ date }}')"
-                                                           style="display: none">
-                                                                <span class="glyphicon glyphicon-pause"
-                                                                      style="font-size: 40px !important;"></span>
-                                                        </a>
                                                     </div>
-                                                </div>
-                                                {# pull seeing data together: #}
-                                                </div>
+                                                    {# pull seeing data together: #}
+                                                    </div>
+                                                {% endif %}
                                             {% endif %}
-                                        {% endif %}
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
-                            <div role="tabpanel" class="tab-pane" id="{{ date }}-data">
-                                {% if programs | length == 0 %}
-                                    <h4>No science data for download</h4>
-                                {% else %}
-                                    {% for program in programs|sort %}
-                                        <h4>Program {{ program }}</h4>
-                                        Master wget-script to fetch all data:
-                                        <abbr title="Dont't forget to 'chmod u+x'">
-                                            <a href="/get_data?date={{ date }}&program={{ program }}">
-                                                program_{{ program }}_{{ date }}.wget.sh
-                                            </a><br>
-                                        </abbr>
-                                        <a data-toggle="collapse" href="#collapse_{{ date }}_{{ program }}"
-                                           aria-expanded="false" aria-controls="collapse_{{ date }}_{{ program }}">
-                                            Individual compressed tarballs
-                                        </a>
-                                        <div class="collapse" id="collapse_{{ date }}_{{ program }}">
-                                            <blockquote style="font-size: 14px;">
-                                                <p>
-                                                    {% for obs in programs[program] %}
-                                                        {# check if bz2 exists: #}
-                                                        {% if obs['distributed']['status'] %}
-                                                            <a href="/data/{{ date }}/{{ obs['_id'] }}/{{ obs['_id'] }}.tar.bz2">
-                                                                {{ obs['_id'] }}.tar.bz2
-                                                            </a><br>
-                                                        {% else %}
-                                                            {{ obs['_id'] }}: not ready yet<br>
-                                                        {% endif %}
-                                                    {% endfor %}
-                                                </p>
-                                            </blockquote>
-                                        </div>
-                                    {% endfor %}
+                                        {% endfor %}
+                                    </div>
                                 {% endif %}
+                                <div role="tabpanel" class="tab-pane" id="{{ date }}-data">
+                                    {% if programs | length == 0 %}
+                                        <h4>No science data for download</h4>
+                                    {% else %}
+                                        {% for program in programs|sort %}
+                                            <h4>Program {{ program }}</h4>
+                                            Master wget-script to fetch all data:
+                                            <abbr title="Dont't forget to 'chmod u+x'">
+                                                <a href="/get_data?date={{ date }}&program={{ program }}">
+                                                    program_{{ program }}_{{ date }}.wget.sh
+                                                </a><br>
+                                            </abbr>
+                                            <a data-toggle="collapse" href="#collapse_{{ date }}_{{ program }}"
+                                               aria-expanded="false" aria-controls="collapse_{{ date }}_{{ program }}">
+                                                Individual compressed tarballs
+                                            </a>
+                                            <div class="collapse" id="collapse_{{ date }}_{{ program }}">
+                                                <blockquote style="font-size: 14px;">
+                                                    <p>
+                                                        {% for obs in programs[program] %}
+                                                            {# check if bz2 exists: #}
+                                                            {% if obs['distributed']['status'] %}
+                                                                <a href="/data/{{ date }}/{{ obs['_id'] }}/{{ obs['_id'] }}.tar.bz2">
+                                                                    {{ obs['_id'] }}.tar.bz2
+                                                                </a><br>
+                                                            {% else %}
+                                                                {{ obs['_id'] }}: not ready yet<br>
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                    </p>
+                                                </blockquote>
+                                            </div>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
                             </div>
-                        </div>
 
+                        </div>
                     </div>
                 </div>
             </div>
@@ -541,8 +545,10 @@
     {% endfor %}
 {% else %}
     <div class="container">
-        <div class="col-md-12">
-            <h1>No science data to show</h1>
+        <div class="row">
+            <div class="col-md-12">
+                <h1>No science data to show</h1>
+            </div>
         </div>
     </div>
 {% endif %}
