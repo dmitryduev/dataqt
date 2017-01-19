@@ -139,6 +139,31 @@ def mdate_walk(_path):
     return mtime
 
 
+def radec_str2rad(_ra_str, _dec_str):
+    """
+
+    :param _ra_str: 'H:M:S'
+    :param _dec_str: 'D:M:S'
+    :return: ra, dec in rad
+    """
+    # convert to rad:
+    _ra = map(float, _ra_str.split(':'))
+    _ra = (_ra[0] + _ra[1] / 60.0 + _ra[2] / 3600.0) * np.pi / 12.
+    _dec = map(float, _dec_str.split(':'))
+    _dec = (_dec[0] + _dec[1] / 60.0 + _dec[2] / 3600.0) * np.pi / 180.
+
+    return _ra, _dec
+
+
+def great_circle_distance(phi1, lambda1, phi2, lambda2):
+    # input: dec1, ra1, dec2, ra2
+    # this is much faster than astropy.coordinates.Skycoord.separation
+    delta_lambda = lambda2 - lambda1
+    return np.arctan2(np.sqrt((np.cos(phi2)*np.sin(delta_lambda))**2
+                              + (np.cos(phi1)*np.sin(phi2) - np.sin(phi1)*np.cos(phi2)*np.cos(delta_lambda))**2),
+                      np.sin(phi1)*np.sin(phi2) + np.cos(phi1)*np.cos(phi2)*np.cos(delta_lambda))
+
+
 class Star(object):
     """ Define a star by its coordinates and modelled FWHM
         Given the coordinates of a star within a 2D array, fit a model to the star and determine its
@@ -762,6 +787,10 @@ def naptime(_config):
                 print('sleep until:', sleep_until)
 
             return (sleep_until - now).total_seconds()
+
+        else:
+            # sleep for loop_interval minutes otherwise (return seconds)
+            return _config['loop_interval'] * 60.0
 
     except Exception as _e:
         print(_e)
@@ -2329,15 +2358,41 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
                 fits100p = os.path.join(path_obs, '100p.fits')
                 header = get_fits_header(fits100p) if tag != 'failed' else {}
 
+                _exposure = float(header['EXPOSURE'][0]) if ('EXPOSURE' in header and tag != 'failed') else None
+                _magnitude = float(header['MAGNITUD'][0]) if ('MAGNITUD' in header and tag != 'failed') else None
+
+                # coordinates
+                # TODO: replace TELRA -> RA and TELDEC -> DEC once the TCS update is done
+                _ra_str = header['TELRA'][0] if 'TELRA' in header else None
+                _dec_str = header['TELDEC'][0] if 'TELDEC' in header else None
+                _az_str = str(header['AZIMUTH'][0]) if 'AZIMUTH' in header else None
+                _el_str = str(header['ELVATION'][0]) if 'ELVATION' in header else None
+                _epoch = float(header['EQUINOX'][0]) if 'EQUINOX' in header else 2000.0
+
+                if '9999' in _ra_str or '9999' in _dec_str or '9999' in _az_str or '9999' in _el_str:
+                    _radec_str = None
+                    _epoch = None
+                    _radec = None
+                    _azel = None
+                else:
+                    # string format: H:M:S, D:M:S
+                    _radec_str = [_ra_str, _dec_str]
+                    # the rest are floats [rad]
+                    _ra, _dec = radec_str2rad(_ra_str, _dec_str)
+                    _radec = [_ra, _dec]
+                    _azel = [float(_az_str)*np.pi/180., float(_el_str)*np.pi/180.]
+
                 # update db entry. reset status flags to (re)run Strehl/PCA/preview
                 _coll.update_one(
                     {'_id': _obs},
                     {
                         '$set': {
-                            'exposure': float(header['EXPOSURE'][0])
-                                          if ('EXPOSURE' in header and tag != 'failed') else None,
-                            'magnitude': float(header['MAGNITUD'][0])
-                                          if ('MAGNITUD' in header and tag != 'failed') else None,
+                            'exposure': _exposure,
+                            'magnitude': _magnitude,
+                            'coordinates.epoch': _epoch,
+                            'coordinates.radec_str': _radec_str,
+                            'coordinates.radec': _radec,
+                            'coordinates.azel': _azel,
                             'pipelined.automated.status.done': True,
                             'pipelined.automated.classified_as': tag,
                             'pipelined.automated.last_modified': time_tag,
