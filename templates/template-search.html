@@ -151,42 +151,81 @@
 
             <div class="panel panel-default">
                 <div class="panel-body">
-                    <form class="form-horizontal">
+                    <form class="form-horizontal" action="/search" method="POST">
                         <div class="form-group">
                             <label for="source_name" class="col-sm-2 control-label">Source name</label>
-                            <div class="col-sm-10">
-                                <input type="text" class="form-control" id="source_name"
-                                       placeholder="source_name contains name; default: find all if empty">
+                            <div class="col-sm-8">
+                                <input type="text" class="form-control" id="source_name" name="source_name"
+                                       placeholder="default: get all if blank">
+                            </div>
+                            <div class="col-sm-2">
+                                <label class="checkbox-inline">
+                                    <input type="checkbox" id="source_name_exact"
+                                           name="source_name_exact" checked="checked"> Exact match
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="ra" class="col-sm-2 control-label">RA</label>
+                            <div class="col-sm-2">
+                                <input type="text" class="form-control" id="ra" name="ra"
+                                       placeholder="get all if blank">
+                            </div>
+
+                            <label for="dec" class="col-sm-1 control-label">Dec</label>
+                            <div class="col-sm-2">
+                                <input type="text" class="form-control" id="dec" name="dec"
+                                       placeholder="get all if blank">
+                            </div>
+
+                            <label for="cone_search_radius" class="col-sm-2 control-label">
+                                <input type="checkbox" id="do_cone_search" name="do_cone_search">&nbsp;Cone search
+                            </label>
+                            <div class="col-sm-3">
+                                <div class="row">
+                                    <div class="col-xs-4">
+                                        <input type="text" class="form-control" id="cone_search_radius"
+                                             name="cone_search_radius" placeholder="" disabled="disabled">
+                                    </div>
+                                    <div class="col-xs-8">
+                                        <select class="form-control" disabled="disabled" id="cone_search_unit"
+                                            name="cone_search_unit">
+                                            <option>arcsec</option>
+                                            <option>arcmin</option>
+                                            <option>deg</option>
+                                            <option>rad</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
                         <div class="form-group">
                             <label for="program_id" class="col-sm-2 control-label">Program ID</label>
-                            <div class="col-sm-10">
-                                <select class="form-control" id="program_id">
+                            <div class="col-sm-2">
+                                <select class="form-control" id="program_id" name="program_id">
                                     <option>all</option>
                                     {% for program_id in program_ids|sort %}
                                         <option>{{ program_id }}</option>
                                     {% endfor %}
                                 </select>
                             </div>
-                        </div>
 
-                        <div class="form-group">
-                            <label for="date_from" class="col-sm-2 control-label">From</label>
-                            <div class="col-sm-4">
-                                <div class='input-group date' id='date_from'>
-                                    <input type='text' class="form-control" id="date_from"/>
+                            <label for="date_from" class="col-sm-1 control-label">From</label>
+                            <div class="col-sm-3">
+                                <div class='input-group date'>
+                                    <input type='text' class="form-control" id="date_from" name="date_from"/>
                                     <span class="input-group-addon">
                                         <span class="glyphicon glyphicon-calendar"></span>
                                     </span>
                                 </div>
                             </div>
 
-                            <label for="date_to" class="col-sm-2 control-label">To</label>
-                            <div class="col-sm-4">
-                                <div class='input-group date' id='date_to'>
-                                    <input type='text' class="form-control" id="date_to"/>
+                            <label for="date_to" class="col-sm-1 control-label">To</label>
+                            <div class="col-sm-3">
+                                <div class='input-group date'>
+                                    <input type='text' class="form-control" id="date_to" name="date_to"/>
                                     <span class="input-group-addon">
                                         <span class="glyphicon glyphicon-calendar"></span>
                                     </span>
@@ -197,9 +236,98 @@
                         {# advanced search options #}
                         <div id="filter-panel" class="collapse filter-panel">
                             <div class="form-group">
-                                <label for="inputEmail3" class="col-sm-2 control-label">Email</label>
+                                <label for="source_id" class="col-sm-2 control-label">Source ID</label>
+                                <div class="col-sm-8">
+                                    <input type="text" class="form-control" id="source_id" name="source_id"
+                                           placeholder="get all if blank">
+                                </div>
+                                <div class="col-sm-2">
+                                    <label class="checkbox-inline">
+                                        <input type="checkbox" id="source_id_exact"
+                                               name="source_id_exact" checked="checked"> Exact match
+                                    </label>
+                                </div>
+                            </div>
+
+
+                            <div class="form-group">
+                                <label for="exposure" class="col-sm-2 control-label">Exposure</label>
+                                <div class="col-sm-2">
+                                    <input type="text" class="form-control" id="exposure" name="exposure"
+                                       placeholder="get all if blank">
+                                </div>
+
+                                <label for="magnitude" class="col-sm-2 control-label">Magnitude</label>
+                                <div class="col-sm-2">
+                                    <input type="text" class="form-control" id="magnitude" name="exposure"
+                                       placeholder="get all if blank">
+                                </div>
+
+                                <label for="filter" class="col-sm-2 control-label">Filter</label>
+                                <div class="col-sm-2">
+                                    <select class="form-control" id="filter" name="filter">
+                                        <option>any</option>
+                                        <option>Sloan g'</option>
+                                        <option>Sloan r'</option>
+                                        <option>Sloan i'</option>
+                                        <option>Sloan z'</option>
+                                        <option>Longpass 600nm</option>
+                                        <option>Clear</option>
+                                        <option>H</option>
+                                        <option>J</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="azimuth" class="col-sm-2 control-label">Azimuth</label>
+                                <div class="col-sm-2">
+                                    <input type="text" class="form-control" id="azimuth" name="azimuth"
+                                       placeholder="get all if blank">
+                                </div>
+                                <label for="elevation" class="col-sm-2 control-label">Elevation</label>
+                                <div class="col-sm-2">
+                                    <input type="text" class="form-control" id="elevation" name="elevation"
+                                       placeholder="get all if blank">
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="lucky_strehl" class="col-sm-2 control-label">Lucky Strehl</label>
+                                <div class="col-sm-2">
+                                    <input type="text" class="form-control" id="lucky_strehl" name="lucky_strehl"
+                                       placeholder="get all if blank">
+                                </div>
+                                <label for="faint_strehl" class="col-sm-2 control-label">Faint Strehl</label>
+                                <div class="col-sm-2">
+                                    <input type="text" class="form-control" id="faint_strehl" name="faint_strehl"
+                                       placeholder="get all if blank">
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="pipelines" class="col-sm-2 control-label">Pipelines</label>
                                 <div class="col-sm-10">
-                                    <input type="text" class="form-control" id="__" placeholder="So Advanced!">
+                                    <label class="checkbox-inline">
+                                        <input type="checkbox" id="pipe_lucky" name="pipe_lucky"
+                                               checked="checked"> Lucky
+                                    </label>
+                                    <label class="checkbox-inline">
+                                        <input type="checkbox" id="pipe_lucky_pca"
+                                               name="pipe_lucky_pca"> PCA for lucky
+                                    </label>
+                                    <label class="checkbox-inline">
+                                        <input type="checkbox" id="pipe_faint"
+                                               name="pipe_faint"> Faint
+                                    </label>
+                                    <label class="checkbox-inline">
+                                        <input type="checkbox" id="pipe_faint_pca"
+                                               name="pipe_faint_pca"> PCA for faint
+                                    </label>
+                                    <label class="checkbox-inline">
+                                        <input type="checkbox" id="pipe_planetary"
+                                               name="pipe_planetary"> Planetary
+                                    </label>
                                 </div>
                             </div>
                         </div>
@@ -209,10 +337,12 @@
                             <label for="output_formatting" class="col-sm-2 control-label">Output formatting</label>
                             <div class="col-sm-10" id="output_formatting">
                                 <label class="checkbox-inline">
-                                    <input type="checkbox" id="output_thumbnail" value="output_thumbnail"> thumbnail gallery
+                                    <input type="checkbox" id="output_thumbnail"
+                                            name="output_thumbnail"> thumbnail gallery
                                 </label>
                                 <label class="checkbox-inline">
-                                    <input type="checkbox" id="output_table" value="output_thumbnail" checked> table
+                                    <input type="checkbox" id="output_table"
+                                           name="output_table" checked="checked"> table
                                 </label>
                             </div>
                         </div>
@@ -417,6 +547,14 @@
         if ($('#output_table').prop('checked')!= true && $('#output_thumbnail').prop('checked')!= true) {
             $('#output_table').prop('checked', true);
         }
+    });
+</script>
+
+{# toggle cone search #}
+<script>
+    $('#do_cone_search').change(function() {
+        $('#cone_search_radius').attr('disabled',!(this.checked));
+        $('#cone_search_unit').attr('disabled',!(this.checked));
     });
 </script>
 

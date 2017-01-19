@@ -32,6 +32,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+def great_circle_distance(phi1, lambda1, phi2, lambda2):
+    # input: dec1, ra1, dec2, ra2 [rad]
+    # this is much faster than astropy.coordinates.Skycoord.separation
+    delta_lambda = lambda2 - lambda1
+    return np.arctan2(np.sqrt((np.cos(phi2)*np.sin(delta_lambda))**2
+                              + (np.cos(phi1)*np.sin(phi2) - np.sin(phi1)*np.cos(phi2)*np.cos(delta_lambda))**2),
+                      np.sin(phi1)*np.sin(phi2) + np.cos(phi1)*np.cos(phi2)*np.cos(delta_lambda))
+
+
 def get_config(config_file='config.ini'):
     """
         load config data
@@ -643,9 +652,13 @@ def root():
 
 
 # serve root
-@app.route('/search', methods=['GET'])
+@app.route('/search', methods=['GET', 'POST'])
 @flask_login.login_required
 def search():
+    """
+
+    :return:
+    """
     user_id = flask_login.current_user.id
 
     # get db connection
@@ -658,10 +671,81 @@ def search():
     else:
         program_ids = [program_id for program_id in program_pi.keys() if program_pi[program_id] == user_id]
 
-    # execute query
+    # got a request?
+    if flask.request.method == 'POST':
+        print(flask.request.form)
+        # query db
+        obs = query_db(search_form=flask.request.form, _coll=coll, _program_ids=program_ids)
+    else:
+        obs = dict()
 
     return flask.Response(stream_template('template-search.html',
-                                          user=user_id, program_ids=program_ids))
+                                          user=user_id, program_ids=program_ids, obs=obs))
+
+
+def query_db(search_form, _coll, _program_ids):
+    """
+        parse search form and generate db query
+    :param search_form:
+    :return:
+    """
+    # create indeces not to perform in-memory sorting:
+    _coll.create_index([('name', 1)])
+    source_name_exact = True if ('source_name_exact' in search_form) and search_form['source_name_exact'] == 'on' \
+        else False
+
+    # dict to store query to be executed:
+    query = dict()
+    # list to store the results:
+    obs = []
+
+    # source name
+    source_name = search_form['source_name']
+    print(source_name)
+    if len(source_name) > 0:
+        if source_name_exact:
+            # exact:
+            query['name'] = source_name
+            # select = _coll.find({'name': source_name})
+        else:
+            # contains:
+            query['name'] = {'$regex': u'.*{:s}.*'.format(source_name)}
+            # select = _coll.find({'name': {'$regex': u'.*{:s}.*'.format(source_name)}})
+
+    # program id:
+    program_id = search_form['program_id']
+    if program_id == 'all':
+        query['science_program.program_id'] = {'$in': _program_ids}
+    else:
+        query['science_program.program_id'] = program_id
+
+    # time range:
+    date_from = search_form['date_from']
+    if len(date_from) == 0:
+        date_from = '2015/10/01'
+    date_from = datetime.datetime.strptime(date_from, '%Y/%m/%d')
+
+    date_to = search_form['date_to']
+    if len(date_to) == 0:
+        date_to = datetime.datetime.utcnow()
+    else:
+        date_to = datetime.datetime.strptime(date_to, '%Y/%m/%d')
+    query['date_utc'] = {'$gte': date_from, '$lt': date_to + datetime.timedelta(days=1)}
+
+    # position
+    if len(search_form['ra']) > 0 and len(search_form['dec']) > 0:
+        pass
+
+    # execute query:
+    if len(query) > 0:
+        print('executing query:\n{:s}'.format(query))
+        select = _coll.find(query)
+
+        for ob in select:
+            print('matching:', ob['_id'])
+            obs.append(ob)
+
+    return obs
 
 
 # manage users
