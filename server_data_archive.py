@@ -32,6 +32,22 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+def radec_str2rad(_ra_str, _dec_str):
+    """
+
+    :param _ra_str: 'H:M:S'
+    :param _dec_str: 'D:M:S'
+    :return: ra, dec in rad
+    """
+    # convert to rad:
+    _ra = map(float, _ra_str.split(':'))
+    _ra = (_ra[0] + _ra[1] / 60.0 + _ra[2] / 3600.0) * np.pi / 12.
+    _dec = map(float, _dec_str.split(':'))
+    _dec = (_dec[0] + _dec[1] / 60.0 + _dec[2] / 3600.0) * np.pi / 180.
+
+    return _ra, _dec
+
+
 def great_circle_distance(phi1, lambda1, phi2, lambda2):
     # input: dec1, ra1, dec2, ra2 [rad]
     # this is much faster than astropy.coordinates.Skycoord.separation
@@ -674,13 +690,19 @@ def search():
     # got a request?
     if flask.request.method == 'POST':
         print(flask.request.form)
+        # create indices before searching:
+        coll.drop_indexes()
+        # coll.create_index([('name', 1)])
+        coll.create_index([('coordinates.radec_geojson', '2dsphere'), ('name', 1)])
+
         # query db
-        obs = query_db(search_form=flask.request.form, _coll=coll, _program_ids=program_ids)
+        obs, errors = query_db(search_form=flask.request.form, _coll=coll, _program_ids=program_ids)
     else:
         obs = dict()
+        errors = []
 
-    return flask.Response(stream_template('template-search.html',
-                                          user=user_id, program_ids=program_ids, obs=obs))
+    return flask.Response(stream_template('template-search.html', form=flask.request.form,
+                                          user=user_id, program_ids=program_ids, obs=obs, errors=errors))
 
 
 def query_db(search_form, _coll, _program_ids):
@@ -689,19 +711,18 @@ def query_db(search_form, _coll, _program_ids):
     :param search_form:
     :return:
     """
-    # create indeces not to perform in-memory sorting:
-    _coll.create_index([('name', 1)])
-    source_name_exact = True if ('source_name_exact' in search_form) and search_form['source_name_exact'] == 'on' \
-        else False
-
     # dict to store query to be executed:
     query = dict()
     # list to store the results:
     obs = []
+    # list to store errors
+    errors = []
 
     # source name
-    source_name = search_form['source_name']
-    print(source_name)
+    source_name = search_form['source_name'].strip()
+    # print(source_name)
+    source_name_exact = True if ('source_name_exact' in search_form) and search_form['source_name_exact'] == 'on' \
+        else False
     if len(source_name) > 0:
         if source_name_exact:
             # exact:
@@ -720,21 +741,76 @@ def query_db(search_form, _coll, _program_ids):
         query['science_program.program_id'] = program_id
 
     # time range:
-    date_from = search_form['date_from']
+    date_from = search_form['date_from'].strip()
     if len(date_from) == 0:
-        date_from = '2015/10/01'
-    date_from = datetime.datetime.strptime(date_from, '%Y/%m/%d')
+        date_from = '2015/10/01 00:00'
+    date_from = datetime.datetime.strptime(date_from, '%Y/%m/%d %H:%M')
 
-    date_to = search_form['date_to']
+    date_to = search_form['date_to'].strip()
     if len(date_to) == 0:
         date_to = datetime.datetime.utcnow()
     else:
-        date_to = datetime.datetime.strptime(date_to, '%Y/%m/%d')
+        date_to = datetime.datetime.strptime(date_to, '%Y/%m/%d %H:%M')
     query['date_utc'] = {'$gte': date_from, '$lt': date_to + datetime.timedelta(days=1)}
 
     # position
-    if len(search_form['ra']) > 0 and len(search_form['dec']) > 0:
-        pass
+    ra_str = search_form['ra'].strip()
+    dec_str = search_form['dec'].strip()
+    if len(ra_str) > 0 and len(dec_str) > 0:
+        try:
+            # try to guess format and convert to decimal degrees:
+
+            # hms -> ::, dms -> ::
+            if ('h' in ra_str) and ('m' in ra_str) and ('s' in ra_str):
+                ra_str = ra_str[:-1]  # strip 's' at the end
+                for char in ('h', 'm'):
+                    ra_str.replace(char, ':')
+            if ('d' in dec_str) and ('m' in dec_str) and ('s' in dec_str):
+                dec_str = dec_str[:-1]  # strip 's' at the end
+                for char in ('d', 'm'):
+                    dec_str.replace(char, ':')
+
+            if (':' in ra_str) and (':' in dec_str):
+                ra, dec = radec_str2rad(ra_str, dec_str)
+            else:
+                ra = float(ra_str)
+                dec = float(dec_str)
+
+            # do cone search
+            if 'cone_search_radius' in search_form:
+                if len(search_form['cone_search_radius'].strip()) > 0:
+                    cone_search_radius = float(search_form['cone_search_radius'])
+                    # convert to rad:
+                    if search_form['cone_search_unit'] == 'arcsec':
+                        cone_search_radius *= np.pi/180.0/3600.
+                    elif search_form['cone_search_unit'] == 'arcmin':
+                        cone_search_radius *= np.pi/180.0/60.
+                    elif search_form['cone_search_unit'] == 'deg':
+                        cone_search_radius *= np.pi/180.0
+
+                    # ra, dec in geospatial-friendly format:
+                    ra *= 180.0 / np.pi
+                    ra -= 180.0
+                    dec *= 180.0 / np.pi
+
+                    # print(ra_str, dec_str)
+                    # print(ra, dec)
+                    # print(cone_search_radius)
+
+                    query['coordinates.radec_geojson'] = {'$geoWithin': {'$centerSphere': [[ra, dec],
+                                                                                           cone_search_radius]}}
+
+                else:
+                    errors.append('Must specify cone search radius')
+                    return {}, errors
+            else:
+                # (almost) exact match wanted instead?
+                pass
+
+        except Exception as _e:
+            print(_e)
+            errors.append('Failed to recognize RA/Dec format')
+            return {}, errors
 
     # execute query:
     if len(query) > 0:
@@ -745,7 +821,7 @@ def query_db(search_form, _coll, _program_ids):
             print('matching:', ob['_id'])
             obs.append(ob)
 
-    return obs
+    return obs, errors
 
 
 # manage users

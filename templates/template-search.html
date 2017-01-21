@@ -180,17 +180,17 @@
                             </div>
 
                             <label for="cone_search_radius" class="col-sm-2 control-label">
-                                <input type="checkbox" id="do_cone_search" name="do_cone_search">&nbsp;Cone search
+                                Cone search radius
                             </label>
                             <div class="col-sm-3">
                                 <div class="row">
                                     <div class="col-xs-4">
                                         <input type="text" class="form-control" id="cone_search_radius"
-                                             name="cone_search_radius" placeholder="" disabled="disabled">
+                                               name="cone_search_radius" placeholder="">
                                     </div>
                                     <div class="col-xs-8">
-                                        <select class="form-control" disabled="disabled" id="cone_search_unit"
-                                            name="cone_search_unit">
+                                        <select class="form-control" id="cone_search_unit"
+                                                name="cone_search_unit">
                                             <option>arcsec</option>
                                             <option>arcmin</option>
                                             <option>deg</option>
@@ -214,8 +214,8 @@
 
                             <label for="date_from" class="col-sm-1 control-label">From</label>
                             <div class="col-sm-3">
-                                <div class='input-group date'>
-                                    <input type='text' class="form-control" id="date_from" name="date_from"/>
+                                <div class='input-group date' id="date_from">
+                                    <input type='text' class="form-control" name="date_from"/>
                                     <span class="input-group-addon">
                                         <span class="glyphicon glyphicon-calendar"></span>
                                     </span>
@@ -224,8 +224,8 @@
 
                             <label for="date_to" class="col-sm-1 control-label">To</label>
                             <div class="col-sm-3">
-                                <div class='input-group date'>
-                                    <input type='text' class="form-control" id="date_to" name="date_to"/>
+                                <div class='input-group date' id="date_to">
+                                    <input type='text' class="form-control" name="date_to"/>
                                     <span class="input-group-addon">
                                         <span class="glyphicon glyphicon-calendar"></span>
                                     </span>
@@ -354,6 +354,10 @@
                         </div>
                     </form>
                 </div>
+            </div>
+
+            <div class="col-sm-12">
+                {{ obs }}
             </div>
         </div>
     </div>
@@ -551,30 +555,30 @@
 </script>
 
 {# toggle cone search #}
-<script>
-    $('#do_cone_search').change(function() {
-        $('#cone_search_radius').attr('disabled',!(this.checked));
-        $('#cone_search_unit').attr('disabled',!(this.checked));
-    });
-</script>
+{#<script>#}
+{#    $('#do_cone_search').change(function() {#}
+{#        $('#cone_search_radius').attr('disabled',!(this.checked));#}
+{#        $('#cone_search_unit').attr('disabled',!(this.checked));#}
+{#    });#}
+{#</script>#}
 
 <script type="text/javascript">
     $(function () {
         $('#date_from').datetimepicker({
-            format : "YYYY/MM/DD",
-            defaultDate: "2015/10/01"
+            format : "YYYY/MM/DD HH:mm",
+            defaultDate: "2015/10/01 00:00"
         });
         $('#date_to').datetimepicker({
             useCurrent: false, //Important! See issue #1075
-            format : "YYYY/MM/DD",
+            format : "YYYY/MM/DD HH:mm",
             defaultDate: new Date()
         });
 
         // don't look back in anger (for too far. also forward):
-        $('#date_from').data("DateTimePicker").minDate("2015/10/01");
-        $('#date_to').data("DateTimePicker").minDate("2015/10/01");
-        $('#date_from').data("DateTimePicker").maxDate("2019/01/01");
-        $('#date_to').data("DateTimePicker").maxDate("2019/01/01");
+        $('#date_from').data("DateTimePicker").minDate("2015/10/01 00:00");
+        $('#date_to').data("DateTimePicker").minDate("2015/10/01 00:00");
+        $('#date_from').data("DateTimePicker").maxDate("2019/01/01 00:00");
+        $('#date_to').data("DateTimePicker").maxDate("2019/01/01 00:00");
 
         // keep track of changes:
         $("#date_from").on("dp.change", function (e) {
@@ -584,6 +588,22 @@
             $('#date_from').data("DateTimePicker").maxDate(e.date);
         });
     });
+</script>
+
+<script>
+    $(document).ready(function() {
+        {%-for key in form-%}
+            {%-if key in ('date_from', 'date_to')-%}
+                $('#{{ key }}').data("DateTimePicker").date("{{ form[key] }}");
+            {%-else-%}
+                {%-if form[key] == 'on'-%}
+                    $('#{{ key }}').prop('checked', true);
+                {%-else-%}
+                    $('#{{ key }}').val('{{ form[key] }}');
+                {%-endif-%}
+            {%-endif-%}
+        {%-endfor-%}
+    })
 </script>
 
 </body>
