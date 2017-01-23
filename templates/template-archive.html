@@ -23,6 +23,7 @@
         html {
             position: relative;
             min-height: 100%;
+{#            -webkit-backface-visibility: hidden;#}
         }
         body {
             padding-top: 70px;
@@ -515,6 +516,8 @@
                                             <a data-toggle="collapse" href="#collapse_{{ date }}_{{ program }}"
                                                aria-expanded="false" aria-controls="collapse_{{ date }}_{{ program }}">
                                                 Individual compressed tarballs
+                                                <span class="glyphicon glyphicon-triangle-bottom"
+                                                      aria-hidden="true" style="font-size: 9px;"></span>
                                             </a>
                                             <div class="collapse" id="collapse_{{ date }}_{{ program }}">
                                                 <blockquote style="font-size: 14px;">

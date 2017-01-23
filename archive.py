@@ -2012,6 +2012,7 @@ def empty_db_record():
             'seeing': {
                 'median': None,
                 'mean': None,
+                'nearest': None,
                 'last_modified': time_now_utc
             },
             'distributed': {

@@ -32,6 +32,28 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+def get_filter_code(_filter):
+    # print(_filter)
+    if _filter == 'Sloan g\'':
+        return 'Sg'
+    elif _filter == 'Sloan r\'':
+        return 'Sr'
+    elif _filter == 'Sloan i\'':
+        return 'Si'
+    elif _filter == 'Sloan z\'':
+        return 'Sz'
+    elif _filter == 'Longpass 600nm':
+        return 'lp600'
+    elif _filter == 'Clear':
+        return 'c'
+    elif _filter == 'H':
+        return 'H'
+    elif _filter == 'J':
+        return 'J'
+    else:
+        raise Exception('couldn\'t recognize filter name')
+
+
 def radec_str2rad(_ra_str, _dec_str):
     """
 
@@ -735,9 +757,13 @@ def query_db(search_form, _coll, _program_ids):
 
     # program id:
     program_id = search_form['program_id']
-    if program_id == 'all':
-        query['science_program.program_id'] = {'$in': _program_ids}
-    else:
+    # strict
+    # if program_id == 'all':
+    #     query['science_program.program_id'] = {'$in': _program_ids}
+    # else:
+    #     query['science_program.program_id'] = program_id
+    # everything, not so strict
+    if program_id != 'all':
         query['science_program.program_id'] = program_id
 
     # time range:
@@ -812,9 +838,68 @@ def query_db(search_form, _coll, _program_ids):
             errors.append('Failed to recognize RA/Dec format')
             return {}, errors
 
+    # source id
+    source_id = search_form['source_id'].strip()
+    source_id_exact = True if ('source_id_exact' in search_form) and search_form['source_id_exact'] == 'on' else False
+    if len(source_id) > 0:
+        if source_id_exact:
+            # exact:
+            query['_id'] = source_id
+        else:
+            # contains:
+            query['_id'] = {'$regex': u'.*{:s}.*'.format(source_id)}
+
+    # filter:
+    filt = search_form['filter']
+    if filt != 'any':
+        try:
+            query['filter'] = get_filter_code(_filter=filt)
+        except Exception as e:
+            print(e)
+
+    # parse sliders:
+    for key in ('magnitude', 'exposure', 'azimuth', 'elevation', 'lucky_strehl', 'faint_strehl'):
+        try:
+            val = search_form[key]
+            if len(val) > 0:
+                rng = map(float, val.split(','))
+                assert rng[0] <= rng[1], 'invalid range for {:s}'.format(key)
+                if key == 'azimuth':
+                    if rng == [0.0, 360.0]:
+                        continue
+                    rng[0] *= np.pi / 180.0
+                    rng[1] *= np.pi / 180.0
+                    key_query = 'coordinates.azel.0'
+                elif key == 'elevation':
+                    if rng == [0.0, 90.0]:
+                        continue
+                    rng[0] *= np.pi / 180.0
+                    rng[1] *= np.pi / 180.0
+                    key_query = 'coordinates.azel.1'
+                elif key == 'lucky_strehl':
+                    if rng == [0.0, 100.0]:
+                        continue
+                    key_query = 'pipelined.automated.strehl.ratio_percent'
+                elif key == 'faint_strehl':
+                    if rng == [0.0, 100.0]:
+                        continue
+                    key_query = 'pipelined.faint.strehl.ratio_percent'
+                # elif key == 'seeing':
+                #     if rng == [0.1, 3.0]:
+                #         continue
+                #     key_query = 'seeing.nearest'
+                else:
+                    key_query = key
+                # add to query
+                # print(key_query, rng)
+                query[key_query] = {'$gte': rng[0], '$lte': rng[1]}
+        except Exception as e:
+            print(e)
+            continue
+
     # execute query:
     if len(query) > 0:
-        print('executing query:\n{:s}'.format(query))
+        # print('executing query:\n{:s}'.format(query))
         select = _coll.find(query)
 
         for ob in select:
