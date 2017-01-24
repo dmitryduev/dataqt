@@ -758,7 +758,7 @@ def query_db(search_form, _coll, _program_ids, _user_id):
     # program id:
     program_id = search_form['program_id']
     # security check for non-admin users:
-    if _user_id != 'admin':
+    if _user_id != 'admin' and program_id != 'all':
         assert program_id in _program_ids, \
             'user {:s} tried accessing info that does not belong to him!'.format(_user_id)
     # strict
