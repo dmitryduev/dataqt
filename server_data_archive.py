@@ -906,7 +906,7 @@ def query_db(search_form, _coll, _program_ids, _user_id):
         select = _coll.find(query)
 
         for ob in select:
-            print('matching:', ob['_id'])
+            # print('matching:', ob['_id'])
             # don't transfer everything -- too much stuff, filter out
             ob_out = dict()
             for key in ('_id', 'seeing', 'science_program', 'name', 'exposure', 'camera', 'magnitude',
@@ -965,13 +965,18 @@ def add_user():
         if len(user) == 0 or len(password) == 0:
             return 'everything must be set'
         client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
-        result = coll_usr.insert_one(
+        # add user to coll_usr collection:
+        coll_usr.insert_one(
             {'_id': user,
              'password': generate_password_hash(password),
              'programs': programs,
              'last_modified': datetime.datetime.now()}
         )
-        # print(result.inserted_id)
+        # change data ownership in the main database:
+        if user != 'admin':  # admin has it 'all'!
+            coll.update({'science_program.program_id': {'$in': programs}},
+                        {'$set': {'science_program.program_PI': user}}, multi=True)
+
         return 'success'
     except Exception as _e:
         print(_e)
@@ -1021,7 +1026,24 @@ def edit_user():
                     '$currentDate': {'last_modified': True}
                 }
             )
-        # print(result.inserted_id)
+
+        # change program ownership if necessary:
+        # get all program numbers for this user:
+        programs_in_db = [k for k in program_pi.keys() if program_pi[k] == user]
+        old_set = set(programs_in_db)
+        new_set = set(programs)
+        # change data ownership in the main database:
+        if user != 'admin':  # admin has it 'all'!
+            # added new programs?
+            if len(new_set - old_set) > 0:
+                # reset ownership for the set difference new-old (program in new, but not in old)
+                coll.update({'science_program.program_id': {'$in': list(new_set - old_set)}},
+                            {'$set': {'science_program.program_PI': user}}, multi=True)
+            # removed programs? reset ownership to admin
+            if len(old_set - new_set) > 0:
+                # reset ownership for the set difference old-new (program in old, but not in new)
+                coll.update({'science_program.program_id': {'$in': list(old_set - new_set)}},
+                            {'$set': {'science_program.program_PI': 'admin'}}, multi=True)
         return 'success'
     except Exception as _e:
         print(_e)
@@ -1038,9 +1060,17 @@ def remove_user():
         if user == 'admin':
             return 'Cannot remove the admin!'
         # print(user)
-        # try to remove
+
+        # get db:
         client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
-        result = coll_usr.delete_one({'_id': user})
+        # get all program numbers for this user:
+        user_programs = [k for k in program_pi.keys() if program_pi[k] == user]
+        # try to remove the user:
+        coll_usr.delete_one({'_id': user})
+        # change data ownership to 'admin'
+        coll.update({'science_program.program_id': {'$in': user_programs}},
+                    {'$set': {'science_program.program_PI': 'admin'}}, multi=True)
+
         return 'success'
     except Exception as _e:
         print(_e)
