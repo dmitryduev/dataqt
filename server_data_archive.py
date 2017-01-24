@@ -718,7 +718,7 @@ def search():
         coll.create_index([('coordinates.radec_geojson', '2dsphere'), ('name', 1)])
 
         # query db
-        obs, errors = query_db(search_form=flask.request.form, _coll=coll, _program_ids=program_ids)
+        obs, errors = query_db(search_form=flask.request.form, _coll=coll, _program_ids=program_ids, _user_id=user_id)
     else:
         obs = dict()
         errors = []
@@ -727,7 +727,7 @@ def search():
                                           user=user_id, program_ids=program_ids, obs=obs, errors=errors))
 
 
-def query_db(search_form, _coll, _program_ids):
+def query_db(search_form, _coll, _program_ids, _user_id):
     """
         parse search form and generate db query
     :param search_form:
@@ -757,6 +757,10 @@ def query_db(search_form, _coll, _program_ids):
 
     # program id:
     program_id = search_form['program_id']
+    # security check for non-admin users:
+    if _user_id != 'admin':
+        assert program_id in _program_ids, \
+            'user {:s} tried accessing info that does not belong to him!'.format(_user_id)
     # strict
     # if program_id == 'all':
     #     query['science_program.program_id'] = {'$in': _program_ids}
@@ -799,6 +803,7 @@ def query_db(search_form, _coll, _program_ids):
             if (':' in ra_str) and (':' in dec_str):
                 ra, dec = radec_str2rad(ra_str, dec_str)
             else:
+                # already in radian?
                 ra = float(ra_str)
                 dec = float(dec_str)
 

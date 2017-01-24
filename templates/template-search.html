@@ -96,7 +96,6 @@
         {# prevent flicker on transition #}
             -webkit-backface-visibility: hidden;
         }
-
         .overlay-show {
             transition: opacity 0.3s ease-out;
             opacity: 0.7;
@@ -114,7 +113,6 @@
         {# prevent flicker on transition #}
             -webkit-backface-visibility: hidden;
         }
-
         .back-to-top {
             cursor: pointer;
             position: fixed;
@@ -122,7 +120,6 @@
             right: 20px;
             display:none;
         }
-
     </style>
 
 </head>
@@ -186,12 +183,12 @@
                 <div class="panel-body">
                     <form class="form-horizontal " action="/search" method="POST">
                         <div class="form-group">
-                            <label for="source_name" class="col-sm-2 control-label">Source name</label>
-                            <div class="col-sm-8">
+                            <label for="source_name" class="col-md-2 control-label">Source name</label>
+                            <div class="col-md-8">
                                 <input type="text" class="form-control" id="source_name" name="source_name"
                                        placeholder="default: get all if blank">
                             </div>
-                            <div class="col-sm-2">
+                            <div class="col-md-2">
                                 <label class="checkbox-inline">
                                     <input type="checkbox" id="source_name_exact"
                                            name="source_name_exact" checked="checked"> Exact match
@@ -200,30 +197,32 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="ra" class="col-sm-2 control-label">RA</label>
-                            <div class="col-sm-2">
-                                <input type="text" class="form-control" id="ra" name="ra"
-                                       placeholder="get all if blank">
+                            <label for="ra" class="col-md-2 control-label">RA</label>
+                            <div class="col-md-2">
+                                <input type="text" class="form-control radec" id="ra" name="ra"
+                                       placeholder="get all if blank" data-toggle="tooltip" data-placement="top"
+                                       title="H:M:S or HhMmSs or rad%">
                             </div>
 
-                            <label for="dec" class="col-sm-1 control-label">Dec</label>
-                            <div class="col-sm-2">
-                                <input type="text" class="form-control" id="dec" name="dec"
-                                       placeholder="get all if blank">
+                            <label for="dec" class="col-md-1 control-label">Dec</label>
+                            <div class="col-md-2">
+                                <input type="text" class="form-control radec" id="dec" name="dec"
+                                       placeholder="get all if blank" data-toggle="tooltip" data-placement="top"
+                                       title="D:M:S or DdMmSs or rad%">
                             </div>
 
-                            <label for="cone_search_radius" class="col-sm-2 control-label">
+                            <label for="cone_search_radius" class="col-md-2 control-label">
                                 Cone search radius
                             </label>
-                            <div class="col-sm-3">
+                            <div class="col-md-3">
                                 <div class="row">
                                     <div class="col-xs-4">
                                         <input type="text" class="form-control" id="cone_search_radius"
-                                               name="cone_search_radius" placeholder="">
+                                               name="cone_search_radius" placeholder="" disabled="disabled">
                                     </div>
                                     <div class="col-xs-8">
                                         <select class="form-control" id="cone_search_unit"
-                                                name="cone_search_unit">
+                                                name="cone_search_unit"  disabled="disabled">
                                             <option>arcsec</option>
                                             <option>arcmin</option>
                                             <option>deg</option>
@@ -235,8 +234,8 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="program_id" class="col-sm-2 control-label">Program ID</label>
-                            <div class="col-sm-2">
+                            <label for="program_id" class="col-md-2 control-label">Program ID</label>
+                            <div class="col-md-2">
                                 <select class="form-control" id="program_id" name="program_id">
                                     <option>all</option>
                                     {% for program_id in program_ids|sort %}
@@ -245,8 +244,8 @@
                                 </select>
                             </div>
 
-                            <label for="date_from" class="col-sm-1 control-label">From</label>
-                            <div class="col-sm-3">
+                            <label for="date_from" class="col-md-1 control-label">From</label>
+                            <div class="col-md-3">
                                 <div class='input-group date' id="date_from">
                                     <input type='text' class="form-control" name="date_from"/>
                                     <span class="input-group-addon">
@@ -255,8 +254,8 @@
                                 </div>
                             </div>
 
-                            <label for="date_to" class="col-sm-1 control-label">To</label>
-                            <div class="col-sm-3">
+                            <label for="date_to" class="col-md-1 control-label">To</label>
+                            <div class="col-md-3">
                                 <div class='input-group date' id="date_to">
                                     <input type='text' class="form-control" name="date_to"/>
                                     <span class="input-group-addon">
@@ -269,12 +268,12 @@
                         {# advanced search options #}
                         <div id="filter-panel" class="collapse filter-panel">
                             <div class="form-group">
-                                <label for="source_id" class="col-sm-2 control-label">Source ID</label>
-                                <div class="col-sm-8">
+                                <label for="source_id" class="col-md-2 control-label">Source ID</label>
+                                <div class="col-md-8">
                                     <input type="text" class="form-control" id="source_id" name="source_id"
                                            placeholder="get all if blank">
                                 </div>
-                                <div class="col-sm-2">
+                                <div class="col-md-2">
                                     <label class="checkbox-inline">
                                         <input type="checkbox" id="source_id_exact"
                                                name="source_id_exact" checked="checked"> Exact match
@@ -362,8 +361,8 @@
                             </div>
 
                             <div class="form-group">
-                                <label for="pipelines" class="col-sm-2 control-label">Pipelines</label>
-                                <div class="col-sm-10">
+                                <label for="pipelines" class="col-md-2 control-label">Pipelines</label>
+                                <div class="col-md-10">
                                     <label class="checkbox-inline">
                                         <input type="checkbox" id="pipe_lucky" name="pipe_lucky"
                                                checked="checked"> Lucky
@@ -390,121 +389,219 @@
 
                         {# output formatting #}
                         <div class="form-group">
-                            <label for="output_formatting" class="col-sm-2 control-label">Output formatting</label>
-                            <div class="col-sm-10" id="output_formatting">
-                                <label class="checkbox-inline">
-                                    <input type="checkbox" id="output_thumbnail"
-                                            name="output_thumbnail"> thumbnail gallery
-                                </label>
+                            <label for="output_formatting" class="col-md-2 control-label">Output formatting</label>
+                            <div class="col-md-10" id="output_formatting">
                                 <label class="checkbox-inline">
                                     <input type="checkbox" id="output_table"
                                            name="output_table" checked="checked"> table
+                                </label>
+                                <label class="checkbox-inline">
+                                    <input type="checkbox" id="output_thumbnail"
+                                            name="output_thumbnail"> thumbnail gallery
                                 </label>
                             </div>
                         </div>
 
                         <div class="form-group">
-                            <div class="col-sm-offset-2 col-sm-10">
+                            <div class="col-md-offset-2 col-md-10">
                                 <button type="submit" class="btn btn-success">Search</button>
                             </div>
                         </div>
                     </form>
                 </div>
             </div>
-
-            {% if obs | length > 0 and form['output_table'] == 'on' %}
-                <div class="col-md-12">
-    {#                {{ form }}<br>#}
-                    <table class="table table-hover table-condensed tablesorter" id="obs-table">
-                        <thead style="border-bottom: none;">
-                        <tr>
-                            {% for key in ('program_id', 'name', 'date_UTC', 'RA, h:m:s', 'Dec, d:m:s',
-                                           'azimuth, &deg;', 'elevation, &deg;', 'magnitude', 'exposure, s', 'filter',
-                                           'lucky_done', 'lucky_pca_done', 'lucky_strehl',
-                                           'faint_done', 'faint_pca_done', 'faint_strehl',
-                                           'download_link', 'preview')%}
-                                <th class="rotate" style="cursor: pointer; cursor: hand;">
-                                    <div><span>{{ key }}</span></div>
-                                </th>
-                            {% endfor %}
-                            <th></th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        {% for object in obs %}
-                            <tr class="clickable-row">
-                                <td>
-                                    {{ object['science_program']['program_id'] }}
-                                </td>
-                                {% for key in ('name', 'date_utc')%}
-                                    <td id="{{ key }}">
-                                        {{ object[key] }}
-                                    </td>
-                                {% endfor %}
-                                <td>
-                                    {{ object['coordinates']['radec_str'][0] }}
-                                </td>
-                                <td>
-                                    {{ object['coordinates']['radec_str'][1] }}
-                                </td>
-                                <td>
-                                    {{ '%.2f' | format(object['coordinates']['azel'][0]*180.0/3.1415926) }}
-                                </td>
-                                <td>
-                                    {{ '%.2f' | format(object['coordinates']['azel'][1]*180.0/3.1415926) }}
-                                </td>
-                                {% for key in ('magnitude', 'exposure', 'filter')%}
-                                    <td>
-                                        {{ object[key] }}
-                                    </td>
-                                {% endfor %}
-                                {% for key in ('automated', 'faint')%}
-                                    {% set class_pipe = 'success' if
-                                            object['pipelined'][key]['status']['done'] else 'danger' %}
-                                    {% set class_pipe_pca = 'success' if
-                                            object['pipelined'][key]['pca']['status']['done'] else 'danger' %}
-                                    <td>
-                                        <span class="label label-{{ class_pipe }}">
-                                            {{ object['pipelined'][key]['status']['done'] }}</span>
-                                    </td>
-                                    <td>
-                                        <span class="label label-{{ class_pipe_pca }}">
-                                            {{ object['pipelined'][key]['pca']['status']['done'] }}</span>
-                                    </td>
-                                    <td>
-                                        {% if object['pipelined'][key]['strehl']['ratio_percent'] != None %}
-                                            {{ '%.2f' | format(object['pipelined'][key]['strehl']['ratio_percent']) }}
-                                        {% else %}
-                                            <span class="label label-danger">None</span>
-                                        {% endif %}
-                                    </td>
-                                {% endfor %}
-                                <td>
-                                    {% if object['distributed']['status'] %}
-                                        <a href="/data/{{object['date_utc'].strftime('%Y%m%d')}}/{{object['_id']}}/{{object['_id']}}.tar.bz2">
-                                            <span class="glyphicon glyphicon-download"></span></a>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <a href="#" data-toggle="modal" data-target="#sourceModal"
-                                       data-date="{{object['date_utc'].strftime('%Y%m%d')}}"
-                                       data-source="{{ object['_id'] }}"
-                                       data-sou_name="{{ object['name'] }}"
-                                       data-lucky="{{ object['pipelined']['automated']['preview']['done'] }}"
-                                       data-lucky-strehl="{{ object['pipelined']['automated']['strehl']['status']['done'] }}"
-                                       data-lucky-pca="{{ object['pipelined']['automated']['pca']['preview']['done'] }}"
-                                       data-faint="{{ object['pipelined']['faint']['preview']['done'] }}"
-                                       data-faint-strehl="{{ object['pipelined']['faint']['strehl']['status']['done'] }}"
-                                       data-faint-pca="{{ object['pipelined']['faint']['pca']['preview']['done'] }}">
-                                    <span class="glyphicon glyphicon-play-circle"></span></a>
-                                </td>
-                            </tr>
-                        {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            {% endif %}
         </div>
+    </div>
+</div>
+
+{# query results #}
+<div class="container">
+    <div class="row">
+        {% if obs | length > 0 and (form['output_table'] == 'on' or form['output_thumbnail'] == 'on') %}
+            <div class="col-md-12">
+                <div class="data-tabs">
+
+                    <!-- Nav tabs -->
+                    <ul class="nav nav-tabs" role="tablist" id="nav-tabs">
+                        {% if form['output_table'] == 'on' %}
+                            <li role="presentation" id="nav-tabs-table">
+                                <a href="#data-table" aria-controls="data-table"
+                                   role="tab" data-toggle="tab">Summary table</a>
+                            </li>
+                        {% endif %}
+                        {% if form['output_thumbnail'] == 'on' %}
+                            <li role="presentation" id="nav-tabs-thumbnail">
+                                <a href="#data-thumbnail" aria-controls="data-thumbnail"
+                                   role="tab" data-toggle="tab">Thumbnails</a>
+                            </li>
+                        {% endif %}
+                    </ul>
+
+                    <!-- Tab panes -->
+                    <div class="tab-content">
+                        {% if form['output_table'] == 'on' %}
+                            <div role="tabpanel" class="tab-pane" id="data-table">
+                                <table class="table table-hover table-condensed tablesorter" id="obs-table">
+                                    <thead style="border-bottom: none;">
+                                    <tr>
+                                        {% for key in ('program_id', 'name', 'date_UTC', 'RA, h:m:s', 'Dec, d:m:s',
+                                                       'azimuth, &deg;', 'elevation, &deg;', 'magnitude', 'exposure, s', 'filter',
+                                                       'lucky_done', 'lucky_pca_done', 'lucky_strehl',
+                                                       'faint_done', 'faint_pca_done', 'faint_strehl',
+                                                       'download_link', 'preview')%}
+                                            <th class="rotate" style="cursor: pointer; cursor: hand;">
+                                                <div><span>{{ key }}</span></div>
+                                            </th>
+                                        {% endfor %}
+                                        <th></th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    {% for object in obs %}
+                                        <tr class="clickable-row">
+                                            <td>
+                                                {{ object['science_program']['program_id'] }}
+                                            </td>
+                                            {% for key in ('name', 'date_utc')%}
+                                                <td id="{{ key }}">
+                                                    {{ object[key] }}
+                                                </td>
+                                            {% endfor %}
+                                            <td>
+                                                {{ object['coordinates']['radec_str'][0] }}
+                                            </td>
+                                            <td>
+                                                {{ object['coordinates']['radec_str'][1] }}
+                                            </td>
+                                            <td>
+                                                {{ '%.2f' | format(object['coordinates']['azel'][0]*180.0/3.1415926) }}
+                                            </td>
+                                            <td>
+                                                {{ '%.2f' | format(object['coordinates']['azel'][1]*180.0/3.1415926) }}
+                                            </td>
+                                            {% for key in ('magnitude', 'exposure', 'filter')%}
+                                                <td>
+                                                    {{ object[key] }}
+                                                </td>
+                                            {% endfor %}
+                                            {% for key in ('automated', 'faint')%}
+                                                {% set class_pipe = 'success' if
+                                                        object['pipelined'][key]['status']['done'] else 'danger' %}
+                                                {% set class_pipe_pca = 'success' if
+                                                        object['pipelined'][key]['pca']['status']['done'] else 'danger' %}
+                                                <td>
+                                                    <span class="label label-{{ class_pipe }}">
+                                                        {{ object['pipelined'][key]['status']['done'] }}</span>
+                                                </td>
+                                                <td>
+                                                    <span class="label label-{{ class_pipe_pca }}">
+                                                        {{ object['pipelined'][key]['pca']['status']['done'] }}</span>
+                                                </td>
+                                                <td>
+                                                    {% if object['pipelined'][key]['strehl']['ratio_percent'] != None %}
+                                                        {{ '%.2f' | format(object['pipelined'][key]['strehl']['ratio_percent']) }}
+                                                    {% else %}
+                                                        <span class="label label-danger">None</span>
+                                                    {% endif %}
+                                                </td>
+                                            {% endfor %}
+                                            <td>
+                                                {% if object['distributed']['status'] %}
+                                                    <a href="/data/{{object['date_utc'].strftime('%Y%m%d')}}/{{object['_id']}}/{{object['_id']}}.tar.bz2">
+                                                        <span class="glyphicon glyphicon-download"></span></a>
+                                                {% else %}
+                                                    <span class="label label-danger">None</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <a href="#" data-toggle="modal" data-target="#sourceModal"
+                                                   data-date="{{object['date_utc'].strftime('%Y%m%d')}}"
+                                                   data-source="{{ object['_id'] }}"
+                                                   data-sou_name="{{ object['name'] }}"
+                                                   data-lucky="{{ object['pipelined']['automated']['preview']['done'] }}"
+                                                   data-lucky-strehl="{{ object['pipelined']['automated']['strehl']['status']['done'] }}"
+                                                   data-lucky-pca="{{ object['pipelined']['automated']['pca']['preview']['done'] }}"
+                                                   data-faint="{{ object['pipelined']['faint']['preview']['done'] }}"
+                                                   data-faint-strehl="{{ object['pipelined']['faint']['strehl']['status']['done'] }}"
+                                                   data-faint-pca="{{ object['pipelined']['faint']['pca']['preview']['done'] }}">
+                                                <span class="glyphicon glyphicon-play-circle"></span></a>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% endif %}
+                        {% if form['output_thumbnail'] == 'on' %}
+                            <div role="tabpanel" class="tab-pane" id="data-thumbnail">
+                                {# toggle summary info #}
+                                <button type="button" class="btn btn-default btn-sm"
+                                        style="margin-top:10px;" onClick="toggle_summary()">
+                                    Toggle summary
+                                </button><br>
+
+                                {# change preview size #}
+                                <div style="margin-top: 10px;">
+                                    <span style="margin-right: 10px;">Thumbnail size:</span>
+                                    <input id="preview_size" type="text" data-slider-min="50" data-slider-max="400"
+                                       data-slider-step="1" data-slider-value="120"/>
+                                    <span style="margin-left: 10px;"><span id="preview_size_val">120</span>&nbsp;px</span>
+                                </div>
+
+                                {# previews in the flesh #}
+                                <div id="preview_images" style="margin-top: 10px;">
+                                    {% for object in obs %}
+                                        {% if (object['pipelined']['automated']['status']['done'] and
+                                                object['pipelined']['automated']['classified_as'] != 'failed') or
+                                                object['pipelined']['faint']['status']['done'] %}
+                                            {% set date = object['date_utc'].strftime('%Y%m%d') %}
+                                            <div class="img-wrapper">
+                                                {% if object['pipelined']['automated']['status']['done'] %}
+                                                    <img src="/data/{{date}}/{{object['_id']}}/automated/preview/{{object['_id']}}_cropped.png"
+                                                         alt="{{ object['_id'] }}"
+                                                         style="height:120px; cursor: pointer; margin-bottom: 3px;"
+                                                         class="preview">
+                                                {% elif object['pipelined']['faint']['status']['done'] %}
+                                                    <img src="/data/{{date}}/{{object['_id']}}/faint/preview/{{object['_id']}}_cropped.png"
+                                                         alt="{{ object['_id'] }}"
+                                                         style="height:120px; cursor: pointer;"
+                                                         class="preview">
+                                                {% endif %}
+                                                <div class="overlay" data-toggle="modal" data-target="#sourceModal"
+                                                     data-date="{{date}}"
+                                                     data-source="{{ object['_id'] }}"
+                                                     data-sou_name="{{ object['name'] }}"
+                                                     data-lucky="{{ object['pipelined']['automated']['preview']['done'] }}"
+                                                     data-lucky-strehl="{{ object['pipelined']['automated']['strehl']['status']['done'] }}"
+                                                     data-lucky-pca="{{ object['pipelined']['automated']['pca']['preview']['done'] }}"
+                                                     data-faint="{{ object['pipelined']['faint']['preview']['done'] }}"
+                                                     data-faint-strehl="{{ object['pipelined']['faint']['strehl']['status']['done'] }}"
+                                                     data-faint-pca="{{ object['pipelined']['faint']['pca']['preview']['done'] }}"
+                                                     style="cursor: pointer;">
+                                                     {{object['name']}}<br>
+                                                     Camera: {{object['camera']}}<br>
+                                                     Filter: {{object['filter']}}
+                                                    <br>{{object['date_utc']}}
+                                                </div>
+                                            </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                    <br>
+                                    <p style="margin-top: 10px;">
+                                    {% for object in obs %}
+                                        {% if object['pipelined']['automated']['status']['done'] and
+                                                object['pipelined']['automated']['classified_as'] == 'failed' %}
+                                            {{ object['_id'] }}: failed<br>
+                                        {% endif %}
+                                    {% endfor %}
+                                    </p>
+                                </div>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        {% endif %}
     </div>
 </div>
 
@@ -688,8 +785,24 @@
     // for AJAX requests [absolute website's uri]:
     $SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
 
-    // sort table
+    // switch tabs
+    $(document).ready(function() {
+        // activate switch
+        $('.data-tabs li a').click(function (e) {
+            e.preventDefault();
+            $(this).tab('show')
+        });
+        // select active tab
+        {% if form['output_table'] == 'on' %}
+            $('#nav-tabs-table').addClass('active');
+            $('#data-table').addClass('active');
+        {% else %}
+            $('#nav-tabs-thumbnail').addClass('active');
+            $('#data-thumbnail').addClass('active');
+        {% endif %}
+    });
 
+    // sort table
     $(document).ready(function() {
         // call the tablesorter plugin
         $("#obs-table").tablesorter({
@@ -697,9 +810,40 @@
             sortList: [[2, 1]]
         });
     });
+
+    // toggle summary info
+    function toggle_summary(date) {
+        $('div[data-toggle="modal"]').each(function() {
+            $(this).toggleClass('overlay overlay-show');
+        });
+    }
+
+    // display
+    $(document).ready(function() {
+        $(".img-wrapper").hover(
+            function () {
+                $(this).find('div[data-toggle="modal"]').toggleClass('overlay overlay-show');
+            }
+        )
+    });
+
+    // With JQuery
+    $(document).ready(function() {
+        $("#preview_size").slider();
+        $("#preview_size").on("slide", function (slideEvt) {
+            $("#preview_size_val").text(slideEvt.value);
+            // change preview sizes
+            $(".preview").css('height', slideEvt.value);
+        });
+    });
 </script>
 
-
+{# init tooltips #}
+<script>
+    $(function () {
+        $('[data-toggle="tooltip"]').tooltip()
+    })
+</script>
 
 {# current year for solidnost'#}
 <script>
@@ -719,12 +863,12 @@
 </script>
 
 {# toggle cone search #}
-{#<script>#}
-{#    $('#do_cone_search').change(function() {#}
-{#        $('#cone_search_radius').attr('disabled',!(this.checked));#}
-{#        $('#cone_search_unit').attr('disabled',!(this.checked));#}
-{#    });#}
-{#</script>#}
+<script>
+    $('.radec').change(function() {
+        $("#cone_search_radius").prop('disabled', false);
+        $("#cone_search_unit").prop('disabled', false);
+    });
+</script>
 
 <script type="text/javascript">
     $(function () {
