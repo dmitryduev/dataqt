@@ -27,6 +27,36 @@
             /* Margin bottom by footer height */
             margin-bottom: 60px;
         }
+        .form-group {
+            margin-bottom:5px !important;
+            margin-top: 2px !important;
+        }
+        th.rotate {
+            height: 70px;
+            white-space: nowrap;
+        }
+        th.rotate > div {
+            transform:
+                    translate(0px, -6px)
+                    rotate(315deg);
+            width: 20px;
+        }
+        th.rotate > div > span {
+            border-bottom: 1px solid #ddd;
+            padding: 5px 10px;
+        }
+        td {
+            border-right: solid 1px #DDDDDD;
+        }
+        .borderless td, .borderless th {
+            border: none;
+        }
+        .table-condensed>thead>tr>th, .table-condensed>tbody>tr>th,
+        .table-condensed>tfoot>tr>th, .table-condensed>thead>tr>td,
+        .table-condensed>tbody>tr>td, .table-condensed>tfoot>tr>td {
+            padding: 1px;
+            font-size: 9px;
+        }
         .footer {
             position: absolute;
             bottom: 0;
@@ -154,7 +184,7 @@
 
             <div class="panel panel-default">
                 <div class="panel-body">
-                    <form class="form-horizontal" action="/search" method="POST">
+                    <form class="form-horizontal " action="/search" method="POST">
                         <div class="form-group">
                             <label for="source_name" class="col-sm-2 control-label">Source name</label>
                             <div class="col-sm-8">
@@ -253,14 +283,6 @@
                             </div>
 
                             <div class="form-group">
-                                <label for="seeing" class="col-md-2 control-label">Seeing, "</label>
-                                <div class="col-md-2">
-                                    <input id="seeing" name="seeing" type="text"
-                                           data-provide="slider" data-slider-min="0.1" data-slider-max="3"
-                                           data-slider-step="0.1" data-slider-value="[0.1,3]" data-slider-range="true"
-                                           data-slider-tooltip="show" data-slider-enabled="false"/>
-                                </div>
-
                                 <label for="filter" class="col-md-2 control-label">Filter</label>
                                 <div class="col-md-4">
                                     <select class="form-control" id="filter" name="filter">
@@ -274,6 +296,16 @@
                                         <option>H</option>
                                         <option>J</option>
                                     </select>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="seeing" class="col-md-2 control-label">Seeing, "</label>
+                                <div class="col-md-2">
+                                    <input id="seeing" name="seeing" type="text"
+                                           data-provide="slider" data-slider-min="0.1" data-slider-max="3"
+                                           data-slider-step="0.1" data-slider-value="[0.1,3]" data-slider-range="true"
+                                           data-slider-tooltip="show" data-slider-enabled="false"/>
                                 </div>
                             </div>
 
@@ -380,12 +412,98 @@
                 </div>
             </div>
 
-            <div class="col-sm-12">
-                {{ form }}<br>
-                {% for ob in obs %}
-                    {{ ob['_id'] }}<br>
-                {% endfor %}
-            </div>
+            {% if obs | length > 0 and form['output_table'] == 'on' %}
+                <div class="col-md-12">
+    {#                {{ form }}<br>#}
+                    <table class="table table-hover table-condensed tablesorter" id="obs-table">
+                        <thead style="border-bottom: none;">
+                        <tr>
+                            {% for key in ('program_id', 'name', 'date_UTC', 'RA, h:m:s', 'Dec, d:m:s',
+                                           'azimuth, &deg;', 'elevation, &deg;', 'magnitude', 'exposure, s', 'filter',
+                                           'lucky_done', 'lucky_pca_done', 'lucky_strehl',
+                                           'faint_done', 'faint_pca_done', 'faint_strehl',
+                                           'download_link', 'preview')%}
+                                <th class="rotate" style="cursor: pointer; cursor: hand;">
+                                    <div><span>{{ key }}</span></div>
+                                </th>
+                            {% endfor %}
+                            <th></th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for object in obs %}
+                            <tr class="clickable-row">
+                                <td>
+                                    {{ object['science_program']['program_id'] }}
+                                </td>
+                                {% for key in ('name', 'date_utc')%}
+                                    <td id="{{ key }}">
+                                        {{ object[key] }}
+                                    </td>
+                                {% endfor %}
+                                <td>
+                                    {{ object['coordinates']['radec_str'][0] }}
+                                </td>
+                                <td>
+                                    {{ object['coordinates']['radec_str'][1] }}
+                                </td>
+                                <td>
+                                    {{ '%.2f' | format(object['coordinates']['azel'][0]*180.0/3.1415926) }}
+                                </td>
+                                <td>
+                                    {{ '%.2f' | format(object['coordinates']['azel'][1]*180.0/3.1415926) }}
+                                </td>
+                                {% for key in ('magnitude', 'exposure', 'filter')%}
+                                    <td>
+                                        {{ object[key] }}
+                                    </td>
+                                {% endfor %}
+                                {% for key in ('automated', 'faint')%}
+                                    {% set class_pipe = 'success' if
+                                            object['pipelined'][key]['status']['done'] else 'danger' %}
+                                    {% set class_pipe_pca = 'success' if
+                                            object['pipelined'][key]['pca']['status']['done'] else 'danger' %}
+                                    <td>
+                                        <span class="label label-{{ class_pipe }}">
+                                            {{ object['pipelined'][key]['status']['done'] }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="label label-{{ class_pipe_pca }}">
+                                            {{ object['pipelined'][key]['pca']['status']['done'] }}</span>
+                                    </td>
+                                    <td>
+                                        {% if object['pipelined'][key]['strehl']['ratio_percent'] != None %}
+                                            {{ '%.2f' | format(object['pipelined'][key]['strehl']['ratio_percent']) }}
+                                        {% else %}
+                                            <span class="label label-danger">None</span>
+                                        {% endif %}
+                                    </td>
+                                {% endfor %}
+                                <td>
+                                    {% if object['distributed']['status'] %}
+                                        <a href="/data/{{object['date_utc'].strftime('%Y%m%d')}}/{{object['_id']}}/{{object['_id']}}.tar.bz2">
+                                            <span class="glyphicon glyphicon-download"></span></a>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="#" data-toggle="modal" data-target="#sourceModal"
+                                       data-date="{{object['date_utc'].strftime('%Y%m%d')}}"
+                                       data-source="{{ object['_id'] }}"
+                                       data-sou_name="{{ object['name'] }}"
+                                       data-lucky="{{ object['pipelined']['automated']['preview']['done'] }}"
+                                       data-lucky-strehl="{{ object['pipelined']['automated']['strehl']['status']['done'] }}"
+                                       data-lucky-pca="{{ object['pipelined']['automated']['pca']['preview']['done'] }}"
+                                       data-faint="{{ object['pipelined']['faint']['preview']['done'] }}"
+                                       data-faint-strehl="{{ object['pipelined']['faint']['strehl']['status']['done'] }}"
+                                       data-faint-pca="{{ object['pipelined']['faint']['pca']['preview']['done'] }}">
+                                    <span class="glyphicon glyphicon-play-circle"></span></a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -558,12 +676,30 @@
 ================================================== -->
 <!-- Placed at the end of the document so the pages load faster -->
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+<script type="text/javascript" src="/static/js/jquery.tablesorter.min.js"></script>
 <script src="/static/js/bootstrap.min.js"></script>
 <script src="/static/js/bootstrap-magnify.js"></script>
 <script src="/static/js/bootstrap-notify.js"></script>
 <script src="/static/js/moment.min.js"></script>
 <script src="/static/js/bootstrap-datetimepicker.min.js"></script>
 <script src="/static/js/bootstrap-slider.min.js"></script>
+
+<script>
+    // for AJAX requests [absolute website's uri]:
+    $SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
+
+    // sort table
+
+    $(document).ready(function() {
+        // call the tablesorter plugin
+        $("#obs-table").tablesorter({
+            // sort on the third column, order descending, first - asc
+            sortList: [[2, 1]]
+        });
+    });
+</script>
+
+
 
 {# current year for solidnost'#}
 <script>
@@ -653,6 +789,173 @@
 
         $('.slider-selection').css('background', 'green');
     })
+</script>
+
+<script>
+    // clear table with FITS header (in case it's not empty) before displaying current table
+    function clearTable() {
+        $('#headerTable').html('');
+    }
+
+    // send AJAX GET request to server to get source FITS header
+    function getHeader(source) {
+        $.getJSON($SCRIPT_ROOT + '/_get_fits_header', {
+            source: source
+        }, function(data) {
+            var header = data.result;
+            for (var key in header) {
+                if (key != 'COMMENT') {
+                    var $formrow = '<tr><td>'+key+'</td>'+
+                            '<td>'+header[key][0]+'</td>'+
+                            '<td>'+header[key][1]+'</td>'+'</tr>';
+                    $('#headerTable').append($formrow);
+                }
+            }
+        });
+        return false;
+    }
+
+    // clear tab with external images
+    function clearExternalImages() {
+        $('#dss2_r').hide();
+        $('#2mass_h').hide();
+    }
+
+    // send AJAX GET request to server to get source FITS header
+    function getExternalImages(source) {
+        $.getJSON($SCRIPT_ROOT + '/_get_vo_image', {
+            source: source
+        }, function(data) {
+            var images = data.result;
+            for (var key in images) {
+                $('#'+key).show();
+                $('#'+key+'_image').attr('src', 'data:image/png;base64,' + images[key])
+            }
+        });
+        return false;
+    }
+
+    // Build modal with source data on-the-fly
+    $('#sourceModal').on('show.bs.modal', function (event) {
+        // show images tab by default:
+        $('#sourceTabs a[href="#luckyImagesTab"]').tab('show'); // Select tab by name
+
+        var trigger = $(event.relatedTarget); // Who triggered the modal? [to extract source info]
+        // Extract info from data-* attributes
+        var date = trigger.data('date'); // date of observation
+        var source = trigger.data('source'); // full source name (including prog_num, filt etc)
+        var lucky = trigger.data('lucky'); // lucky data?
+        var lucky_strehl = trigger.data('lucky-strehl'); // lucky data?
+        var lucky_pca = trigger.data('lucky-pca'); // lucky data?
+        var faint = trigger.data('faint'); // lucky data?
+        var faint_strehl = trigger.data('faint-strehl'); // lucky data?
+        var faint_pca = trigger.data('faint-pca'); // lucky data?
+
+        // download link:
+        $('#previewModalDonloadLink').attr('href', '/data/' + date + '/' +
+                    source + '/' + source + '.tar.bz2');
+
+        //var cc = trigger.data('cc'); // type of contrast curve
+        // Strehl
+        //var core = trigger.data('core'); // type of contrast curve
+        //var halo = trigger.data('halo'); // type of contrast curve
+        //var fwhm = trigger.data('fwhm'); // type of contrast curve
+        //var sr_flag = trigger.data('sr_flag'); // type of contrast curve
+        // If necessary, you could initiate an AJAX request here (and then do the updating in a callback).
+        // Update the modal's content. We'll use jQuery here,
+        // but one could use a data binding library or other methods instead.
+        var modal = $(this);
+        modal.find('.modal-title').text(source);
+        // lucky pipeline
+        if (JSON.parse(lucky.toLowerCase())) {
+            $('#luckyImagesTabContent').show();
+            $('#luckyImagesTabEmpty').hide();
+            modal.find('#lucky_sou_full').attr('src', '/data/' + date + '/' +
+                    source + '/automated/preview/' + source + '_full.png');
+            modal.find('#lucky_sou_cropped').attr('src', '/data/' + date + '/' +
+                    source + '/automated/preview/' + source + '_cropped.png');
+            // pca
+            if (JSON.parse(lucky_pca.toLowerCase())) {
+                $('#lucky_sou_pca_label').show();
+                $('#lucky_sou_pca').show();
+                modal.find('#lucky_sou_pca').attr('src', '/data/' + date + '/' +
+                    source + '/automated/pca/' + source + '_pca.png');
+                $('#lucky_sou_cc').show();
+                modal.find('#lucky_sou_cc').attr('src', '/data/' + date + '/' +
+                    source + '/automated/pca/' + source + '_contrast_curve.png');
+            }
+            else {
+                $('#lucky_sou_pca_label').hide();
+                $('#lucky_sou_pca').hide();
+                modal.find('#lucky_sou_pca').attr('src', '');
+                $('#lucky_sou_cc').hide();
+                modal.find('#lucky_sou_cc').attr('src', '');
+            }
+            // strehl
+            if (JSON.parse(lucky_strehl.toLowerCase())) {
+
+            }
+            else {
+
+            }
+        }
+        else {
+            $('#luckyImagesTabContent').hide();
+            $('#luckyImagesTabEmpty').show();
+        }
+
+        // faint pipeline
+        if (JSON.parse(faint.toLowerCase())) {
+            $('#faintImagesTabContent').show();
+            $('#faintImagesTabEmpty').hide();
+            modal.find('#faint_sou_full').attr('src', '/data/'+date+'/'+
+                    source+'/faint/preview/'+source+'_full.png');
+            modal.find('#faint_sou_cropped').attr('src', '/data/'+date+'/'+
+                    source+'/faint/preview/'+source+'_cropped.png');
+            // pca
+            if (JSON.parse(faint_pca.toLowerCase())) {
+                $('#faint_sou_pca_label').show();
+                $('#faint_sou_pca').show();
+                modal.find('#faint_sou_pca').attr('src', '/data/' + date + '/' +
+                    source + '/faint/pca/' + source + '_pca.png');
+                $('#faint_sou_cc').show();
+                modal.find('#faint_sou_cc').attr('src', '/data/' + date + '/' +
+                    source + '/faint/pca/' + source + '_contrast_curve.png');
+            }
+            else {
+                $('#faint_sou_pca_label').hide();
+                $('#faint_sou_pca').hide();
+                modal.find('#faint_sou_pca').attr('src', '');
+                $('#faint_sou_cc').hide();
+                modal.find('#faint_sou_cc').attr('src', '');
+            }
+            // strehl
+            if (JSON.parse(faint_strehl.toLowerCase())) {
+
+            }
+            else {
+
+            }
+        }
+        else {
+            $('#faintImagesTabContent').hide();
+            $('#faintImagesTabEmpty').show();
+        }
+
+        // generate table with header data
+        clearTable();
+        getHeader(source);
+
+        // fetch external vo images of the field
+        clearExternalImages();
+        getExternalImages(source);
+    });
+    // tabs in the modal
+    $('#sourceTabs a').click(function (e) {
+        e.preventDefault();
+        $(this).tab('show')
+    });
+
 </script>
 
 </body>

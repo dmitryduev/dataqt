@@ -884,10 +884,10 @@ def query_db(search_form, _coll, _program_ids):
                     if rng == [0.0, 100.0]:
                         continue
                     key_query = 'pipelined.faint.strehl.ratio_percent'
-                # elif key == 'seeing':
-                #     if rng == [0.1, 3.0]:
-                #         continue
-                #     key_query = 'seeing.nearest'
+                elif key == 'seeing':
+                    if rng == [0.1, 3.0]:
+                        continue
+                    key_query = 'seeing.nearest'
                 else:
                     key_query = key
                 # add to query
@@ -904,7 +904,23 @@ def query_db(search_form, _coll, _program_ids):
 
         for ob in select:
             print('matching:', ob['_id'])
-            obs.append(ob)
+            # don't transfer everything -- too much stuff, filter out
+            ob_out = dict()
+            for key in ('_id', 'seeing', 'science_program', 'name', 'exposure', 'camera', 'magnitude',
+                        'filter', 'date_utc', 'coordinates', 'distributed'):
+                ob_out[key] = ob[key]
+            ob_out['pipelined'] = dict()
+            for key in ('automated', 'faint'):
+                ob_out['pipelined'][key] = dict()
+                ob_out['pipelined'][key]['status'] = ob['pipelined'][key]['status']
+                ob_out['pipelined'][key]['preview'] = ob['pipelined'][key]['preview']
+                ob_out['pipelined'][key]['strehl'] = ob['pipelined'][key]['strehl']
+                ob_out['pipelined'][key]['pca'] = dict()
+                ob_out['pipelined'][key]['pca']['status'] = ob['pipelined'][key]['pca']['status']
+                ob_out['pipelined'][key]['pca']['preview'] = ob['pipelined'][key]['pca']['preview']
+
+            # append to output dict
+            obs.append(ob_out)
 
     return obs, errors
 
