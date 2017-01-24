@@ -761,13 +761,10 @@ def query_db(search_form, _coll, _program_ids, _user_id):
     if _user_id != 'admin' and program_id != 'all':
         assert program_id in _program_ids, \
             'user {:s} tried accessing info that does not belong to him!'.format(_user_id)
-    # strict
-    # if program_id == 'all':
-    #     query['science_program.program_id'] = {'$in': _program_ids}
-    # else:
-    #     query['science_program.program_id'] = program_id
-    # everything, not so strict
-    if program_id != 'all':
+    # strict check:
+    if program_id == 'all' and _user_id != 'admin':
+        query['science_program.program_id'] = {'$in': _program_ids}
+    else:
         query['science_program.program_id'] = program_id
 
     # time range:
