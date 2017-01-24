@@ -711,7 +711,7 @@ def search():
 
     # got a request?
     if flask.request.method == 'POST':
-        print(flask.request.form)
+        # print(flask.request.form)
         # create indices before searching:
         coll.drop_indexes()
         # coll.create_index([('name', 1)])
