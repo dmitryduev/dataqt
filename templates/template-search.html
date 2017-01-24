@@ -17,6 +17,8 @@
     <link rel="stylesheet" href="/static/css/bootstrap-datetimepicker.min.css">
     <link rel="stylesheet" href="/static/css/bootstrap-slider.min.css">
 
+    <link rel="stylesheet" href="/static/css/animate.css">
+
     <style>
         html {
             position: relative;
@@ -1100,6 +1102,28 @@
         $(this).tab('show')
     });
 
+</script>
+
+{# show info #}
+<script>
+    {% if form | length > 0 %}
+        $(document).ready(function() {
+            $.notify({
+                title: '<strong>Info:</strong>',
+                {% if obs | length > 0 %}
+                    message: 'Found {{ obs | length }} observations.',
+                {% else %}
+                    message: 'No matches found.'
+                {% endif %}
+            },{
+                type: 'info',
+                offset: {
+                    x: 50,
+                    y: 70
+                }
+            });
+        });
+    {% endif %}
 </script>
 
 </body>
