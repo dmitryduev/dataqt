@@ -1913,6 +1913,7 @@ def empty_db_record():
                 'epoch': None,
                 'radec': None,
                 'radec_str': None,
+                'radec_geojson': None,
                 'azel': None
             },
             'pipelined': {
@@ -2370,25 +2371,58 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
                 _magnitude = float(header['MAGNITUD'][0]) if ('MAGNITUD' in header and tag != 'failed') else None
 
                 # coordinates
-                # TODO: replace TELRA -> RA and TELDEC -> DEC once the TCS update is done
+                # TODO: replace TELRA -> RA and TELDEC -> DEC once the TCS update is done?
                 _ra_str = header['TELRA'][0] if 'TELRA' in header else None
+                _objra = header['OBJRA'][0] if 'OBJRA' in header else None
+                if _objra is not None:
+                    for letter in ('h, m'):
+                        _objra = _objra.replace(letter, ':')
+                    _objra = _objra[:-1]
+                # print(_objra)
+                # TELRA not available? try replacing with OBJRA:
+                if _ra_str is None:
+                    _ra_str = _objra
+
                 _dec_str = header['TELDEC'][0] if 'TELDEC' in header else None
+                _objdec = header['OBJDEC'][0] if 'OBJDEC' in header else None
+                if _objdec is not None:
+                    for letter in ('d, m'):
+                        _objdec = _objdec.replace(letter, ':')
+                    _objdec = _objdec[:-1]
+                # print(_objdec)
+                # TELDEC not available? try replacing with OBJDEC:
+                if _dec_str is None:
+                    _dec_str = _objdec
+
                 _az_str = str(header['AZIMUTH'][0]) if 'AZIMUTH' in header else None
                 _el_str = str(header['ELVATION'][0]) if 'ELVATION' in header else None
                 _epoch = float(header['EQUINOX'][0]) if 'EQUINOX' in header else 2000.0
 
-                if '9999' in _ra_str or '9999' in _dec_str or '9999' in _az_str or '9999' in _el_str:
-                    _radec_str = None
-                    _epoch = None
-                    _radec = None
+                if None in (_ra_str, _dec_str):
+                    _logger.error('error: no positional info for {:s}. check fits header!'.format(_obs))
                     _azel = None
+                    _radec = None
+                    _radec_str = None
+                    _radec_deg = None
                 else:
-                    # string format: H:M:S, D:M:S
-                    _radec_str = [_ra_str, _dec_str]
-                    # the rest are floats [rad]
-                    _ra, _dec = radec_str2rad(_ra_str, _dec_str)
-                    _radec = [_ra, _dec]
-                    _azel = [float(_az_str)*np.pi/180., float(_el_str)*np.pi/180.]
+                    if not ('9999' in _ra_str or '9999' in _dec_str):
+                        # string format: H:M:S, D:M:S
+                        _radec_str = [_ra_str, _dec_str]
+                        # the rest are floats [rad]
+                        _ra, _dec = radec_str2rad(_ra_str, _dec_str)
+                        _radec = [_ra, _dec]
+                        # for GeoJSON, must be lon:[-180, 180], lat:[-90, 90] (i.e. in deg)
+                        _radec_deg = [_ra * 180.0 / np.pi - 180.0, _dec * 180.0 / np.pi]
+                        if (None not in (_az_str, _el_str)) and ('9999' not in (_az_str, _el_str)):
+                            _azel = [float(_az_str) * np.pi / 180., float(_el_str) * np.pi / 180.]
+                        else:
+                            _azel = None
+                    else:
+                        _logger.error('error: no positional info for {:s}. check fits header!'.format(_obs))
+                        _azel = None
+                        _radec = None
+                        _radec_str = None
+                        _radec_deg = None
 
                 # update db entry. reset status flags to (re)run Strehl/PCA/preview
                 _coll.update_one(
@@ -2399,6 +2433,8 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
                             'magnitude': _magnitude,
                             'coordinates.epoch': _epoch,
                             'coordinates.radec_str': _radec_str,
+                            'coordinates.radec_geojson': {'type': 'Point',
+                                                          'coordinates': _radec_deg},
                             'coordinates.radec': _radec,
                             'coordinates.azel': _azel,
                             'pipelined.automated.status.done': status_done,
