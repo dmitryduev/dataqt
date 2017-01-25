@@ -586,7 +586,7 @@ def get_vo_image():
 
                         fig = plt.figure(figsize=(3, 3))
                         ax = fig.add_subplot(111)
-                        ax.imshow(survey_image, origin='lower', interpolation='nearest', cmap=plt.cm.magma)
+                        ax.imshow(survey_image, origin='upper', interpolation='nearest', cmap=plt.cm.magma)
                         ax.grid('off')
                         ax.set_axis_off()
                         fig.subplots_adjust(wspace=0, hspace=0, top=1, bottom=0, right=1, left=0)
