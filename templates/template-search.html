@@ -527,17 +527,22 @@
                                                 {% endif %}
                                             </td>
                                             <td>
-                                                <a href="#" data-toggle="modal" data-target="#sourceModal"
-                                                   data-date="{{object['date_utc'].strftime('%Y%m%d')}}"
-                                                   data-source="{{ object['_id'] }}"
-                                                   data-sou_name="{{ object['name'] }}"
-                                                   data-lucky="{{ object['pipelined']['automated']['preview']['done'] }}"
-                                                   data-lucky-strehl="{{ object['pipelined']['automated']['strehl']['status']['done'] }}"
-                                                   data-lucky-pca="{{ object['pipelined']['automated']['pca']['preview']['done'] }}"
-                                                   data-faint="{{ object['pipelined']['faint']['preview']['done'] }}"
-                                                   data-faint-strehl="{{ object['pipelined']['faint']['strehl']['status']['done'] }}"
-                                                   data-faint-pca="{{ object['pipelined']['faint']['pca']['preview']['done'] }}">
-                                                <span class="glyphicon glyphicon-play-circle"></span></a>
+                                                {% if object['pipelined']['automated']['status']['done'] or
+                                                        object['pipelined']['faint']['status']['done'] %}
+                                                    <a href="#" data-toggle="modal" data-target="#sourceModal"
+                                                       data-date="{{object['date_utc'].strftime('%Y%m%d')}}"
+                                                       data-source="{{ object['_id'] }}"
+                                                       data-sou_name="{{ object['name'] }}"
+                                                       data-lucky="{{ object['pipelined']['automated']['preview']['done'] }}"
+                                                       data-lucky-strehl="{{ object['pipelined']['automated']['strehl']['status']['done'] }}"
+                                                       data-lucky-pca="{{ object['pipelined']['automated']['pca']['preview']['done'] }}"
+                                                       data-faint="{{ object['pipelined']['faint']['preview']['done'] }}"
+                                                       data-faint-strehl="{{ object['pipelined']['faint']['strehl']['status']['done'] }}"
+                                                       data-faint-pca="{{ object['pipelined']['faint']['pca']['preview']['done'] }}">
+                                                    <span class="glyphicon glyphicon-play-circle"></span></a>
+                                                {% else %}
+                                                    <span class="label label-danger">None</span>
+                                                {% endif %}
                                             </td>
                                         </tr>
                                     {% endfor %}
