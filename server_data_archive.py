@@ -892,6 +892,14 @@ def query_db(search_form, _coll, _program_ids, _user_id):
                     if rng == [0.1, 3.0]:
                         continue
                     key_query = 'seeing.nearest'
+                elif key == 'magnitude':
+                    if rng == [-6.0, 23.0]:
+                        continue
+                    key_query = 'magnitude'
+                elif key == 'exposure':
+                    if rng == [0.0, 600.0]:
+                        continue
+                    key_query = 'magnitude'
                 else:
                     key_query = key
                 # add to query
