@@ -452,6 +452,8 @@ def job_faint_pipeline(_config, _raws_zipped, _date, _obs, _path_out):
         # path to calibration data produced by lucky pipeline:
         _path_calib = os.path.join(_config['path_pipe'], _date, 'calib')
 
+        print('running faint pipeline for {:s}'.format(_obs))
+
         # zipped raw files:
         # raws_zipped = sorted([_f for _f in os.listdir(_path_in) if _obs in _f])[0:]
         # print(raws_zipped)
@@ -664,6 +666,7 @@ def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_fact
 
     # do the work
     try:
+        print('running Strehl calculation for {:s}'.format(_obs))
         img, x, y = trim_frame(_path_in, _fits_name=_fits_name,
                                _win=_win, _method=_method,
                                _x=_x, _y=_x, _drizzled=_drizzled)
