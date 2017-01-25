@@ -2357,7 +2357,11 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
 
                 # get fits header:
                 fits100p = os.path.join(path_obs, '100p.fits')
-                header = get_fits_header(fits100p) if tag != 'failed' else {}
+                status_done = os.path.exists(fits100p)
+                if (not status_done) or (tag == 'failed'):
+                    header = {}
+                else:
+                    header = get_fits_header(fits100p)
 
                 _exposure = float(header['EXPOSURE'][0]) if ('EXPOSURE' in header and tag != 'failed') else None
                 _magnitude = float(header['MAGNITUD'][0]) if ('MAGNITUD' in header and tag != 'failed') else None
@@ -2394,7 +2398,7 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
                             'coordinates.radec_str': _radec_str,
                             'coordinates.radec': _radec,
                             'coordinates.azel': _azel,
-                            'pipelined.automated.status.done': True,
+                            'pipelined.automated.status.done': status_done,
                             'pipelined.automated.classified_as': tag,
                             'pipelined.automated.last_modified': time_tag,
                             'pipelined.automated.fits_header': header,
