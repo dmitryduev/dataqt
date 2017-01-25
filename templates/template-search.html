@@ -467,10 +467,18 @@
                                                 {{ object['coordinates']['radec_str'][1] }}
                                             </td>
                                             <td>
-                                                {{ '%.2f' | format(object['coordinates']['azel'][0]*180.0/3.1415926) }}
+                                                {% if object['coordinates']['azel'] != None %}
+                                                    {{ '%.2f' | format(object['coordinates']['azel'][0]*180.0/3.1415926) }}
+                                                {% else %}
+                                                    <span class="label label-danger">None</span>
+                                                {% endif %}
                                             </td>
                                             <td>
-                                                {{ '%.2f' | format(object['coordinates']['azel'][1]*180.0/3.1415926) }}
+                                                {% if object['coordinates']['azel'] != None %}
+                                                    {{ '%.2f' | format(object['coordinates']['azel'][1]*180.0/3.1415926) }}
+                                                {% else %}
+                                                    <span class="label label-danger">None</span>
+                                                {% endif %}
                                             </td>
                                             {% for key in ('magnitude', 'exposure', 'filter')%}
                                                 <td>
