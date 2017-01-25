@@ -769,17 +769,18 @@ def query_db(search_form, _coll, _program_ids, _user_id):
         query['science_program.program_id'] = program_id
 
     # time range:
-    date_from = search_form['date_from'].strip()
-    if len(date_from) == 0:
-        date_from = '2015/10/01 00:00'
-    date_from = datetime.datetime.strptime(date_from, '%Y/%m/%d %H:%M')
+    try:
+        date_range = search_form['daterange'].split('-')
+        date_from = date_range[0].strip()
+        date_from = datetime.datetime.strptime(date_from, '%Y/%m/%d %H:%M')
 
-    date_to = search_form['date_to'].strip()
-    if len(date_to) == 0:
-        date_to = datetime.datetime.utcnow()
-    else:
+        date_to = date_range[1].strip()
         date_to = datetime.datetime.strptime(date_to, '%Y/%m/%d %H:%M')
-    query['date_utc'] = {'$gte': date_from, '$lt': date_to + datetime.timedelta(days=1)}
+        query['date_utc'] = {'$gte': date_from, '$lt': date_to}
+    except Exception as _e:
+        print(_e)
+        errors.append('Failed to parse date range')
+        return {}, errors
 
     # position
     ra_str = search_form['ra'].strip()
