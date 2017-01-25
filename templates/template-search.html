@@ -221,11 +221,11 @@
                                 <div class="row">
                                     <div class="col-xs-4">
                                         <input type="text" class="form-control" id="cone_search_radius"
-                                               name="cone_search_radius" placeholder="" disabled="disabled">
+                                               name="cone_search_radius" placeholder="">
                                     </div>
                                     <div class="col-xs-8">
                                         <select class="form-control" id="cone_search_unit"
-                                                name="cone_search_unit"  disabled="disabled">
+                                                name="cone_search_unit">
                                             <option>arcsec</option>
                                             <option>arcmin</option>
                                             <option>deg</option>
@@ -906,12 +906,12 @@ $(document).ready(function(){
 </script>
 
 {# toggle cone search #}
-<script>
-    $('.radec').change(function() {
-        $("#cone_search_radius").prop('disabled', false);
-        $("#cone_search_unit").prop('disabled', false);
-    });
-</script>
+{#<script>#}
+{#    $('.radec').change(function() {#}
+{#        $("#cone_search_radius").prop('disabled', false);#}
+{#        $("#cone_search_unit").prop('disabled', false);#}
+{#    });#}
+{#</script>#}
 
 {# daterangepicker #}
 <script type="text/javascript">
