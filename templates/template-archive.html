@@ -14,7 +14,7 @@
     <!-- Bootstrap core CSS -->
     <link rel="stylesheet" href="/static/css/bootstrap.min.css">
     <link rel="stylesheet" href="/static/css/bootstrap-magnify.min.css">
-    <link rel="stylesheet" href="/static/css/bootstrap-datetimepicker.min.css">
+    <link rel="stylesheet" href="/static/css/daterangepicker.css">
     <link rel="stylesheet" href="/static/css/bootstrap-submenu.min.css">
 
     <link rel="stylesheet" href="/static/css/animate.css">
@@ -215,7 +215,7 @@
 {% if dates %}
     <div class="container">
         <div class="row">
-            <div class="col-md-12">
+            <div class="col-md-8">
                 <h2>
                     Nightly data
                     <div class="btn-group">
@@ -229,52 +229,18 @@
                             <li><a href="#" onclick="showAll(2)">Download</a></li>
                         </ul>
                     </div>
-                    <div class="btn-group">
-                        <button type="button" class="btn btn-primary dropdown-toggle"
-                                data-toggle="dropdown" data-submenu aria-haspopup="true" aria-expanded="false">
-                            Show dates <span class="caret"></span>
-                        </button>
-                        <ul class="dropdown-menu">
-                            <li><a href="/">Last 10 days (default)</a></li>
-                            <li><a href="?start=20150901">Everything (careful, traffic!)</a></li>
-                            <li class="dropdown-submenu">
-                                <a tabindex="0" style="cursor: pointer; cursor: hand;">Select date</a>
-                                <ul class="dropdown-menu" style="padding: 5px 10px 0px 10px;">
-                                    <li>
-                                    <div class="form-group">
-                                        <div class="row">
-                                            <div class="col-md-12">
-                                                <div id="datetimepicker"></div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    </li>
-                                </ul>
-                            </li>
-                            <li class="dropdown-submenu">
-                                <a tabindex="0" style="cursor: pointer; cursor: hand;">Select range</a>
-                                <ul class="dropdown-menu" style="padding: 5px 10px 0px 10px;">
-                                    <li>
-                                        <div class="row">
-                                            <div class='col-md-12'>
-                                                From:<br>
-                                                <div class="form-group">
-                                                    <div class='input-group date' id='datetimepicker6'></div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="row">
-                                            <div class='col-md-12'>
-                                                To:<br>
-                                                <div class="form-group">
-                                                    <div class='input-group date' id='datetimepicker7'></div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </li>
-                                </ul>
-                            </li>
-                        </ul>
+                </h2>
+            </div>
+            <div class="col-md-4">
+                <h2>
+                    <div class="form-group">
+                        <div class="input-group">
+                            <input type="text" name="daterange" id="daterange" class="form-control"
+                               style="cursor: pointer"/>
+                            <span class="input-group-addon">
+                                <span class="glyphicon glyphicon-calendar"></span>
+                            </span>
+                        </div>
                     </div>
                 </h2>
             </div>
@@ -716,50 +682,8 @@
 <script src="/static/js/bootstrap-magnify.js"></script>
 <script src="/static/js/bootstrap-notify.js"></script>
 <script src="/static/js/moment.min.js"></script>
-<script src="/static/js/bootstrap-datetimepicker.min.js"></script>
-<script src="/static/js/bootstrap-submenu.min.js"></script>
+<script src="/static/js/daterangepicker.js"></script>
 
-<script type="text/javascript">
-    $('[data-submenu]').submenupicker();
-    $(function () {
-        $('#datetimepicker').datetimepicker({format : "YYYY/MM/DD",
-                                             inline: true
-                                             });
-        $("#datetimepicker").on("dp.hide",function (e) {
-            var m = moment(e.date);
-            window.location.href = "?start=" + m.format('YYYYMMDD') +
-                    "&stop=" + m.add(1, 'days').format('YYYYMMDD');
-        });
-        $("#datetimepicker").on("dp.change",function (e) {
-            var m = moment(e.date);
-            window.location.href = "?start=" + m.format('YYYYMMDD') +
-                    "&stop=" + m.add(1, 'days').format('YYYYMMDD');
-        });
-    });
-</script>
-<script type="text/javascript">
-    $(function () {
-        $('#datetimepicker6').datetimepicker({
-            format : "YYYY/MM/DD",
-            inline: true
-        });
-        $('#datetimepicker7').datetimepicker({
-            useCurrent: false, //Important! See issue #1075
-            format : "YYYY/MM/DD",
-            inline: true
-        });
-        $("#datetimepicker6").on("dp.change", function (e) {
-            $('#datetimepicker7').data("DateTimePicker").minDate(e.date);
-        });
-        $("#datetimepicker7").on("dp.change", function (e) {
-            $('#datetimepicker6').data("DateTimePicker").maxDate(e.date);
-            var start = moment($('#datetimepicker6').data("DateTimePicker").date());
-            var stop = moment($('#datetimepicker7').data("DateTimePicker").date());
-            window.location.href = "?start=" + start.format('YYYYMMDD') +
-                    "&stop=" + stop.add(1, 'days').format('YYYYMMDD');
-        });
-    });
-</script>
 <script>
     // for AJAX requests [absolute website's uri]:
     $SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
@@ -1015,6 +939,56 @@ function pauseCarouselHide(date) {
 
 </script>
 
+{# daterangepicker #}
+<script type="text/javascript">
+$(function() {
+
+    var start = moment().utc().subtract(9, 'days').startOf('day');
+    var end = moment().utc();
+
+    function cb(start, end) {
+        $('#daterange').val(start.format('MMMM D, YYYY') + ' - ' + end.format('MMMM D, YYYY'));
+    }
+
+    $('#daterange').daterangepicker({
+        startDate: start,
+        endDate: end,
+        timePicker: true,
+        timePicker24Hour: true,
+        timePickerIncrement: 5,
+        locale: {
+            format: 'MMMM D, YYYY'
+        },
+        ranges: {
+           'Today': [moment().utc().startOf('day'), moment().utc().add(1, 'days').startOf('day')],
+           'Yesterday': [moment().utc().subtract(1, 'days').startOf('day'),
+                         moment().utc().startOf('day')],
+           'Last 7 Days': [moment().utc().subtract(6, 'days').startOf('day'),
+                           moment().utc().add(1, 'days').startOf('day')],
+           'Last 30 Days': [moment().utc().subtract(29, 'days').startOf('day'),
+                            moment().utc().add(1, 'days').startOf('day')],
+           'This Month': [moment().utc().startOf('month'),
+                          moment().utc().endOf('month')],
+           'Last Month': [moment().utc().subtract(1, 'month').startOf('month'),
+                          moment().utc().subtract(1, 'month').endOf('month')],
+           'Everything': [moment('20151001', 'YYYYMMDD'), moment().utc()]
+        },
+        minDate: moment('20151001', 'YYYYMMDD'),
+        maxDate: moment('20200101', 'YYYYMMDD'),
+        opens: "left"
+    }, cb);
+
+    cb(start, end);
+
+    $('#daterange').on('apply.daterangepicker', function(ev, picker) {
+        var start = picker.startDate.format('YYYYMMDD');
+        var stop = picker.endDate.format('YYYYMMDD');
+        window.location.href = "?start=" + start + "&stop=" + stop;
+    });
+
+});
+</script>
+
 {# current year for solidnost'#}
 <script>
 $(document).ready(function() {
@@ -1050,5 +1024,16 @@ $(document).ready(function() {
     });
 });
 </script>
+
+
+{# propagate date ranges #}
+{% if request.args.get('start') != None and request.args.get('stop') != None %}
+<script>
+    $(document).ready(function() {
+        $('#daterange').data('daterangepicker').setStartDate(moment('{{ request.args.get('start') }}', 'YYYYMMDD'));
+        $('#daterange').data('daterangepicker').setEndDate(moment('{{ request.args.get('stop') }}', 'YYYYMMDD'));
+    });
+</script>
+{% endif %}
 </body>
 </html>
