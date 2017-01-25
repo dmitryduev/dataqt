@@ -461,10 +461,18 @@
                                                 </td>
                                             {% endfor %}
                                             <td>
-                                                {{ object['coordinates']['radec_str'][0] }}
+                                                {% if object['coordinates']['azel'] != None %}
+                                                    {{ object['coordinates']['radec_str'][0] }}
+                                                {% else %}
+                                                    <span class="label label-danger">None</span>
+                                                {% endif %}
                                             </td>
                                             <td>
-                                                {{ object['coordinates']['radec_str'][1] }}
+                                                {% if object['coordinates']['azel'] != None %}
+                                                    {{ object['coordinates']['radec_str'][1] }}
+                                                {% else %}
+                                                    <span class="label label-danger">None</span>
+                                                {% endif %}
                                             </td>
                                             <td>
                                                 {% if object['coordinates']['azel'] != None %}
@@ -482,7 +490,11 @@
                                             </td>
                                             {% for key in ('magnitude', 'exposure', 'filter')%}
                                                 <td>
-                                                    {{ object[key] }}
+                                                    {% if object[key] != None %}
+                                                        {{ object[key] }}
+                                                    {% else %}
+                                                        <span class="label label-danger">None</span>
+                                                    {% endif %}
                                                 </td>
                                             {% endfor %}
                                             {% for key in ('automated', 'faint')%}
