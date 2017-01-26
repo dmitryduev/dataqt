@@ -73,7 +73,7 @@ def radec_str2rad(_ra_str, _dec_str):
 def great_circle_distance(phi1, lambda1, phi2, lambda2):
     # input: dec1, ra1, dec2, ra2 [rad]
     # this is much faster than astropy.coordinates.Skycoord.separation
-    delta_lambda = lambda2 - lambda1
+    delta_lambda = np.abs(lambda2 - lambda1)
     return np.arctan2(np.sqrt((np.cos(phi2)*np.sin(delta_lambda))**2
                               + (np.cos(phi1)*np.sin(phi2) - np.sin(phi1)*np.cos(phi2)*np.cos(delta_lambda))**2),
                       np.sin(phi1)*np.sin(phi2) + np.cos(phi1)*np.cos(phi2)*np.cos(delta_lambda))
