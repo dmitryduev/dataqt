@@ -478,15 +478,20 @@ def job_faint_pipeline(_config, _raws_zipped, _date, _obs, _path_out):
             pivot = get_best_pipe_frame(os.path.join(_path_lucky, tag, _obs))
         else:
             # zero flux or failed? try the whole (square) image (or the largest square subset of it)
-            with fits.open(os.path.join(_path_tmp, raws[0])) as tmp_fits:
-                # print(hdulist[0].header)
-                tmp_header = tmp_fits[0].header
-                x_lock = tmp_header.get('NAXIS1') // 2
-                y_lock = tmp_header.get('NAXIS2') // 2
-            # window must be square:
-            win = int(np.min([x_lock, y_lock]))
-            # use seeing-limited image to align individual frames to:
-            pivot = (-1, -1)
+
+            # with fits.open(os.path.join(_path_tmp, raws[0])) as tmp_fits:
+            #     # print(hdulist[0].header)
+            #     tmp_header = tmp_fits[0].header
+            #     x_lock = tmp_header.get('NAXIS1') // 2
+            #     y_lock = tmp_header.get('NAXIS2') // 2
+            # # window must be square:
+            # win = int(np.min([x_lock, y_lock]))
+            # # use seeing-limited image to align individual frames to:
+            # pivot = (-1, -1)
+
+            # don't waste processing resources! no magic can happen here, just skip
+            raise Exception('Observation {:s} marked as {:s}'.format(_obs, tag) +
+                            ', no need to waste computational resources to run the faint pipeline')
 
         # print('Initial lock position: ', x_lock, y_lock)
 
