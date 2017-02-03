@@ -454,17 +454,6 @@ def job_faint_pipeline(_config, _raws_zipped, _date, _obs, _path_out):
 
         print('running faint pipeline for {:s}'.format(_obs))
 
-        # zipped raw files:
-        # raws_zipped = sorted([_f for _f in os.listdir(_path_in) if _obs in _f])[0:]
-        # print(raws_zipped)
-
-        # unbzip source file(s):
-        lbunzip2(_path_in=_path_in, _files=_raws_zipped, _path_out=_path_tmp, _keep=True)
-
-        # unzipped file names:
-        raws = [os.path.splitext(_f)[0] for _f in _raws_zipped]
-        # print('\n', raws)
-
         tag = [tag for tag in ('high_flux', 'faint', 'zero_flux', 'failed') if
                os.path.exists(os.path.join(_path_lucky, tag, _obs))][0]
 
@@ -494,6 +483,17 @@ def job_faint_pipeline(_config, _raws_zipped, _date, _obs, _path_out):
                             ', no need to waste computational resources to run the faint pipeline')
 
         # print('Initial lock position: ', x_lock, y_lock)
+
+        # zipped raw files:
+        # raws_zipped = sorted([_f for _f in os.listdir(_path_in) if _obs in _f])[0:]
+        # print(raws_zipped)
+
+        # unbzip source file(s):
+        lbunzip2(_path_in=_path_in, _files=_raws_zipped, _path_out=_path_tmp, _keep=True)
+
+        # unzipped file names:
+        raws = [os.path.splitext(_f)[0] for _f in _raws_zipped]
+        # print('\n', raws)
 
         # parse observation name
         _, _, _, _filt, _, _, _ = parse_obs_name(_obs, {})
