@@ -601,8 +601,8 @@ def job_pca(_config, _path_in, _fits_name, _obs, _path_out,
         cross_corr_sorted, index_sorted = (np.array(zip(*sorted(zip(cross_corr, np.arange(len(cross_corr))),
                                                                 key=operator.itemgetter(0), reverse=True))))
         index_sorted = np.int_(index_sorted)
-        library = library_notmystar[index_sorted[0:_nrefs], :, :]
-        print('Library correlations = ', cross_corr_sorted[0:_nrefs])
+        library = library_notmystar[index_sorted[0:int(_nrefs)], :, :]
+        print('Library correlations = ', cross_corr_sorted[0:int(_nrefs)])
 
         # Do PCA
         reshaped_frame = np.reshape(centered_frame, (1, centered_frame.shape[0], centered_frame.shape[1]))
