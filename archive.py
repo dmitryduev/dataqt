@@ -1759,6 +1759,7 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
             # print(get_xy_from_frames_txt(_path))
             x = out['table']['YPEAK_IMAGE'][best_score]
             y = out['table']['XPEAK_IMAGE'][best_score]
+            x, y = map(int, [x, y])
             scidata_cropped = scidata[x - _win: x + _win + 1,
                                       y - _win: y + _win + 1]
         else:
@@ -1766,12 +1767,14 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
                 _win = 100
             # use a simple max instead:
             x, y = np.unravel_index(scidata.argmax(), scidata.shape)
+            x, y = map(int, [x, y])
             scidata_cropped = scidata[x - _win: x + _win + 1,
                                       y - _win: y + _win + 1]
     elif _method == 'max':
         if _win is None:
             _win = 100
         x, y = np.unravel_index(scidata.argmax(), scidata.shape)
+        x, y = map(int, [x, y])
         scidata_cropped = scidata[x - _win: x + _win + 1,
                                   y - _win: y + _win + 1]
     elif _method == 'shifts.txt':
@@ -1781,6 +1784,7 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
         if _drizzled:
             x *= 2.0
             y *= 2.0
+        x, y = map(int, [x, y])
         scidata_cropped = scidata[x - _win: x + _win + 1,
                                   y - _win: y + _win + 1]
     elif _method == 'frames.txt':
@@ -1790,6 +1794,7 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
         if _drizzled:
             x *= 2.0
             y *= 2.0
+        x, y = map(int, [x, y])
         scidata_cropped = scidata[x - _win: x + _win + 1,
                                   y - _win: y + _win + 1]
     elif _method == 'pipeline_settings.txt':
@@ -1799,12 +1804,14 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
         if _drizzled:
             x *= 2.0
             y *= 2.0
+        x, y = map(int, [x, y])
         scidata_cropped = scidata[x - _win: x + _win + 1,
                                   y - _win: y + _win + 1]
     elif _method == 'manual' and _x is not None and _y is not None:
         if _win is None:
             _win = 100
         x, y = _x, _y
+        x, y = map(int, [x, y])
         scidata_cropped = scidata[x - _win: x + _win + 1,
                                   y - _win: y + _win + 1]
     else:
