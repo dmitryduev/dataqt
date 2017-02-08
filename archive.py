@@ -567,6 +567,7 @@ def job_pca(_config, _path_in, _fits_name, _obs, _path_out,
         if _fwhm < 2:
             _fwhm = 2.0
             # print('Too small, changing to ', _fwhm)
+        _fwhm = int(_fwhm)
 
         # Center the filtered frame
         centered_cube, shy, shx = \
