@@ -672,6 +672,7 @@ def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_fact
     # do the work
     try:
         print('running Strehl calculation for {:s}'.format(_obs))
+        x, y, _win = map(int, [x, y, _win])
         img, x, y = trim_frame(_path_in, _fits_name=_fits_name,
                                _win=_win, _method=_method,
                                _x=_x, _y=_x, _drizzled=_drizzled)
@@ -1826,7 +1827,7 @@ def makebox(array, halfwidth, peak1, peak2):
     boxside2a = peak2 - halfwidth
     boxside2b = peak2 + halfwidth
 
-    box = array[boxside1a:boxside1b, boxside2a:boxside2b]
+    box = array[int(boxside1a):int(boxside1b), int(boxside2a):int(boxside2b)]
     box_fraction = np.sum(box) / np.sum(array)
     # print('box has: {:.2f}% of light'.format(box_fraction * 100))
 
