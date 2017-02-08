@@ -672,7 +672,8 @@ def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_fact
     # do the work
     try:
         print('running Strehl calculation for {:s}'.format(_obs))
-        _x, _y, _win = map(int, [_x, _y, _win])
+        if (_x is not None) and (_y is not None) and (_win is not None):
+            _x, _y, _win = map(int, [_x, _y, _win])
         img, x, y = trim_frame(_path_in, _fits_name=_fits_name,
                                _win=_win, _method=_method,
                                _x=_x, _y=_x, _drizzled=_drizzled)
