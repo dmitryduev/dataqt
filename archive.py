@@ -352,36 +352,37 @@ class Star(object):
 
 def process_seeing(_path_in, _seeing_frame, _path_calib, _path_out,
                    _frame_size_x_arcsec=36, _fit_model='Gaussian2D', _box_size=100):
-    # parse observation name
-    _, _, _, _filt, _date_utc, _, _ = parse_obs_name('9999_' + _seeing_frame, {})
-    _mode = get_mode(os.path.join(_path_in, '{:s}.fits'.format(_seeing_frame)))
-
-    # load darks and flats
-    dark, flat = load_darks_and_flats(_path_calib, _mode, _filt)
-    if dark is None or flat is None:
-        raise Exception('Could not open darks and flats')
-
-    with fits.open(os.path.join(_path_in, '{:s}.fits'.format(_seeing_frame))) as _hdulist:
-        # get image size (this would be (1024, 1024) for the Andor camera)
-        image_size = _hdulist[0].shape
-        # number of frames in the data cube:
-        nf = len(_hdulist)
-        # Stack to seeing-limited image
-        summed_seeing_limited_frame = np.zeros((image_size[0], image_size[1]), dtype=np.float)
-        for ii, _ in enumerate(_hdulist):
-            # im_tmp = np.array(_hdulist[ii].data, dtype=np.float)
-            # im_tmp = calibrate_frame(im_tmp, dark, flat, _iter=2)
-            # im_tmp = gaussian_filter(im_tmp, sigma=5)
-            # summed_seeing_limited_frame += im_tmp
-            summed_seeing_limited_frame += _hdulist[ii].data
-
-        #
-        summed_seeing_limited_frame = calibrate_frame(summed_seeing_limited_frame / nf, dark, flat, _iter=2)
-        summed_seeing_limited_frame = gaussian_filter(summed_seeing_limited_frame, sigma=5)  # 5, 10
-
-    # dump fits for sextraction:
-    _fits_stacked = '{:s}.summed.fits'.format(_seeing_frame)
     try:
+        # parse observation name
+        _, _, _, _filt, _date_utc, _, _ = parse_obs_name('9999_' + _seeing_frame, {})
+        _mode = get_mode(os.path.join(_path_in, '{:s}.fits'.format(_seeing_frame)))
+
+        # load darks and flats
+        dark, flat = load_darks_and_flats(_path_calib, _mode, _filt)
+        if dark is None or flat is None:
+            raise Exception('Could not open darks and flats')
+
+        with fits.open(os.path.join(_path_in, '{:s}.fits'.format(_seeing_frame))) as _hdulist:
+            # get image size (this would be (1024, 1024) for the Andor camera)
+            image_size = _hdulist[0].shape
+            # number of frames in the data cube:
+            nf = len(_hdulist)
+            # Stack to seeing-limited image
+            summed_seeing_limited_frame = np.zeros((image_size[0], image_size[1]), dtype=np.float)
+            for ii, _ in enumerate(_hdulist):
+                # im_tmp = np.array(_hdulist[ii].data, dtype=np.float)
+                # im_tmp = calibrate_frame(im_tmp, dark, flat, _iter=2)
+                # im_tmp = gaussian_filter(im_tmp, sigma=5)
+                # summed_seeing_limited_frame += im_tmp
+                summed_seeing_limited_frame += _hdulist[ii].data
+
+            #
+            summed_seeing_limited_frame = calibrate_frame(summed_seeing_limited_frame / nf, dark, flat, _iter=2)
+            summed_seeing_limited_frame = gaussian_filter(summed_seeing_limited_frame, sigma=5)  # 5, 10
+
+        # dump fits for sextraction:
+        _fits_stacked = '{:s}.summed.fits'.format(_seeing_frame)
+
         export_fits(os.path.join(_path_in, _fits_stacked), summed_seeing_limited_frame)
 
         _, x, y = trim_frame(_path_in, _fits_name=_fits_stacked,
