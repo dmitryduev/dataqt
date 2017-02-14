@@ -909,6 +909,24 @@ def query_db(search_form, _coll, _program_ids, _user_id):
             print(e)
             continue
 
+    # pipelines
+    pipe_lucky = True if ('pipe_lucky' in search_form) and search_form['pipe_lucky'] == 'on' else False
+    pipe_lucky_pca = True if ('pipe_lucky_pca' in search_form) and search_form['pipe_lucky_pca'] == 'on' else False
+    pipe_faint = True if ('pipe_faint' in search_form) and search_form['pipe_faint'] == 'on' else False
+    pipe_faint_pca = True if ('pipe_faint_pca' in search_form) and search_form['pipe_faint_pca'] == 'on' else False
+    pipe_planetary = True if ('pipe_planetary' in search_form) and search_form['pipe_planetary'] == 'on' else False
+
+    if pipe_lucky:
+        query['pipelined.automated.status.done'] = True
+    if pipe_lucky_pca:
+        query['pipelined.automated.pca.status.done'] = True
+    if pipe_faint:
+        query['pipelined.faint.status.done'] = True
+    if pipe_faint_pca:
+        query['pipelined.faint.pca.status.done'] = True
+    if pipe_planetary:
+        query['pipelined.planetary.status.done'] = True
+
     # execute query:
     if len(query) > 0:
         # print('executing query:\n{:s}'.format(query))
