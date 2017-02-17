@@ -411,7 +411,7 @@ def process_seeing(_path_in, _seeing_frames, _path_calib, _path_out,
 
         if seeing < 10:
             print('Estimated seeing suspiciously small, discarding.')
-            return _date_utc, None, None, _filt, None, None, None
+            return _date_utc, None, None, _filt, None, None, _exp
         else:
             # plot image, model, and residuals:
             # print('plotting seeing preview, see', os.path.join(_path_out, 'seeing'))
