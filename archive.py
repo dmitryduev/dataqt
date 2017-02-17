@@ -428,7 +428,7 @@ def process_seeing(_path_in, _seeing_frames, _path_calib, _path_out,
             if os.path.exists(os.path.join(_path_in, _fits_stacked)):
                 # remove fits:
                 os.remove(os.path.join(_path_in, _fits_stacked))
-            return _date_utc, None, None, _filt, None, None, None
+            return _date_utc, None, None, _filt, None, None, _exp
         except Exception as _e:
             print(_e)
             traceback.print_exc()
