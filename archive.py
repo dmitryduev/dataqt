@@ -302,9 +302,9 @@ class Star(object):
         # ax1.title('Data', fontsize=14)
         ax1.grid('off')
         ax1.set_axis_off()
-        ax1.text(0.1, 0.8,
-                 'exposure: {:.0f} sec'.format(self._exp), color='0.75',
-                 horizontalalignment='center', verticalalignment='center')
+        # ax1.text(0.1, 0.8,
+        #          'exposure: {:.0f} sec'.format(self._exp), color='0.75',
+        #          horizontalalignment='center', verticalalignment='center')
 
         asb = AnchoredSizeBar(ax1.transData,
                               bar_len,
