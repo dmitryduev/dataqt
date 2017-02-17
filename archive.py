@@ -408,12 +408,18 @@ def process_seeing(_path_in, _seeing_frames, _path_calib, _path_out,
         seeing, seeing_x, seeing_y = centroid.fwhm
         print('Estimated seeing = {:.3f} pixels'.format(seeing))
         print('Estimated seeing = {:.3f}\"'.format(seeing * _plate_scale))
-        # plot image, model, and residuals:
-        # print('plotting seeing preview, see', os.path.join(_path_out, 'seeing'))
-        centroid.plot_resulting_model(frame_name=_seeing_frames[0])
-        # print('done')
 
-        return _date_utc, seeing * _plate_scale, seeing, _filt, seeing_x * _plate_scale, seeing_y * _plate_scale, _exp
+        if seeing < 10:
+            print('Estimated seeing suspiciously small, discarding.')
+            return _date_utc, None, None, _filt, None, None, None
+        else:
+            # plot image, model, and residuals:
+            # print('plotting seeing preview, see', os.path.join(_path_out, 'seeing'))
+            centroid.plot_resulting_model(frame_name=_seeing_frames[0])
+            # print('done')
+
+            return _date_utc, seeing * _plate_scale, seeing, _filt, \
+                   seeing_x * _plate_scale, seeing_y * _plate_scale, _exp
 
     except Exception as _e:
         print(_e)
