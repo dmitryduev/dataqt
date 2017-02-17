@@ -476,8 +476,7 @@ def get_dates(user_id, coll, coll_aux, start=None, stop=None):
                         # sort by time, not by name:
                         ind_sort = np.argsort([frame[1] for frame in date_data[key]['frames']])
                         for frame in np.array(date_data[key]['frames'])[ind_sort]:
-                            print(frame, None not in frame)
-                            if None not in frame:
+                            if not np.any(np.equal(frame, None)):
                                 aux[key]['frames'].append(frame[0] + '.png')
 
             if len(aux) > 0:
