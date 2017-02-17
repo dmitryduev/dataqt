@@ -43,6 +43,7 @@ import functools
 from sklearn import linear_model
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import make_pipeline
+from itertools import chain
 
 from skimage import exposure, img_as_float
 from matplotlib.patches import Rectangle
@@ -175,7 +176,8 @@ class Star(object):
     _MOFFAT2D = 'Moffat2D'
     # _MODELS = set([_GAUSSIAN2D, _MOFFAT2D])
 
-    def __init__(self, x0, y0, data, model_type=_GAUSSIAN2D, box=100, fow_x=36, out_path='./'):
+    def __init__(self, x0, y0, data, model_type=_GAUSSIAN2D,
+                 box=100, plate_scale=0.0351594, exp=0.0, out_path='./'):
         """ Instantiation method for the class Star.
         The 2D array in which the star is located (data), together with the pixel coordinates (x0,y0) must be
         passed to the instantiation method. .
@@ -184,8 +186,8 @@ class Star(object):
         self.y = y0
         self._box = box
         # field of view in x in arcsec:
-        self._fow_x = fow_x
-        self._pix_x = data.shape[0]
+        self._plate_scale = plate_scale
+        self._exp = exp
         self._XGrid, self._YGrid = self._grid_around_star(x0, y0, data)
         self.data = data[self._XGrid, self._YGrid]
         self.model_type = model_type
@@ -288,7 +290,7 @@ class Star(object):
         _residuals = data - model
 
         bar_len = data.shape[0] * 0.1
-        bar_len_str = '{:.1f}'.format(bar_len * self._fow_x / self._pix_x)
+        bar_len_str = '{:.1f}'.format(bar_len * self._plate_scale)
 
         plt.close('all')
         fig = plt.figure(figsize=(9, 3))
@@ -300,6 +302,9 @@ class Star(object):
         # ax1.title('Data', fontsize=14)
         ax1.grid('off')
         ax1.set_axis_off()
+        ax1.text(0.1, 0.8,
+                 'exposure: {:.0f} sec'.format(self._exp), color='0.75',
+                 horizontalalignment='center', verticalalignment='center')
 
         asb = AnchoredSizeBar(ax1.transData,
                               bar_len,
@@ -350,38 +355,44 @@ class Star(object):
         # plt.show()
 
 
-def process_seeing(_path_in, _seeing_frame, _path_calib, _path_out,
-                   _frame_size_x_arcsec=36, _fit_model='Gaussian2D', _box_size=100):
+def process_seeing(_path_in, _seeing_frames, _path_calib, _path_out,
+                   _plate_scale=0.0351594, _fit_model='Gaussian2D', _box_size=100):
     try:
         # parse observation name
-        _, _, _, _filt, _date_utc, _, _ = parse_obs_name('9999_' + _seeing_frame, {})
-        _mode = get_mode(os.path.join(_path_in, '{:s}.fits'.format(_seeing_frame)))
+        _, _, _, _filt, _date_utc, _, _ = parse_obs_name('9999_' + _seeing_frames[0], {})
+        _mode, _exp = get_mode_exp(os.path.join(_path_in, '{:s}.fits'.format(_seeing_frames[0])))
+
+        # get total number of frames to allocate
+        # number of frames in each fits file
+        n_frames_files = []
+        for jj, _file in enumerate(_seeing_frames):
+            with fits.open(os.path.join(_path_in, '{:s}.fits'.format(_file))) as _hdulist:
+                if jj == 0:
+                    # get image size (this would be (1024, 1024) for the Andor camera)
+                    image_size = _hdulist[0].shape
+                n_frames_files.append(len(_hdulist))
+                # bar.update(iterations=files_sizes[jj])
+        # total number of frames
+        nf = sum(n_frames_files)
+
+        # Stack to seeing-limited image
+        summed_seeing_limited_frame = np.zeros(image_size, dtype=np.float)
+        for jj, _file in enumerate(_seeing_frames):
+            # print(jj)
+            with fits.open(os.path.join(_path_in, '{:s}.fits'.format(_file))) as _hdulist:
+                for ii, _ in enumerate(_hdulist):
+                    summed_seeing_limited_frame += _hdulist[ii].data
 
         # load darks and flats
-        dark, flat = load_darks_and_flats(_path_calib, _mode, _filt)
+        dark, flat = load_darks_and_flats(_path_calib, _mode, _filt, image_size[0])
         if dark is None or flat is None:
             raise Exception('Could not open darks and flats')
 
-        with fits.open(os.path.join(_path_in, '{:s}.fits'.format(_seeing_frame))) as _hdulist:
-            # get image size (this would be (1024, 1024) for the Andor camera)
-            image_size = _hdulist[0].shape
-            # number of frames in the data cube:
-            nf = len(_hdulist)
-            # Stack to seeing-limited image
-            summed_seeing_limited_frame = np.zeros((image_size[0], image_size[1]), dtype=np.float)
-            for ii, _ in enumerate(_hdulist):
-                # im_tmp = np.array(_hdulist[ii].data, dtype=np.float)
-                # im_tmp = calibrate_frame(im_tmp, dark, flat, _iter=2)
-                # im_tmp = gaussian_filter(im_tmp, sigma=5)
-                # summed_seeing_limited_frame += im_tmp
-                summed_seeing_limited_frame += _hdulist[ii].data
-
-            #
-            summed_seeing_limited_frame = calibrate_frame(summed_seeing_limited_frame / nf, dark, flat, _iter=2)
-            summed_seeing_limited_frame = gaussian_filter(summed_seeing_limited_frame, sigma=5)  # 5, 10
+        summed_seeing_limited_frame = calibrate_frame(summed_seeing_limited_frame / nf, dark, flat, _iter=2)
+        summed_seeing_limited_frame = gaussian_filter(summed_seeing_limited_frame, sigma=1)
 
         # dump fits for sextraction:
-        _fits_stacked = '{:s}.summed.fits'.format(_seeing_frame)
+        _fits_stacked = '{:s}.summed.fits'.format(_seeing_frames[0])
 
         export_fits(os.path.join(_path_in, _fits_stacked), summed_seeing_limited_frame)
 
@@ -393,23 +404,29 @@ def process_seeing(_path_in, _seeing_frame, _path_calib, _path_out,
         os.remove(os.path.join(_path_in, _fits_stacked))
 
         centroid = Star(x, y, summed_seeing_limited_frame, model_type=_fit_model, box=_box_size,
-                        fow_x=_frame_size_x_arcsec, out_path=os.path.join(_path_out, 'seeing'))
+                        plate_scale=_plate_scale, exp=_exp, out_path=os.path.join(_path_out, 'seeing'))
         seeing, seeing_x, seeing_y = centroid.fwhm
         print('Estimated seeing = {:.3f} pixels'.format(seeing))
-        print('Estimated seeing = {:.3f}\"'.format(seeing * _frame_size_x_arcsec / image_size[0]))
+        print('Estimated seeing = {:.3f}\"'.format(seeing * _plate_scale))
         # plot image, model, and residuals:
-        centroid.plot_resulting_model(frame_name=_seeing_frame)
+        # print('plotting seeing preview, see', os.path.join(_path_out, 'seeing'))
+        centroid.plot_resulting_model(frame_name=_seeing_frames[0])
+        # print('done')
 
-        return _date_utc, seeing * _frame_size_x_arcsec / image_size[0], seeing, _filt, \
-                seeing_x * _frame_size_x_arcsec / image_size[0], seeing_y * _frame_size_x_arcsec / image_size[0]
+        return _date_utc, seeing * _plate_scale, seeing, _filt, seeing_x * _plate_scale, seeing_y * _plate_scale, _exp
 
     except Exception as _e:
         print(_e)
         traceback.print_exc()
-        if os.path.exists(os.path.join(_path_in, _fits_stacked)):
-            # remove fits:
-            os.remove(os.path.join(_path_in, _fits_stacked))
-        return _date_utc, None, None, _filt, None, None
+        try:
+            if os.path.exists(os.path.join(_path_in, _fits_stacked)):
+                # remove fits:
+                os.remove(os.path.join(_path_in, _fits_stacked))
+            return _date_utc, None, None, _filt, None, None, None
+        except Exception as _e:
+            print(_e)
+            traceback.print_exc()
+            return None, None, None, None, None, None, None
 
 
 def inqueue(job_type, *_args):
@@ -499,7 +516,7 @@ def job_faint_pipeline(_config, _raws_zipped, _date, _obs, _path_out):
         # parse observation name
         _, _, _, _filt, _, _, _ = parse_obs_name(_obs, {})
 
-        _mode = get_mode(os.path.join(_path_tmp, raws[0]))
+        _mode, _ = get_mode_exp(os.path.join(_path_tmp, raws[0]))
 
         reduce_faint_object_noram(_path_in=_path_tmp, _files=raws,
                                   _path_calib=_path_calib, _path_out=_path_out,
@@ -963,9 +980,9 @@ def lbunzip2(_path_in, _files, _path_out, _keep=True, _v=False):
     return True
 
 
-def get_mode(_fits):
+def get_mode_exp(_fits):
     header = get_fits_header(_fits)
-    return str(header['MODE_NUM'][0])
+    return str(header['MODE_NUM'][0]), header['EXPOSURE'][0]
 
 
 def load_darks_and_flats(_path_calib, _mode, _filt, image_size_x=1024):
@@ -3454,12 +3471,31 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
         _path_calib = os.path.join(_config['path_pipe'], _date, 'calib')
 
         # _seeing_frames = _select['seeing']['frames']
-        _seeing_raws = ['{:s}.fits.bz2'.format(_s[0]) for _s in _seeing_frames]
+        # deal with long seeing observations properly
+        _seeing_raws = []
+        # unzipped file names:
+        _obsz = []
+        for _s in _seeing_frames:
+            _s_raws = ['{:s}.fits.bz2'.format(_s[0])]
+            _s_obsz = [_s[0]]
+            for _si in range(_s[1]-1):
+                _s_raws.append('{:s}_{:d}.fits.bz2'.format(_s[0], _si))
+                _s_obsz.append('{:s}_{:d}'.format(_s[0], _si))
+            _seeing_raws.append(_s_raws)
+            _obsz.append(_s_obsz)
+
+        _seeing_data = [[_s[0], None, None, None, None, None, None] for _s in _seeing_frames]
+
+        # get plate scale:
+        telescope = 'KittPeak' if datetime.datetime.strptime(_date, '%Y%m%d') > \
+                                  datetime.datetime(2015, 9, 1) else 'Palomar'
+        # this is not drizzled!
+        plate_scale = _config['telescope_data'][telescope]['scale']
 
         if len(_seeing_raws) > 0:
             try:
-                time_tags = [datetime.datetime.utcfromtimestamp(os.stat(os.path.join(_path_seeing, _s)).st_mtime)
-                             for _s in _seeing_raws]
+                time_tags = [max([datetime.datetime.utcfromtimestamp(os.stat(os.path.join(_path_seeing, _ss)).st_mtime)
+                                  for _ss in _s]) for _s in _seeing_raws]
                 time_tag = max(time_tags)
                 time_tag = time_tag.replace(tzinfo=pytz.utc)
                 # not done or new files appeared in the raw directory
@@ -3467,30 +3503,27 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
                         (_select['seeing']['retries'] <= _config['max_pipelining_retries']):
 
                         # unbzip source file(s):
-                        lbunzip2(_path_in=_path_seeing, _files=_seeing_raws, _path_out=_path_tmp,
-                                 _keep=True, _v=True)
-
-                        # unzipped file names:
-                        _obsz = [_s[0] for _s in _seeing_frames]
-                        # print(raws)
+                        lbunzip2(_path_in=_path_seeing, _files=list(chain.from_iterable(_seeing_raws)),
+                                 _path_out=_path_tmp, _keep=True, _v=True)
 
                         seeing_plot = []
                         for ii, _obs in enumerate(_obsz):
                             print('processing {:s}'.format(_obs))
                             # this returns datetime, seeing in " and in pix, and used filter:
-                            _date_utc, seeing, _, _filt, seeing_x, seeing_y = \
-                                process_seeing(_path_in=_path_tmp, _seeing_frame=_obs,
+                            _date_utc, seeing, _, _filt, seeing_x, seeing_y, _exp = \
+                                process_seeing(_path_in=_path_tmp, _seeing_frames=_obs,
                                                _path_calib=_path_calib, _path_out=_path_out,
-                                               _frame_size_x_arcsec=36,
+                                               _plate_scale=plate_scale,
                                                _fit_model=_config['seeing']['fit_model'],
                                                _box_size=_config['seeing']['win'])
                             if seeing is not None:
-                                seeing_plot.append([_date_utc, seeing, _filt])
-                            _seeing_frames[ii][1] = _date_utc
-                            _seeing_frames[ii][2] = _filt
-                            _seeing_frames[ii][3] = seeing
-                            _seeing_frames[ii][4] = seeing_x
-                            _seeing_frames[ii][5] = seeing_y
+                                seeing_plot.append([_date_utc, seeing, _filt, _exp])
+                            _seeing_data[ii][1] = _date_utc
+                            _seeing_data[ii][2] = _filt
+                            _seeing_data[ii][3] = seeing
+                            _seeing_data[ii][4] = seeing_x
+                            _seeing_data[ii][5] = seeing_y
+                            _seeing_data[ii][6] = _exp
 
                         # generate summary plot for the whole night:
                         if len(seeing_plot) > 0:
@@ -3512,12 +3545,27 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
                             # all filters used that night:
                             filters_used = set(seeing_plot[:, 2])
 
+                            # plot different filters in different colors
                             for filter_used in filters_used:
-                                # plot different filters in different colors
-                                mask = seeing_plot[:, 2] == filter_used
                                 fc = filter_colors[filter_used] if filter_used in filter_colors else plt.cm.Greys(0.7)
-                                ax.plot(seeing_plot[mask, 0], seeing_plot[mask, 1], '.',
-                                        c=fc, markersize=8, label=filter_used)
+
+                                # mask = seeing_plot[:, 2] == filter_used
+
+                                # short exposures:
+                                mask = np.all(np.vstack((seeing_plot[:, 2] == filter_used,
+                                                         seeing_plot[:, 3] <= 15.0)), axis=0)
+                                # print(filter_used, mask)
+                                if np.count_nonzero(mask) > 0:
+                                    ax.plot(seeing_plot[mask, 0], seeing_plot[mask, 1], '.',
+                                            c=fc, markersize=8, label='{:s}, short exp'.format(filter_used))
+
+                                # long exposures:
+                                mask = np.all(np.vstack((seeing_plot[:, 2] == filter_used,
+                                                         seeing_plot[:, 3] > 15.0)), axis=0)
+                                # print(filter_used, mask)
+                                if np.count_nonzero(mask) > 0:
+                                    ax.plot(seeing_plot[mask, 0], seeing_plot[mask, 1], '.',
+                                            c=fc, markersize=12, label='{:s}, long exp'.format(filter_used))
 
                             ax.set_ylabel('Seeing, arcsec')  # , fontsize=18)
                             ax.grid(linewidth=0.5)
@@ -3565,7 +3613,7 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
                             {
                                 '$set': {
                                     'seeing.done': True,
-                                    'seeing.frames': _seeing_frames,
+                                    'seeing.frames': _seeing_data,
                                     'seeing.last_modified': time_tag
                                 },
                                 '$inc': {
@@ -3605,7 +3653,7 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
 
             finally:
                 # remove unzipped files
-                _seeing_raws_unzipped = [os.path.splitext(_f)[0] for _f in _seeing_raws]
+                _seeing_raws_unzipped = [os.path.splitext(_f)[0] for _f in chain.from_iterable(_seeing_raws)]
                 for _seeing_raw_unzipped in _seeing_raws_unzipped:
                     if os.path.exists(os.path.join(_path_tmp, _seeing_raw_unzipped)):
                         os.remove(os.path.join(_path_tmp, _seeing_raw_unzipped))
@@ -4127,6 +4175,12 @@ if __name__ == '__main__':
                                if re.search(pattern_end, s) is not None and
                                re.match('seeing_', s) is not None]
                 # print(date_seeing)
+                # for each observation, count number of fits files with data:
+                date_seeing_num_fits = [np.count_nonzero([s in df for df in date_files]) for s in date_seeing]
+                # print(date_seeing_num_fits)
+                # stack with obs names:
+                date_seeing = zip(date_seeing, date_seeing_num_fits)
+                # print(date_seeing)
                 # for each source name see if there's an entry in the database
                 for obs in date_obs:
                     print('processing {:s}'.format(obs))
@@ -4198,7 +4252,8 @@ if __name__ == '__main__':
                     # insert date into aux database:
                     result = coll_aux.insert_one({'_id': date,
                                                   'seeing': {'done': False,
-                                                             'frames': [[k, None, None, None] for k in date_seeing],
+                                                             'frames': [[k[0], None, None, None, None, None, None]
+                                                                        for k in date_seeing],
                                                              'retries': 0,
                                                              'last_modified': utc_now()},
                                                   'contrast_curve': {'done': False,
@@ -4211,8 +4266,7 @@ if __name__ == '__main__':
                 # make joint plots to display on the website
                 # do that once a day*1.5 or so
                 status_ok = check_aux(_config=config, _logger=logger, _coll=coll, _coll_aux=coll_aux, _date=date,
-                                      _seeing_frames=[[k, None, None, None, None, None] for k in date_seeing],
-                                      _n_days=1.5)
+                                      _seeing_frames=date_seeing, _n_days=1.5)
                 if not status_ok:
                     logger.error('Checking summaries failed for {:s}'.format(date))
 
