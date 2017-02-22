@@ -1915,7 +1915,7 @@ def Strehl_calculator(image_data, _Strehl_factor, _plate_scale, _boxsize):
 
     max_inds = np.where(box_roboao == np.max(box_roboao))
 
-    centroid = Star(max_inds[1][0], max_inds[0][0], box_roboao)
+    centroid = Star(max_inds[0][0], max_inds[1][0], box_roboao)
     FWHM, FWHM_x, FWHM_y = centroid.fwhm
     fwhm_arcsec = FWHM * _plate_scale
     # print(FWHM, FWHM_x, FWHM_y)
