@@ -1745,7 +1745,7 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
         # extract sources
         sew = sewpy.SEW(params=["X_IMAGE", "Y_IMAGE", "XPEAK_IMAGE", "YPEAK_IMAGE",
                                 "A_IMAGE", "B_IMAGE", "FWHM_IMAGE", "FLAGS"],
-                        config={"DETECT_MINAREA": 10, "PHOT_APERTURES": "10", 'DETECT_THRESH': '5.0'},
+                        config={"DETECT_MINAREA": 8, "PHOT_APERTURES": "10", 'DETECT_THRESH': '5.0'},
                         sexpath="sex")
 
         out = sew(os.path.join(_path, _fits_name))
@@ -1787,23 +1787,17 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
             x = out['table']['YPEAK_IMAGE'][best_score]
             y = out['table']['XPEAK_IMAGE'][best_score]
             x, y = map(int, [x, y])
-            scidata_cropped = scidata[x - _win: x + _win + 1,
-                                      y - _win: y + _win + 1]
         else:
             if _win is None:
                 _win = 100
             # use a simple max instead:
             x, y = np.unravel_index(scidata.argmax(), scidata.shape)
             x, y = map(int, [x, y])
-            scidata_cropped = scidata[x - _win: x + _win + 1,
-                                      y - _win: y + _win + 1]
     elif _method == 'max':
         if _win is None:
             _win = 100
         x, y = np.unravel_index(scidata.argmax(), scidata.shape)
         x, y = map(int, [x, y])
-        scidata_cropped = scidata[x - _win: x + _win + 1,
-                                  y - _win: y + _win + 1]
     elif _method == 'shifts.txt':
         if _win is None:
             _win = 100
@@ -1812,8 +1806,6 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
             x *= 2.0
             y *= 2.0
         x, y = map(int, [x, y])
-        scidata_cropped = scidata[x - _win: x + _win + 1,
-                                  y - _win: y + _win + 1]
     elif _method == 'frames.txt':
         if _win is None:
             _win = 100
@@ -1822,8 +1814,6 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
             x *= 2.0
             y *= 2.0
         x, y = map(int, [x, y])
-        scidata_cropped = scidata[x - _win: x + _win + 1,
-                                  y - _win: y + _win + 1]
     elif _method == 'pipeline_settings.txt':
         if _win is None:
             _win = 100
@@ -1832,17 +1822,26 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
             x *= 2.0
             y *= 2.0
         x, y = map(int, [x, y])
-        scidata_cropped = scidata[x - _win: x + _win + 1,
-                                  y - _win: y + _win + 1]
     elif _method == 'manual' and _x is not None and _y is not None:
         if _win is None:
             _win = 100
         x, y = _x, _y
         x, y = map(int, [x, y])
-        scidata_cropped = scidata[x - _win: x + _win + 1,
-                                  y - _win: y + _win + 1]
     else:
         raise Exception('unrecognized trimming method.')
+
+    # out of the frame? fix that!
+    if x - _win < 0:
+        _win -= abs(x - _win)
+    if x + _win + 1 >= scidata.shape[0]:
+        _win -= abs(scidata.shape[0] - x - _win - 1)
+    if y - _win < 0:
+        _win -= abs(y - _win)
+    if y + _win + 1 >= scidata.shape[1]:
+        _win -= abs(scidata.shape[1] - y - _win - 1)
+
+    scidata_cropped = scidata[x - _win: x + _win + 1,
+                              y - _win: y + _win + 1]
 
     return scidata_cropped, int(x), int(y)
 
