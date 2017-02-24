@@ -3504,130 +3504,156 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
                                   for _ss in _s]) for _s in _seeing_raws]
                 time_tag = max(time_tags)
                 time_tag = time_tag.replace(tzinfo=pytz.utc)
+
                 # not done or new files appeared in the raw directory
                 if (not _select['seeing']['done'] or (time_tag - last_modified).total_seconds() > 1.0) and \
                         (_select['seeing']['retries'] <= _config['max_pipelining_retries']):
 
-                        # unbzip source file(s):
-                        lbunzip2(_path_in=_path_seeing, _files=list(chain.from_iterable(_seeing_raws)),
-                                 _path_out=_path_tmp, _keep=True, _v=True)
+                    # unbzip source file(s):
+                    lbunzip2(_path_in=_path_seeing, _files=list(chain.from_iterable(_seeing_raws)),
+                             _path_out=_path_tmp, _keep=True, _v=True)
 
-                        seeing_plot = []
-                        for ii, _obs in enumerate(_obsz):
-                            print('processing {:s}'.format(_obs))
-                            # this returns datetime, seeing in " and in pix, and used filter:
-                            _date_utc, seeing, _, _filt, seeing_x, seeing_y, _exp = \
-                                process_seeing(_path_in=_path_tmp, _seeing_frames=_obs,
-                                               _path_calib=_path_calib, _path_out=_path_out,
-                                               _plate_scale=plate_scale,
-                                               _fit_model=_config['seeing']['fit_model'],
-                                               _box_size=_config['seeing']['win'])
-                            if seeing is not None:
-                                seeing_plot.append([_date_utc, seeing, _filt, _exp])
-                            _seeing_data[ii][1] = _date_utc
-                            _seeing_data[ii][2] = _filt
-                            _seeing_data[ii][3] = seeing
-                            _seeing_data[ii][4] = seeing_x
-                            _seeing_data[ii][5] = seeing_y
-                            _seeing_data[ii][6] = _exp
+                    seeing_plot = []
+                    for ii, _obs in enumerate(_obsz):
+                        print('processing {:s}'.format(_obs))
+                        # this returns datetime, seeing in " and in pix, and used filter:
+                        _date_utc, seeing, _, _filt, seeing_x, seeing_y, _exp = \
+                            process_seeing(_path_in=_path_tmp, _seeing_frames=_obs,
+                                           _path_calib=_path_calib, _path_out=_path_out,
+                                           _plate_scale=plate_scale,
+                                           _fit_model=_config['seeing']['fit_model'],
+                                           _box_size=_config['seeing']['win'])
+                        if seeing is not None:
+                            seeing_plot.append([_date_utc, seeing, _filt, _exp])
+                        _seeing_data[ii][1] = _date_utc
+                        _seeing_data[ii][2] = _filt
+                        _seeing_data[ii][3] = seeing
+                        _seeing_data[ii][4] = seeing_x
+                        _seeing_data[ii][5] = seeing_y
+                        _seeing_data[ii][6] = _exp
 
-                        # generate summary plot for the whole night:
-                        if len(seeing_plot) > 0:
-                            seeing_plot = np.array(seeing_plot)
-                            # sort by time stamp:
-                            seeing_plot = seeing_plot[seeing_plot[:, 0].argsort()]
+                    # generate summary plot for the whole night:
+                    if len(seeing_plot) > 0:
+                        seeing_plot = np.array(seeing_plot)
+                        # sort by time stamp:
+                        seeing_plot = seeing_plot[seeing_plot[:, 0].argsort()]
 
-                            # filter colors on the plot:
-                            filter_colors = {'lp600': plt.cm.Blues(0.82),
-                                             'Sg': plt.cm.Greens(0.7),
-                                             'Sr': plt.cm.Reds(0.7),
-                                             'Si': plt.cm.Oranges(0.7),
-                                             'Sz': plt.cm.Oranges(0.5)}
+                        # filter colors on the plot:
+                        filter_colors = {'lp600': plt.cm.Blues(0.82),
+                                         'Sg': plt.cm.Greens(0.7),
+                                         'Sr': plt.cm.Reds(0.7),
+                                         'Si': plt.cm.Oranges(0.7),
+                                         'Sz': plt.cm.Oranges(0.5)}
 
-                            plt.close('all')
-                            fig = plt.figure('Seeing data for {:s}'.format(_date), figsize=(8, 3), dpi=200)
-                            ax = fig.add_subplot(111)
+                        plt.close('all')
+                        fig = plt.figure('Seeing data for {:s}'.format(_date), figsize=(8, 3), dpi=200)
+                        ax = fig.add_subplot(111)
 
-                            # all filters used that night:
-                            filters_used = set(seeing_plot[:, 2])
+                        # all filters used that night:
+                        filters_used = set(seeing_plot[:, 2])
 
-                            # plot different filters in different colors
-                            for filter_used in filters_used:
-                                fc = filter_colors[filter_used] if filter_used in filter_colors else plt.cm.Greys(0.7)
+                        # plot different filters in different colors
+                        for filter_used in filters_used:
+                            fc = filter_colors[filter_used] if filter_used in filter_colors else plt.cm.Greys(0.7)
 
-                                # mask = seeing_plot[:, 2] == filter_used
+                            # mask = seeing_plot[:, 2] == filter_used
 
-                                # short exposures:
-                                mask = np.all(np.vstack((seeing_plot[:, 2] == filter_used,
-                                                         seeing_plot[:, 3] <= 15.0)), axis=0)
-                                # print(filter_used, mask)
-                                if np.count_nonzero(mask) > 0:
-                                    ax.plot(seeing_plot[mask, 0], seeing_plot[mask, 1], '.',
-                                            c=fc, markersize=8, label='{:s}, short exp'.format(filter_used))
+                            # short exposures:
+                            mask = np.all(np.vstack((seeing_plot[:, 2] == filter_used,
+                                                     seeing_plot[:, 3] <= 15.0)), axis=0)
+                            # print(filter_used, mask)
+                            if np.count_nonzero(mask) > 0:
+                                ax.plot(seeing_plot[mask, 0], seeing_plot[mask, 1], '.',
+                                        c=fc, markersize=8, label='{:s}, short exp'.format(filter_used))
 
-                                # long exposures:
-                                mask = np.all(np.vstack((seeing_plot[:, 2] == filter_used,
-                                                         seeing_plot[:, 3] > 15.0)), axis=0)
-                                # print(filter_used, mask)
-                                if np.count_nonzero(mask) > 0:
-                                    ax.plot(seeing_plot[mask, 0], seeing_plot[mask, 1], '.',
-                                            c=fc, markersize=12, label='{:s}, long exp'.format(filter_used))
+                            # long exposures:
+                            mask = np.all(np.vstack((seeing_plot[:, 2] == filter_used,
+                                                     seeing_plot[:, 3] > 15.0)), axis=0)
+                            # print(filter_used, mask)
+                            if np.count_nonzero(mask) > 0:
+                                ax.plot(seeing_plot[mask, 0], seeing_plot[mask, 1], '.',
+                                        c=fc, markersize=12, label='{:s}, long exp'.format(filter_used))
 
-                            ax.set_ylabel('Seeing, arcsec')  # , fontsize=18)
-                            ax.grid(linewidth=0.5)
+                        ax.set_ylabel('Seeing, arcsec')  # , fontsize=18)
+                        ax.grid(linewidth=0.5)
 
-                            # evaluate estimators
-                            try:
-                                # make a robust fit to seeing data for visual reference
-                                t_seeing_plot = np.array([(_t - seeing_plot[0, 0]).total_seconds()
-                                                          for _t in seeing_plot[:, 0]])
-                                t_seeing_plot = np.expand_dims(t_seeing_plot, axis=1)
-                                estimators = [('RANSAC', linear_model.RANSACRegressor()), ]
-                                for name, estimator in estimators:
-                                    model = make_pipeline(PolynomialFeatures(degree=5), estimator)
-                                    model.fit(t_seeing_plot, seeing_plot[:, 1])
-                                    y_plot = model.predict(t_seeing_plot)
-                                    # noinspection PyUnboundLocalVariable
-                                    ax.plot(seeing_plot[:, 0], y_plot, '--', c=plt.cm.Blues(0.4),
-                                            linewidth=1, label='Robust {:s} fit'.format(name), clip_on=True)
-                            except Exception as _e:
-                                print(_e)
-                                traceback.print_exc()
+                        try:
+                            # make a robust fit to seeing data for visual reference
+                            t_seeing_plot = np.array([(_t - seeing_plot[0, 0]).total_seconds()
+                                                      for _t in seeing_plot[:, 0]])
+                            t_seeing_plot = np.expand_dims(t_seeing_plot, axis=1)
+                            estimators = [('RANSAC', linear_model.RANSACRegressor()), ]
+                            for name, estimator in estimators:
+                                model = make_pipeline(PolynomialFeatures(degree=5), estimator)
+                                model.fit(t_seeing_plot, seeing_plot[:, 1])
+                                y_plot = model.predict(t_seeing_plot)
+                                # noinspection PyUnboundLocalVariable
+                                ax.plot(seeing_plot[:, 0], y_plot, '--', c=plt.cm.Blues(0.4),
+                                        linewidth=1, label='Robust {:s} fit'.format(name), clip_on=True)
+                        except Exception as _e:
+                            print(_e)
+                            traceback.print_exc()
 
-                            myFmt = mdates.DateFormatter('%H:%M')
-                            ax.xaxis.set_major_formatter(myFmt)
-                            fig.autofmt_xdate()
+                        myFmt = mdates.DateFormatter('%H:%M')
+                        ax.xaxis.set_major_formatter(myFmt)
+                        fig.autofmt_xdate()
 
-                            # make sure our 'robust' fit didn't spoil the scale:
-                            ax.set_ylim([np.min(seeing_plot[:, 1]) * 0.9, np.max(seeing_plot[:, 1]) * 1.1])
-                            dt = datetime.timedelta(seconds=(seeing_plot[-1, 0] -
-                                                             seeing_plot[0, 0]).total_seconds() * 0.05)
-                            ax.set_xlim([seeing_plot[0, 0] - dt, seeing_plot[-1, 0] + dt])
+                        # make sure our 'robust' fit didn't spoil the scale:
+                        ax.set_ylim([np.min(seeing_plot[:, 1]) * 0.9, np.max(seeing_plot[:, 1]) * 1.1])
+                        dt = datetime.timedelta(seconds=(seeing_plot[-1, 0] -
+                                                         seeing_plot[0, 0]).total_seconds() * 0.05)
+                        ax.set_xlim([seeing_plot[0, 0] - dt, seeing_plot[-1, 0] + dt])
 
-                            # add legend:
-                            ax.legend(loc='best', numpoints=1, fancybox=True, prop={'size': 6})
+                        # add legend:
+                        ax.legend(loc='best', numpoints=1, fancybox=True, prop={'size': 6})
 
-                            plt.tight_layout()
+                        plt.tight_layout()
 
-                            # plt.show()
-                            f_seeing_plot = os.path.join(_path_out, 'seeing.{:s}.png'.format(_date))
-                            fig.savefig(f_seeing_plot, dpi=300)
+                        # plt.show()
+                        f_seeing_plot = os.path.join(_path_out, 'seeing.{:s}.png'.format(_date))
+                        fig.savefig(f_seeing_plot, dpi=300)
 
+                    # update database record:
+                    _coll_aux.update_one(
+                        {'_id': _date},
+                        {
+                            '$set': {
+                                'seeing.done': True,
+                                'seeing.frames': _seeing_data,
+                                'seeing.last_modified': time_tag
+                            },
+                            '$inc': {
+                                'seeing.retries': 1
+                            }
+                        }
+                    )
+                    _logger.info('Successfully generated seeing summary for {:s}'.format(_date))
+
+                    # TODO: get all observations for this UTC day, insert seeing values: median and closest in time
+                    seeing_mean = np.mean(seeing_plot[:, 1])
+                    seeing_median = np.median(seeing_plot[:, 1])
+
+                    _obs_cursor = _coll.find({'date_utc': {'$gte': datetime.datetime.strptime(_date, '%Y%m%d'),
+                                                           '$lt': datetime.datetime.strptime(_date, '%Y%m%d') +
+                                                           datetime.timedelta(days=1)}})
+
+                    for _obs in _obs_cursor.sort([('date_utc', -1)]):
+                        # find closest seeing measurement in time:
+                        seeing_nearest_index = np.argmin(np.abs(_obs['date_utc'] - seeing_plot[:, 0]))
                         # update database record:
-                        _coll_aux.update_one(
-                            {'_id': _date},
+                        _coll.update_one(
+                            {'_id': _obs['_id']},
                             {
                                 '$set': {
-                                    'seeing.done': True,
-                                    'seeing.frames': _seeing_data,
-                                    'seeing.last_modified': time_tag
-                                },
-                                '$inc': {
-                                    'seeing.retries': 1
+                                    'seeing.median': seeing_median,
+                                    'seeing.mean': seeing_mean,
+                                    'seeing.nearest': [seeing_plot[seeing_nearest_index, 0],
+                                                       seeing_plot[seeing_nearest_index, 1]],
+                                    'seeing.last_modified': utc_now()
                                 }
                             }
                         )
-                        _logger.error('Successfully generated seeing summary for {:s}'.format(_date))
+                        _logger.info('Successfully inserted seeing info for {:s}'.format(_obs))
 
             except Exception as _e:
                 print(_e)
@@ -3646,6 +3672,26 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
                             }
                         }
                     )
+
+                    # update database record for each science observation on that day:
+                    _obs_cursor = _coll.find({'date_utc': {'$gte': datetime.datetime.strptime(_date, '%Y%m%d'),
+                                                           '$lt': datetime.datetime.strptime(_date, '%Y%m%d') +
+                                                                  datetime.timedelta(days=1)}})
+
+                    for _obs in _obs_cursor.sort([('date_utc', -1)]):
+                        _coll.update_one(
+                            {'_id': _obs['_id']},
+                            {
+                                '$set': {
+                                    'seeing.median': None,
+                                    'seeing.mean': None,
+                                    'seeing.nearest': None,
+                                    'seeing.last_modified': utc_now()
+                                }
+                            }
+                        )
+                        _logger.info('Successfully inserted seeing info for {:s}'.format(_obs))
+
                     # clean up stuff
                     seeing_summary_plot = os.path.join(_path_out, 'seeing.{:s}.png'.format(_date))
                     if os.path.exists(seeing_summary_plot):
