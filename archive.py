@@ -213,7 +213,7 @@ class Star(object):
         model_dict = dict(zip(self.model().param_names, self.model().parameters))
         if self.model_type == self._MOFFAT2D:
             gamma, alpha = [model_dict[ii] for ii in ("gamma_0", "alpha_0")]
-            FWHM = 2. * gamma * np.sqrt(2 ** (1/alpha) -1)
+            FWHM = 2. * gamma * np.sqrt(2 ** (1/alpha) - 1)
             FWHM_x, FWHM_y = None, None
         elif self.model_type == self._GAUSSIAN2D:
             sigma_x, sigma_y = [model_dict[ii] for ii in ("x_stddev_0", "y_stddev_0")]
