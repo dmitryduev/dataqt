@@ -143,7 +143,10 @@ if __name__ == '__main__':
         stop = datetime.datetime.utcnow()
 
         date_tcs_upgrade = datetime.datetime(2016, 10, 1)
-        date_good_data = datetime.datetime(2017, 2, 22)
+        date_good_data = datetime.datetime(2017, 2, 21, 10, 0, 0)
+
+        # get and plot only new (good-ish) stuff:
+        start = date_good_data
 
         select_aux = coll_aux.find({'_id': {'$gte': start.strftime('%Y%m%d'), '$lt': stop.strftime('%Y%m%d')}})
 
@@ -189,6 +192,8 @@ if __name__ == '__main__':
         # query['filter'] = 'Si'
 
         query['seeing.median'] = {'$ne': None}
+
+        query['date_utc'] = {'$gte': start, '$lt': stop}
 
         # consider reliable Strehls only:
         # query['pipelined.automated.strehl.flag'] = {'$eq': 'OK'}
