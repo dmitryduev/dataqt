@@ -8,6 +8,9 @@ from __future__ import print_function
 from gevent import monkey
 monkey.patch_all()
 
+import matplotlib
+matplotlib.use('Agg')
+
 import os
 from pymongo import MongoClient
 import json
@@ -582,7 +585,7 @@ def get_vo_image():
                         image_url = [image.getdataurl() for image in previews
                                      if image.title == survey + survey_filter[survey]][0]
 
-                        print(image_url)
+                        # print(image_url)
 
                         _file = StringIO(urllib2.urlopen(image_url).read())
                         survey_image = np.array(Image.open(_file))
