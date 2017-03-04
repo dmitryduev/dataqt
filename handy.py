@@ -4,6 +4,7 @@ from pymongo import MongoClient
 import inspect
 import ConfigParser
 import datetime
+import calendar
 import argparse
 import pyprind
 import numpy as np
@@ -138,15 +139,26 @@ if __name__ == '__main__':
 
         # FIXME: YOUR CODE HERE!
 
-        # get aux data
-        start = datetime.datetime(2015, 10, 1)
-        stop = datetime.datetime.utcnow()
+        ''' filter wavelengths to scale seeing '''
+        # seeing beta scales with lambda as follows: beta_2 = beta_1 * (lambda_1/lambda_2)**0.2
+        # use central lambdas:
+        filter_lambdas = {'Si': 763.0, 'Sz': 905.0, 'Sr': 622.0, 'Sg': 475.0, 'lp600': 770.0, 'c': 700.0}
+        # scale factors to 500 nm:
+        scale_factors = {f: (filter_lambdas[f]/500.0)**0.2 for f in filter_lambdas}
 
+        ''' get aux data '''
+
+        date_first_KP_light = datetime.datetime(2015, 12, 17)
         date_tcs_upgrade = datetime.datetime(2016, 10, 1)
         date_good_data = datetime.datetime(2017, 2, 21, 10, 0, 0)
+        date_dec_amp_fixed = datetime.datetime(2017, 3, 1, 0, 0, 0)
+
+        start = date_first_KP_light
+        stop = datetime.datetime.utcnow()
 
         # get and plot only new (good-ish) stuff:
-        start = date_good_data
+        # start = date_good_data
+        # stop = datetime.datetime.utcnow()
 
         select_aux = coll_aux.find({'_id': {'$gte': start.strftime('%Y%m%d'), '$lt': stop.strftime('%Y%m%d')}})
 
@@ -160,15 +172,18 @@ if __name__ == '__main__':
                 bar.update(iterations=1)
                 for frame in ob['seeing']['frames']:
                     if None not in frame:
-                        data_aux.append([frame[1]] + frame[3:])
+                        # data_aux.append([frame[1]] + frame[3:])
+                        scaled_seeing = [frame[3]*scale_factors[frame[2]], frame[4]*scale_factors[frame[2]],
+                                         frame[5] * scale_factors[frame[2]]]
+                        data_aux.append([frame[1]] + scaled_seeing + [frame[6]])
 
             data_aux = np.array(data_aux)
             # print(data_aux)
 
-            # consider only measurements below 3 arc seconds:
-            mask_avg = data_aux[:, 1] < 3.0
-            mask_x = data_aux[:, 2] < 3.0
-            mask_y = data_aux[:, 3] < 3.0
+            # consider only measurements below 3 and above 0.5 arc seconds:
+            mask_avg = np.all(np.vstack((data_aux[:, 1] > 0.5, data_aux[:, 1] < 3.0)), axis=0)
+            mask_x = np.all(np.vstack((data_aux[:, 2] > 0.5, data_aux[:, 2] < 3.0)), axis=0)
+            mask_y = np.all(np.vstack((data_aux[:, 3] > 0.5, data_aux[:, 3] < 3.0)), axis=0)
 
             print('median avg seeing: ', np.median(data_aux[mask_avg, 1]))
             print('median x seeing: ', np.median(data_aux[mask_x, 2]))
@@ -183,8 +198,20 @@ if __name__ == '__main__':
             #                            stacked=True, fill=False)
             # n, bins, patches = ax.hist(data_aux[mask_y, 3], bins=50, normed=1, histtype='step',
             #                            stacked=True, fill=False)
-            ax.set_xlabel('Seeing [arc seconds]')
+
+            # add percentiles:
+            # median:
+            median_seeing = np.median(data_aux[mask_avg, 1])
+            q1_seeing = np.percentile(data_aux[mask_avg, 1], 25)
+            q3_seeing = np.percentile(data_aux[mask_avg, 1], 75)
+            plt.axvline(x=q1_seeing, label='25%: {:.2f}\"'.format(q1_seeing), color=plt.cm.Set1(0))
+            plt.axvline(x=median_seeing, label='median: {:.2f}\"'.format(median_seeing), color=plt.cm.Set1(1))
+            plt.axvline(x=q3_seeing, label='75%: {:.2f}\"'.format(q3_seeing), color=plt.cm.Set1(2))
+
+            ax.set_xlabel('Seeing scaled to 500 nm [arc seconds]')
             ax.set_ylabel('Normalized counts')
+            ax.grid(linewidth=0.5)
+            ax.legend(loc='best', fancybox=True, prop={'size': 10})
 
         # dict to store query to be executed on the main collection (with obs data):
         query = dict()
@@ -195,15 +222,22 @@ if __name__ == '__main__':
 
         query['date_utc'] = {'$gte': start, '$lt': stop}
 
+        # exclude planetary data:
+        query['science_program.program_id'] = {'$ne': '24'}
+
+        # azimuth and elevation range:
+        query['coordinates.azel.0'] = {'$gte': 0 * np.pi / 180.0, '$lte': 360 * np.pi / 180.0}
+        query['coordinates.azel.1'] = {'$gte': 0 * np.pi / 180.0, '$lte': 90 * np.pi / 180.0}
+
         # consider reliable Strehls only:
-        # query['pipelined.automated.strehl.flag'] = {'$eq': 'OK'}
+        query['pipelined.automated.strehl.flag'] = {'$eq': 'OK'}
 
         # execute query:
         if len(query) > 0:
             # print('executing query:\n{:s}'.format(query))
             select = coll.find(query)
 
-            print('total reliable Strehl measurements: ', select.count())
+            print('total reliable Strehl measurements:', select.count())
 
             data = []
 
@@ -212,23 +246,111 @@ if __name__ == '__main__':
             for ob in select:
                 # print('matching:', ob['_id'])
                 bar.update(iterations=1)
-                data.append([ob['_id'], ob['date_utc'], ob['filter'], ob['seeing']['nearest'][1],
+                data.append([ob['_id'], ob['date_utc'], ob['filter'],
+                             ob['seeing']['nearest'][0], ob['seeing']['nearest'][1]*scale_factors[ob['filter']],
                              ob['pipelined']['automated']['strehl']['ratio_percent'],
                              ob['pipelined']['automated']['pca']['contrast_curve']])
 
             data = np.array(data)
 
-            print('median Strehl: ', np.median(data[:, 4]))
+            print('median Strehl: ', np.median(data[:, 5]))
 
-            # fig2 = plt.figure('seeing hist')
-            # ax2 = fig2.add_subplot(111)
-            #
-            # # the histogram of the seeing vs strehl data
-            # n, bins, patches = ax2.hist(data[:, 3], bins=50, normed=1)
+            fig2 = plt.figure('seeing hist for science obsevations')
+            ax2 = fig2.add_subplot(111)
 
-            fig3 = plt.figure('strehl vs seeing')
+            # the histogram of the seeing vs strehl data
+            # exclude data taken more than 3 minutes before/after corresponding science observations:
+            mask_real_close = np.abs(data[:, 3] - data[:, 1]) < datetime.timedelta(seconds=60*3)
+            n, bins, patches = ax2.hist(data[mask_real_close, 4], bins=50, normed=1)
 
-            plot_new_good_data = False
+            # add percentiles:
+            # median:
+            median_seeing = np.median(data[mask_real_close, 4])
+            q1_seeing = np.percentile(data[mask_real_close, 4], 25)
+            q3_seeing = np.percentile(data[mask_real_close, 4], 75)
+            print('For the selected data:')
+            print('median: {:.2f}", 25%: {:.2f}", 75% {:.2f}"'.format(median_seeing, q1_seeing, q3_seeing))
+            plt.axvline(x=q1_seeing, label='25%: {:.2f}\"'.format(q1_seeing), color=plt.cm.Pastel1(0))
+            plt.axvline(x=median_seeing, label='median: {:.2f}\"'.format(median_seeing), color=plt.cm.Pastel1(1))
+            plt.axvline(x=q3_seeing, label='75%: {:.2f}\"'.format(q3_seeing), color=plt.cm.Pastel1(2))
+
+            ax2.set_xlabel('Seeing scaled to 500 nm [arc seconds]')
+            ax2.set_ylabel('Normalized counts')
+            # ax2.grid(linewidth=0.5)
+            ax2.legend(loc='best', fancybox=True, prop={'size': 10})
+
+            ''' more in-depth seeing '''
+            total_nights = int((stop - start).days)
+            print('total nights: {:d}'.format(total_nights))
+
+            nights_with_seeing_data = sorted(list(set([d.date() for d in data[mask_real_close, 1]])))
+            print('nights with seeing data: {:d}'.format(len(nights_with_seeing_data)))
+
+            nightly_seeing = []
+            for night in nights_with_seeing_data:
+                data_night = [d.date() == night for d in data[:, 1]]
+                mask_night_sci_seeing_meas = np.all(np.vstack((data_night, mask_real_close)), axis=0)
+
+                seeing_night_median = np.median(data[mask_night_sci_seeing_meas, 4])
+                nightly_seeing.append(seeing_night_median)
+            nightly_seeing = np.array(nightly_seeing)
+
+            # FIXME: switch
+            plot_seeing_vs_time = False
+
+            if plot_seeing_vs_time:
+                fig21 = plt.figure('Seeing vs time')
+                ax21 = fig21.add_subplot(111)
+                ax21.plot(nights_with_seeing_data, nightly_seeing, '.', alpha=0.3, marker='o', markersize=4)
+                ax21.grid(linewidth=0.5)
+
+                # monthly violin plots:
+                fig22 = plt.figure('Seeing vs month')
+                ax22 = fig22.add_subplot(111)
+                months = sorted(list(set([d.strftime('%Y%m') for d in nights_with_seeing_data])))
+                months_ticks = sorted(list(set([d.strftime('%Y-%m') for d in nights_with_seeing_data])))
+
+                violin = []
+                print(months)
+                for month in months:
+                    mask_month = np.array([n.strftime('%Y%m') == month for n in nights_with_seeing_data])
+                    violin.append(nightly_seeing[mask_month])
+
+                # add number of nights with data to ticks:
+                for ii, tick in enumerate(months_ticks):
+                    months_ticks[ii] += '\n{:d}/{:d}'.format(len(violin[ii]),
+                                                             calendar.monthrange(int(tick[:4]), int(tick[5:]))[1])
+
+                ax22.violinplot(violin, showmeans=False, showmedians=True, showextrema=True, points=100)
+                ax22.set_xticks([y+1 for y in range(len(violin))])
+                ax22.set_xticklabels(months_ticks)
+                ax22.grid(linewidth=0.5)
+
+                import seaborn as sns
+                sns.set(style='whitegrid')
+                fig23 = plt.figure('Seeing vs month violin')
+                ax23 = fig23.add_subplot(211)
+                sns.violinplot(data=violin, inner='quartile', cut=0, scale_hue=False,
+                               color='steelblue', scale='count', linewidth=1, bw=.2)
+                # sns.violinplot(data=violin, inner='quartile', cut=2,
+                #                color=plt.cm.Blues(0.5), scale='count', linewidth=1)
+                # sns.despine(left=True)
+                ax23.set_xticks([y for y in range(len(violin))])
+                ax23.set_xticklabels(months_ticks)
+                ax23.set_ylabel('Seeing, arc seconds')
+
+                # fig24 = plt.figure('Seeing vs month box')
+                ax24 = fig23.add_subplot(212)
+                sns.boxplot(data=violin, color=plt.cm.Blues(0.5), linewidth=1)
+                ax24.set_xticks([y for y in range(len(violin))])
+                ax24.set_xticklabels(months_ticks)
+                ax24.set_ylabel('Seeing, arc seconds')
+
+            ''' Strehl vs seeing '''
+            fig3 = plt.figure('Strehl vs seeing')
+
+            # FIXME: switch
+            plot_new_good_data = True
 
             if plot_new_good_data:
                 ax3 = fig3.add_subplot(121)
@@ -240,9 +362,9 @@ if __name__ == '__main__':
             for filt in filters:
                 mask_filter = np.array(data[:, 2] == filt)
 
-                print('median Strehl in {:s}: {:.1f}'.format(filt, np.median(data[mask_filter, 4])))
+                print('median Strehl in {:s}: {:.1f}'.format(filt, np.median(data[mask_filter, 5])))
 
-                ax3.plot(data[mask_filter, 3], data[mask_filter, 4], '.', alpha=0.3,
+                ax3.plot(data[mask_filter, 4], data[mask_filter, 5], '.', alpha=0.3,
                          marker='o', markersize=4, label=filt)
 
                 if plot_new_good_data:
@@ -251,7 +373,7 @@ if __name__ == '__main__':
                     # print(np.count_nonzero(mask_new_data))
                     mask_filter_new_data = np.all(np.vstack((mask_filter, mask_new_data)), axis=0)
                     # print(np.count_nonzero(mask_filter_new_data), '\n')
-                    ax3_new.plot(data[mask_filter_new_data, 3], data[mask_filter_new_data, 4], '.', alpha=0.3,
+                    ax3_new.plot(data[mask_filter_new_data, 4], data[mask_filter_new_data, 5], '.', alpha=0.3,
                                  marker='o', markersize=4, label=filt)
 
             ax3.set_xlabel('Seeing [arc seconds]')
@@ -274,8 +396,8 @@ if __name__ == '__main__':
                 cc_mean = []
 
                 for entry in data[mask_filter, :]:
-                    if entry[5] is not None and len(entry[5]) > 0:
-                        cc = np.array(entry[5])
+                    if entry[6] is not None and len(entry[6]) > 0:
+                        cc = np.array(entry[6])
                     else:
                         continue
 
