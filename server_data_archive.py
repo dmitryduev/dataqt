@@ -582,6 +582,8 @@ def get_vo_image():
                         image_url = [image.getdataurl() for image in previews
                                      if image.title == survey + survey_filter[survey]][0]
 
+                        print(image_url)
+
                         _file = StringIO(urllib2.urlopen(image_url).read())
                         survey_image = np.array(Image.open(_file))
 
