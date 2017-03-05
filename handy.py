@@ -153,11 +153,11 @@ if __name__ == '__main__':
         date_good_data = datetime.datetime(2017, 2, 21, 10, 0, 0)
         date_dec_amp_fixed = datetime.datetime(2017, 3, 1, 0, 0, 0)
 
-        start = date_first_KP_light
+        # start = date_first_KP_light
         stop = datetime.datetime.utcnow()
 
         # get and plot only new (good-ish) stuff:
-        # start = date_good_data
+        start = date_good_data
         # stop = datetime.datetime.utcnow()
 
         select_aux = coll_aux.find({'_id': {'$gte': start.strftime('%Y%m%d'), '$lt': stop.strftime('%Y%m%d')}})
@@ -249,9 +249,12 @@ if __name__ == '__main__':
                 data.append([ob['_id'], ob['date_utc'], ob['filter'],
                              ob['seeing']['nearest'][0], ob['seeing']['nearest'][1]*scale_factors[ob['filter']],
                              ob['pipelined']['automated']['strehl']['ratio_percent'],
-                             ob['pipelined']['automated']['pca']['contrast_curve']])
+                             ob['pipelined']['automated']['pca']['contrast_curve'],
+                             ob['coordinates']['azel'][1]*180/np.pi])
 
             data = np.array(data)
+
+            print('median elevation: ', np.median(data[:, 7]))
 
             print('median Strehl: ', np.median(data[:, 5]))
 
@@ -350,7 +353,7 @@ if __name__ == '__main__':
             fig3 = plt.figure('Strehl vs seeing')
 
             # FIXME: switch
-            plot_new_good_data = True
+            plot_new_good_data = False
 
             if plot_new_good_data:
                 ax3 = fig3.add_subplot(121)
