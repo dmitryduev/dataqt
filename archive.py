@@ -1961,6 +1961,7 @@ def empty_db_record():
                     },
                     'preview': {
                         'force_redo': False,
+                        'enqueued': False,
                         'done': False,
                         'retries': 0,
                         'last_modified': time_now_utc
@@ -1971,6 +1972,7 @@ def empty_db_record():
                     'strehl': {
                         'status': {
                             'force_redo': False,
+                            'enqueued': False,
                             'done': False,
                             'retries': 0
                         },
@@ -1985,11 +1987,13 @@ def empty_db_record():
                     'pca': {
                         'status': {
                             'force_redo': False,
+                            'enqueued': False,
                             'done': False,
                             'retries': 0
                         },
                         'preview': {
                             'force_redo': False,
+                            'enqueued': False,
                             'done': False,
                             'retries': 0
                         },
@@ -2003,11 +2007,13 @@ def empty_db_record():
                 'faint': {
                     'status': {
                         'force_redo': False,
+                        'enqueued': False,
                         'done': False,
                         'retries': 0
                     },
                     'preview': {
                         'force_redo': False,
+                        'enqueued': False,
                         'done': False,
                         'retries': 0,
                         'last_modified': time_now_utc
@@ -2019,6 +2025,7 @@ def empty_db_record():
                     'strehl': {
                         'status': {
                             'force_redo': False,
+                            'enqueued': False,
                             'done': False,
                             'retries': 0
                         },
@@ -2033,11 +2040,13 @@ def empty_db_record():
                     'pca': {
                         'status': {
                             'force_redo': False,
+                            'enqueued': False,
                             'done': False,
                             'retries': 0
                         },
                         'preview': {
                             'force_redo': False,
+                            'enqueued': False,
                             'done': False,
                             'retries': 0
                         },
@@ -2635,6 +2644,17 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
                             }
                         }
                     )
+                    # not enqueued any more?
+                    if not inqueue('job_faint_pipeline', _obs, path_faint):
+                        # update database entry
+                        _coll.update_one(
+                            {'_id': _obs},
+                            {
+                                '$set': {
+                                    'pipelined.faint.status.enqueued': False
+                                }
+                            }
+                        )
                     _logger.info('Updated faint pipeline entry for {:s}'.format(_obs))
                 # check on Strehl:
                 check_strehl(_config, _logger, _coll, _coll.find_one({'_id': _obs}),
@@ -2671,6 +2691,17 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
                         }
                     }
                 )
+                # successfully enqueued?
+                if not inqueue('job_faint_pipeline', _obs, path_faint):
+                    # update database entry
+                    _coll.update_one(
+                        {'_id': _obs},
+                        {
+                            '$set': {
+                                'pipelined.faint.status.enqueued': False
+                            }
+                        }
+                    )
                 _logger.debug(
                     '{:s} not (yet) processed (at least I could not find it), marking undone'.
                         format(_obs))
@@ -2708,6 +2739,18 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
                     _logger.info('put a faint pipeline job into the queue for {:s}'.format(_obs))
                     job_faint_pipeline(_config=_config, _raws_zipped=_raws_zipped, _date=_date,
                                        _obs=_obs, _path_out=path_faint)
+                    # successfully enqueued?
+                    if inqueue('job_faint_pipeline', _obs, path_faint):
+                        # update database entry
+                        _coll.update_one(
+                            {'_id': _obs},
+                            {
+                                '$set': {
+                                    'pipelined.faint.last_modified': utc_now(),
+                                    'pipelined.faint.status.enqueued': True
+                                }
+                            }
+                        )
 
     except Exception as _e:
         print(_e)
@@ -2722,7 +2765,7 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
             set_key(_logger, _coll, _obs, _key, False)
         return False
 
-        # make sure all force_redo switches are off:
+    # make sure all force_redo switches are off:
     for _key in ('pipelined.faint.status.force_redo',
                  'pipelined.faint.pca.status.force_redo',
                  'pipelined.faint.pca.preview.force_redo',
@@ -2777,6 +2820,16 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
                         }
                     }
                 )
+                if not inqueue('job_strehl', _obs, '{:s}'.format(_pipe), 'strehl'):
+                    # update database entry
+                    _coll.update_one(
+                        {'_id': _obs},
+                        {
+                            '$set': {
+                                'pipelined.{:s}.strehl.status.enqueued'.format(_pipe): False
+                            }
+                        }
+                    )
                 # reload entry from db:
                 _select = _coll.find_one({'_id': _obs})
                 _logger.info('Updated strehl entry for {:s}'.format(_obs))
@@ -2803,6 +2856,16 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
                     }
                 }
             )
+            if not inqueue('job_strehl', _obs, '{:s}'.format(_pipe), 'strehl'):
+                # update database entry
+                _coll.update_one(
+                    {'_id': _obs},
+                    {
+                        '$set': {
+                            'pipelined.{:s}.strehl.status.enqueued'.format(_pipe): False
+                        }
+                    }
+                )
             # reload entry from db:
             _select = _coll.find_one({'_id': _obs})
             _logger.info('Corrected strehl entry for {:s}'.format(_obs))
@@ -2873,6 +2936,17 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
                                _plate_scale=plate_scale, _Strehl_factor=Strehl_factor,
                                _method=_method, _drizzled=_drizzled,
                                _core_min=_config['core_min'], _halo_max=_config['halo_max'])
+                    if inqueue('job_strehl', _obs, path_out):
+                        # update database entry
+                        _coll.update_one(
+                            {'_id': _obs},
+                            {
+                                '$set': {
+                                    'pipelined.{:s}.strehl.last_modified'.format(_pipe): utc_now(),
+                                    'pipelined.{:s}.strehl.status.enqueued'.format(_pipe): True
+                                }
+                            }
+                        )
 
     except Exception as _e:
         traceback.print_exc()
@@ -2925,6 +2999,16 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe):
                             }
                         }
                     )
+                    if not inqueue('job_pca', _obs, '{:s}'.format(_pipe), 'pca'):
+                        # update database entry
+                        _coll.update_one(
+                            {'_id': _obs},
+                            {
+                                '$set': {
+                                    'pipelined.{:s}.pca.status.enqueued'.format(_pipe): False
+                                }
+                            }
+                        )
                 else:
                     # else load it
                     x, y, cc = load_cc(os.path.join(path_pca, f_cc))
@@ -2945,6 +3029,16 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe):
                             }
                         }
                     )
+                    if not inqueue('job_pca', _obs, '{:s}'.format(_pipe), 'pca'):
+                        # update database entry
+                        _coll.update_one(
+                            {'_id': _obs},
+                            {
+                                '$set': {
+                                    'pipelined.{:s}.pca.status.enqueued'.format(_pipe): False
+                                }
+                            }
+                        )
                     # reload entry from db:
                     _select = _coll.find_one({'_id': _obs})
                     _logger.info('Updated pca entry for {:s}'.format(_obs))
@@ -2968,6 +3062,16 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe):
                     }
                 }
             )
+            if not inqueue('job_pca', _obs, '{:s}'.format(_pipe), 'pca'):
+                # update database entry
+                _coll.update_one(
+                    {'_id': _obs},
+                    {
+                        '$set': {
+                            'pipelined.{:s}.pca.status.enqueued'.format(_pipe): False
+                        }
+                    }
+                )
             # reload entry from db:
             _select = _coll.find_one({'_id': _obs})
             _logger.info('Corrected PCA entry for {:s}'.format(_obs))
@@ -3041,6 +3145,17 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe):
                     job_pca(_config=_config, _path_in=path_obs, _fits_name=_fits_name, _obs=_obs,
                             _path_out=path_out, _plate_scale=plate_scale,
                             _method=_method, _x=None, _y=None, _drizzled=_drizzled)
+                    # successfully enqueued?
+                    if inqueue('job_pca', _obs, '{:s}'.format(_pipe), 'pca'):
+                        # update database entry
+                        _coll.update_one(
+                            {'_id': _obs},
+                            {
+                                '$set': {
+                                    'pipelined.{:s}.pca.status.enqueued'.format(_pipe): True
+                                }
+                            }
+                        )
 
     except Exception as _e:
         traceback.print_exc()
