@@ -153,11 +153,11 @@ if __name__ == '__main__':
         date_good_data = datetime.datetime(2017, 2, 21, 10, 0, 0)
         date_dec_amp_fixed = datetime.datetime(2017, 3, 1, 0, 0, 0)
 
-        # start = date_first_KP_light
+        start = date_first_KP_light
         stop = datetime.datetime.utcnow()
 
         # get and plot only new (good-ish) stuff:
-        start = date_good_data
+        # start = date_good_data
         # stop = datetime.datetime.utcnow()
 
         select_aux = coll_aux.find({'_id': {'$gte': start.strftime('%Y%m%d'), '$lt': stop.strftime('%Y%m%d')}})
@@ -231,6 +231,10 @@ if __name__ == '__main__':
 
         # consider reliable Strehls only:
         query['pipelined.automated.strehl.flag'] = {'$eq': 'OK'}
+
+        # discard observations marked as "zero_flux" by the automated pipeline
+        query['pipelined.automated.classified_as'] = {'$ne': 'zero_flux'}
+
 
         # execute query:
         if len(query) > 0:

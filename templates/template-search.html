@@ -526,6 +526,7 @@
                                                 {% endif %}
                                             </td>
                                             {% for key in ('automated', 'faint')%}
+                                                {# being recomputed? #}
                                                 {% set class_pipe = 'success' if
                                                         object['pipelined'][key]['status']['done'] else 'danger' %}
                                                 {% if key == 'faint' and (object['pipelined'][key]['status']['force_redo']
@@ -548,7 +549,15 @@
                                                 </td>
                                                 <td>
                                                     {% if object['pipelined'][key]['strehl']['ratio_percent'] != None %}
-                                                        {{ '%.2f' | format(object['pipelined'][key]['strehl']['ratio_percent']) }}
+                                                        {# being recomputed? #}
+                                                        {% if object['pipelined'][key]['strehl']['status']['force_redo'] or
+                                                            object['pipelined'][key]['strehl']['status']['enqueued'] %}
+                                                            <span class="label label-warning">
+                                                                {{ '%.2f' | format(object['pipelined'][key]['strehl']['ratio_percent']) }}
+                                                            </span>
+                                                        {% else %}
+                                                            {{ '%.2f' | format(object['pipelined'][key]['strehl']['ratio_percent']) }}
+                                                        {% endif %}
                                                     {% elif object['pipelined'][key]['strehl']['status']['force_redo'] or
                                                             object['pipelined'][key]['strehl']['status']['enqueued'] %}
                                                         <span class="label label-warning">None</span>
