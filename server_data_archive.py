@@ -868,13 +868,15 @@ def query_db(search_form, _coll, _program_ids, _user_id):
             print(e)
 
     # parse sliders:
-    for key in ('magnitude', 'exposure', 'azimuth', 'elevation', 'lucky_strehl', 'faint_strehl'):
+    for key in ('seeing_median', 'seeing_nearest',
+                'magnitude', 'exposure', 'azimuth', 'elevation', 'lucky_strehl', 'faint_strehl'):
         try:
             val = search_form[key]
             if len(val) > 0:
                 rng = map(float, val.split(','))
                 assert rng[0] <= rng[1], 'invalid range for {:s}'.format(key)
                 if key == 'azimuth':
+                    # not to complicate things, just ignore and don't add to query if full range is requested:
                     if rng == [0.0, 360.0]:
                         continue
                     rng[0] *= np.pi / 180.0
@@ -894,10 +896,14 @@ def query_db(search_form, _coll, _program_ids, _user_id):
                     if rng == [0.0, 100.0]:
                         continue
                     key_query = 'pipelined.faint.strehl.ratio_percent'
-                elif key == 'seeing':
+                elif key == 'seeing_nearest':
                     if rng == [0.1, 3.0]:
                         continue
-                    key_query = 'seeing.nearest'
+                    key_query = 'seeing.nearest.1'
+                elif key == 'seeing_median':
+                    if rng == [0.1, 3.0]:
+                        continue
+                    key_query = 'seeing.median'
                 elif key == 'magnitude':
                     if rng == [-6.0, 23.0]:
                         continue
