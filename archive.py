@@ -8,6 +8,9 @@
 """
 from __future__ import print_function
 
+import matplotlib
+matplotlib.use('Agg')
+
 import ConfigParser
 import argparse
 import inspect
