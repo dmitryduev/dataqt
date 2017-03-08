@@ -526,46 +526,85 @@
                                                 {% endif %}
                                             </td>
                                             {% for key in ('automated', 'faint')%}
-                                                {# being recomputed? #}
+                                                {# set up classes for color-coding the badges #}
                                                 {% set class_pipe = 'success' if
-                                                        object['pipelined'][key]['status']['done'] else 'danger' %}
+                                                object['pipelined'][key]['status']['done'] else 'danger' %}
+                                                {# being recomputed? #}
                                                 {% if key == 'faint' and (object['pipelined'][key]['status']['force_redo']
-                                                        or object['pipelined'][key]['status']['enqueued']) %}
+                                                or object['pipelined'][key]['status']['enqueued']) %}
                                                     {% set class_pipe = 'warning' %}
                                                 {% endif %}
                                                 {% set class_pipe_pca = 'success' if
-                                                        object['pipelined'][key]['pca']['status']['done'] else 'danger' %}
+                                                object['pipelined'][key]['pca']['status']['done'] else 'danger' %}
+                                                {# being recomputed? #}
                                                 {% if object['pipelined'][key]['pca']['status']['force_redo']
-                                                        or object['pipelined'][key]['pca']['status']['enqueued'] %}
+                                                or object['pipelined'][key]['pca']['status']['enqueued'] %}
                                                     {% set class_pipe_pca = 'warning' %}
                                                 {% endif %}
+
+                                                {# pipelined? #}
                                                 <td>
-                                                    <span class="label label-{{ class_pipe }}">
-                                                        {{ object['pipelined'][key]['status']['done'] }}</span>
+                                                    {# jedi master can use force to force redo! #}
+                                                    {% if user == 'admin' and key == 'faint' %}
+                                                        <span style="cursor: pointer;"
+                                                              onclick="forceRedo('{{ object['_id'] }}', '{{ key }}');">
+                                                    {% endif %}
+                                                    <span class="label label-{{ class_pipe }}" id="{{ object['_id'] }}_{{ key }}">
+                                                        {{ object['pipelined'][key]['status']['done'] }}
+                                                    </span>
+                                                    {% if user == 'admin' %}
+                                                        </span>
+                                                    {% endif %}
                                                 </td>
+                                                {# pca pipeline done? #}
                                                 <td>
-                                                    <span class="label label-{{ class_pipe_pca }}">
-                                                        {{ object['pipelined'][key]['pca']['status']['done'] }}</span>
+                                                    {# jedi master can use force to force redo! #}
+                                                    {% if user == 'admin' %}
+                                                        <span style="cursor: pointer;"
+                                                              onclick="forceRedo('{{ object['_id'] }}', '{{ key }}.pca');">
+                                                    {% endif %}
+                                                    <span class="label label-{{ class_pipe_pca }}" id="{{ object['_id'] }}_{{ key }}.pca">
+                                                        {{ object['pipelined'][key]['pca']['status']['done'] }}
+                                                    </span>
+                                                    {% if user == 'admin' %}
+                                                        </span>
+                                                    {% endif %}
                                                 </td>
+                                                {# Strehl computed? #}
                                                 <td>
+                                                    {# jedi master can use force to force redo! #}
+                                                    {% if user == 'admin' %}
+                                                        <span style="cursor: pointer;"
+                                                              onclick="forceRedo('{{ object['_id'] }}', '{{ key }}.strehl');">
+                                                    {% endif %}
                                                     {% if object['pipelined'][key]['strehl']['ratio_percent'] != None %}
                                                         {# being recomputed? #}
                                                         {% if object['pipelined'][key]['strehl']['status']['force_redo'] or
                                                             object['pipelined'][key]['strehl']['status']['enqueued'] %}
-                                                            <span class="label label-warning">
+                                                            <span class="label label-warning" id="{{ object['_id'] }}_{{ key }}.strehl">
                                                                 {{ '%.2f' | format(object['pipelined'][key]['strehl']['ratio_percent']) }}
                                                             </span>
                                                         {% else %}
-                                                            {{ '%.2f' | format(object['pipelined'][key]['strehl']['ratio_percent']) }}
+                                                            <span  id="{{ object['_id'] }}_{{ key }}.strehl">
+                                                                {{ '%.2f' | format(object['pipelined'][key]['strehl']['ratio_percent']) }}
+                                                            </span>
                                                         {% endif %}
                                                     {% elif object['pipelined'][key]['strehl']['status']['force_redo'] or
                                                             object['pipelined'][key]['strehl']['status']['enqueued'] %}
-                                                        <span class="label label-warning">None</span>
+                                                        <span class="label label-warning" id="{{ object['_id'] }}_{{ key }}.strehl">
+                                                            None
+                                                        </span>
                                                     {% else %}
-                                                        <span class="label label-danger">None</span>
+                                                        <span class="label label-danger" id="{{ object['_id'] }}_{{ key }}.strehl">
+                                                            None
+                                                        </span>
+                                                    {% endif %}
+                                                    {% if user == 'admin' %}
+                                                        </span>
                                                     {% endif %}
                                                 </td>
                                             {% endfor %}
+                                            {# obs distributed? #}
                                             <td>
                                                 {% if object['distributed']['status'] %}
                                                     <a href="/data/{{object['date_utc'].strftime('%Y%m%d')}}/{{object['_id']}}/{{object['_id']}}.tar.bz2">
@@ -574,6 +613,7 @@
                                                     <span class="label label-danger">None</span>
                                                 {% endif %}
                                             </td>
+                                            {# display modal with preview stuff #}
                                             <td>
                                                 {% if object['pipelined']['automated']['status']['done'] or
                                                         object['pipelined']['faint']['status']['done'] %}
@@ -846,6 +886,7 @@
 <script src="/static/js/moment.min.js"></script>
 <script src="/static/js/daterangepicker.js"></script>
 <script src="/static/js/bootstrap-slider.min.js"></script>
+<script src="/static/js/bootbox.js"></script>
 
 <script>
 $(document).ready(function(){
@@ -935,7 +976,7 @@ $(document).ready(function(){
     })
 </script>
 
-{# current year for solidnost'#}
+{# current year for solidnost' #}
 <script>
     $(document).ready(function() {
         var ynow = moment().format('YYYY');
@@ -1069,7 +1110,7 @@ $(function() {
         $('#2mass_h').hide();
     }
 
-    // send AJAX GET request to server to get source FITS header
+    // send AJAX GET request to server to get external VO images of the field
     function getExternalImages(source) {
         $.getJSON($SCRIPT_ROOT + '/_get_vo_image', {
             source: source
@@ -1077,11 +1118,48 @@ $(function() {
             var images = data.result;
             for (var key in images) {
                 $('#'+key).show();
-                $('#'+key+'_image').attr('src', 'data:image/png;base64,' + images[key])
+                $('#'+key+'_image').attr('src', 'data:image/png;base64,' + images[key]);
             }
         });
         return false;
     }
+
+    {% if user == 'admin' %}
+    // send AJAX GET request to server to force redo stuff
+    function forceRedo(source, pipe) {
+        bootbox.confirm({
+            title: "Force redo?",
+            message: "Do you want to force redo " + pipe + " pipeline for " + source + "?",
+            buttons: {
+                cancel: {
+                    label: '<i class="fa fa-times"></i> Cancel'
+                },
+                confirm: {
+                    label: '<i class="fa fa-check"></i> Confirm'
+                }
+            },
+            callback: function (result) {
+                // console.log('This was logged in the callback: ' + result);
+                // confirmed? send AJAX request to server:
+                if (result) {
+                    $.getJSON($SCRIPT_ROOT + '/_force_redo', {
+                        source: source,
+                        pipe: pipe
+                    }, function(status) {
+                        var enqueued = status.result;
+{#                        console.log(enqueued);#}
+{#                        console.log(enqueued['status']);#}
+                        if (enqueued['success']) {
+                            // turn badge yellow if successfully enqueued
+                            document.getElementById(source + "_" + pipe).setAttribute('class', 'label label-warning');
+                        }
+                    });
+                }
+            }
+        });
+
+    }
+    {% endif %}
 
     // Build modal with source data on-the-fly
     $('#sourceModal').on('show.bs.modal', function (event) {

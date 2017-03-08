@@ -617,6 +617,69 @@ def get_vo_image():
         return flask.jsonify(result={})
 
 
+@app.route('/_force_redo')
+@flask_login.login_required
+def force_redo():
+    """
+        Force redo a pipeline for _source_
+    :return: jsonified dictionary with the header / empty dict if failed
+    """
+    user_id = flask_login.current_user.id
+
+    # get parameters from the AJAX GET request
+    _obs = flask.request.args.get('source', 0, type=str)
+    _pipe = flask.request.args.get('pipe', 1, type=str)
+
+    if _pipe not in ('automated.pca', 'automated.strehl', 'faint', 'faint.pca', 'faint.strehl'):
+        return flask.jsonify(result={'success': False, 'status': 'bad request'})
+
+    _, _, _coll, _, _, _, _program_pi = get_db(config)
+
+    # trying to steal stuff? no toys for bad boys!
+    _program, _, _, _, _, _, _ = parse_obs_name(_obs, _program_pi)
+    if user_id != 'admin' and _program_pi[_program] != user_id:
+        # flask.abort(403)
+        return flask.jsonify(result={'success': False, 'status': 'not yours!'})
+
+    try:
+        # check that it's not being redone at the moment already:
+        go_ahead = False
+
+        _o = _coll.find_one({'_id': _obs})
+        if _pipe == 'faint':
+            go_ahead = not (_o['pipelined']['faint']['status']['force_redo'] or
+                            _o['pipelined']['faint']['status']['enqueued'])
+        else:
+            for _p in ('automated', 'faint'):
+                if _pipe == '{:s}.pca'.format(_p):
+                    go_ahead = not (_o['pipelined'][_p]['pca']['status']['force_redo'] or
+                                    _o['pipelined'][_p]['pca']['status']['enqueued'])
+                elif _pipe == '{:s}.strehl'.format(_p):
+                    go_ahead = not (_o['pipelined'][_p]['strehl']['status']['force_redo'] or
+                                    _o['pipelined'][_p]['strehl']['status']['enqueued'])
+
+        # set corresponding force_redo flag:
+        if go_ahead:
+            _status = _coll.update_one(
+                {'_id': _obs},
+                {
+                    '$set': {
+                        'pipelined.{:s}.status.force_redo'.format(_pipe): True,
+                    }
+                }
+            )
+            if _status.matched_count == 1:
+                return flask.jsonify(result={'success': True, 'status': 'successfully enqueued'})
+            # not found in the database?
+            else:
+                return flask.jsonify(result={'success': False, 'status': 'could not enqueue'})
+        else:
+            return flask.jsonify(result={'success': False, 'status': 'already enqueued'})
+    except Exception as _e:
+        print(_e)
+        return flask.jsonify(result={'success': False, 'status': 'failed to enqueue'})
+
+
 @app.route('/get_data', methods=['GET'])
 @flask_login.login_required
 def wget_script():

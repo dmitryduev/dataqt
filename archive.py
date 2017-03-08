@@ -1961,7 +1961,6 @@ def empty_db_record():
                     },
                     'preview': {
                         'force_redo': False,
-                        'enqueued': False,
                         'done': False,
                         'retries': 0,
                         'last_modified': time_now_utc
@@ -1993,7 +1992,6 @@ def empty_db_record():
                         },
                         'preview': {
                             'force_redo': False,
-                            'enqueued': False,
                             'done': False,
                             'retries': 0
                         },
@@ -2013,7 +2011,6 @@ def empty_db_record():
                     },
                     'preview': {
                         'force_redo': False,
-                        'enqueued': False,
                         'done': False,
                         'retries': 0,
                         'last_modified': time_now_utc
@@ -2046,7 +2043,6 @@ def empty_db_record():
                         },
                         'preview': {
                             'force_redo': False,
-                            'enqueued': False,
                             'done': False,
                             'retries': 0
                         },
@@ -2521,10 +2517,12 @@ def check_pipe_automated(_config, _logger, _coll, _select, _date, _obs):
             # Strehl done and ok? then proceed:
             # FIXME: _config['core_min']*0.1 this is to force PSF subtraction on "lucky-asteroids"
             # FIXME: _config['halo_max']*1.5 this is to force PSF subtraction on "lucky-asteroids"
+            # if _select['pipelined']['automated']['pca']['status']['force_redo'] or \
+            #         (_select['pipelined']['automated']['strehl']['status']['done'] and
+            #          _select['pipelined']['automated']['strehl']['core_arcsec'] > _config['core_min']*0.1 and
+            #          _select['pipelined']['automated']['strehl']['halo_arcsec'] < _config['halo_max']*1.5):
             if _select['pipelined']['automated']['pca']['status']['force_redo'] or \
-                    (_select['pipelined']['automated']['strehl']['status']['done'] and
-                     _select['pipelined']['automated']['strehl']['core_arcsec'] > _config['core_min']*0.1 and
-                     _select['pipelined']['automated']['strehl']['halo_arcsec'] < _config['halo_max']*1.5):
+                    _select['pipelined']['automated']['strehl']['status']['done']:
                 check_pca(_config, _logger, _coll, _coll.find_one({'_id': _obs}),
                           _date, _obs, _pipe='automated')
             # make preview images
@@ -3042,6 +3040,17 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe):
                     # reload entry from db:
                     _select = _coll.find_one({'_id': _obs})
                     _logger.info('Updated pca entry for {:s}'.format(_obs))
+            # make sure not marked enqueued if not in queue
+            if not inqueue('job_pca', _obs, _pipe):
+                # update database entry
+                _coll.update_one(
+                    {'_id': _obs},
+                    {
+                        '$set': {
+                            'pipelined.{:s}.pca.status.enqueued'.format(_pipe): False
+                        }
+                    }
+                )
             # (re)make preview images
             check_pca_preview(_config, _logger, _coll, _select, _date, _obs, _pipe=_pipe)
 
@@ -3062,7 +3071,7 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe):
                     }
                 }
             )
-            if not inqueue('job_pca', _obs, '{:s}'.format(_pipe), 'pca'):
+            if not inqueue('job_pca', _obs, _pipe):
                 # update database entry
                 _coll.update_one(
                     {'_id': _obs},
@@ -3146,7 +3155,7 @@ def check_pca(_config, _logger, _coll, _select, _date, _obs, _pipe):
                             _path_out=path_out, _plate_scale=plate_scale,
                             _method=_method, _x=None, _y=None, _drizzled=_drizzled)
                     # successfully enqueued?
-                    if inqueue('job_pca', _obs, '{:s}'.format(_pipe), 'pca'):
+                    if inqueue('job_pca', _obs, path_out):
                         # update database entry
                         _coll.update_one(
                             {'_id': _obs},
