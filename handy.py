@@ -154,10 +154,10 @@ if __name__ == '__main__':
         date_dec_amp_fixed = datetime.datetime(2017, 3, 1, 0, 0, 0)
 
         start = date_first_KP_light
-        stop = datetime.datetime.utcnow()
+        stop = datetime.datetime.utcnow() + datetime.timedelta(days=1)
 
         # get and plot only new (good-ish) stuff:
-        # start = date_good_data
+        start = date_good_data
         # stop = datetime.datetime.utcnow()
 
         select_aux = coll_aux.find({'_id': {'$gte': start.strftime('%Y%m%d'), '$lt': stop.strftime('%Y%m%d')}})
@@ -230,11 +230,11 @@ if __name__ == '__main__':
         query['coordinates.azel.1'] = {'$gte': 0 * np.pi / 180.0, '$lte': 90 * np.pi / 180.0}
 
         # consider reliable Strehls only:
-        query['pipelined.automated.strehl.flag'] = {'$eq': 'OK'}
+        # query['pipelined.automated.strehl.flag'] = {'$eq': 'OK'}
 
         # discard observations marked as "zero_flux" by the automated pipeline
-        query['pipelined.automated.classified_as'] = {'$ne': 'zero_flux'}
-
+        # query['pipelined.automated.classified_as'] = {'$ne': 'zero_flux'}
+        query['pipelined.automated.classified_as'] = {'$nin': ['zero_flux', 'failed', 'faint']}
 
         # execute query:
         if len(query) > 0:
@@ -334,24 +334,26 @@ if __name__ == '__main__':
                 ax22.grid(linewidth=0.5)
 
                 import seaborn as sns
-                sns.set(style='whitegrid')
-                fig23 = plt.figure('Seeing vs month violin')
-                ax23 = fig23.add_subplot(211)
-                sns.violinplot(data=violin, inner='quartile', cut=0, scale_hue=False,
-                               color='steelblue', scale='count', linewidth=1, bw=.2)
-                # sns.violinplot(data=violin, inner='quartile', cut=2,
-                #                color=plt.cm.Blues(0.5), scale='count', linewidth=1)
-                # sns.despine(left=True)
-                ax23.set_xticks([y for y in range(len(violin))])
-                ax23.set_xticklabels(months_ticks)
-                ax23.set_ylabel('Seeing, arc seconds')
+                # sns.set(style='whitegrid')
+                with sns.axes_style("whitegrid"):
+                    fig23 = plt.figure('Seeing vs month violin')
+                    ax23 = fig23.add_subplot(211)
+                    sns.violinplot(data=violin, inner='quartile', cut=0, scale_hue=False,
+                                   color=plt.cm.Blues(0.5), scale='count', linewidth=2, bw=.2)
+                    # color='steelblue'
+                    # sns.violinplot(data=violin, inner='quartile', cut=2,
+                    #                color=plt.cm.Blues(0.5), scale='count', linewidth=1)
+                    # sns.despine(left=True)
+                    ax23.set_xticks([y for y in range(len(violin))])
+                    ax23.set_xticklabels(months_ticks)
+                    ax23.set_ylabel('Seeing, arc seconds')
 
-                # fig24 = plt.figure('Seeing vs month box')
-                ax24 = fig23.add_subplot(212)
-                sns.boxplot(data=violin, color=plt.cm.Blues(0.5), linewidth=1)
-                ax24.set_xticks([y for y in range(len(violin))])
-                ax24.set_xticklabels(months_ticks)
-                ax24.set_ylabel('Seeing, arc seconds')
+                    # fig24 = plt.figure('Seeing vs month box')
+                    ax24 = fig23.add_subplot(212)
+                    sns.boxplot(data=violin, color=plt.cm.Blues(0.5), linewidth=1)
+                    ax24.set_xticks([y for y in range(len(violin))])
+                    ax24.set_xticklabels(months_ticks)
+                    ax24.set_ylabel('Seeing, arc seconds')
 
             ''' Strehl vs seeing '''
             fig3 = plt.figure('Strehl vs seeing')
@@ -362,6 +364,9 @@ if __name__ == '__main__':
             if plot_new_good_data:
                 ax3 = fig3.add_subplot(121)
                 ax3_new = fig3.add_subplot(122)
+
+                fig31 = plt.figure('Strehl vs seeing: old vs new')
+                ax31 = fig31.add_subplot(111)
             else:
                 ax3 = fig3.add_subplot(111)
 
@@ -383,6 +388,17 @@ if __name__ == '__main__':
                     ax3_new.plot(data[mask_filter_new_data, 4], data[mask_filter_new_data, 5], '.', alpha=0.3,
                                  marker='o', markersize=4, label=filt)
 
+                    # use same colors when plotted on the same plot:
+                    # baseline, = ax31.plot(data[mask_filter, 4], data[mask_filter, 5], '.', alpha=0.2,
+                    #                       marker='o', markersize=4, label=filt)
+                    # ax31.plot(data[mask_filter_new_data, 4], data[mask_filter_new_data, 5], '.', alpha=0.7,
+                    #           marker='o', markersize=5, label=filt, c=baseline.get_color())
+                    # use different colors when plotted on the same plot:
+                    ax31.plot(data[mask_filter, 4], data[mask_filter, 5], '.', alpha=0.2,
+                              marker='o', markersize=4, label=filt)
+                    ax31.plot(data[mask_filter_new_data, 4], data[mask_filter_new_data, 5], '.', alpha=0.5,
+                              marker='o', markersize=5, label=filt)
+
             ax3.set_xlabel('Seeing [arc seconds]')
             ax3.set_ylabel('Strehl ratio, %')
             ax3.legend(loc='best', numpoints=1, fancybox=True, prop={'size': 10})
@@ -391,6 +407,10 @@ if __name__ == '__main__':
                 ax3_new.set_xlabel('Seeing [arc seconds]')
                 ax3_new.set_ylabel('Strehl ratio, %')
                 ax3_new.legend(loc='best', numpoints=1, fancybox=True, prop={'size': 10})
+
+                ax31.set_xlabel('Seeing [arc seconds]')
+                ax31.set_ylabel('Strehl ratio, %')
+                ax31.legend(loc='best', numpoints=1, fancybox=True, prop={'size': 10})
 
             fig4 = plt.figure('contrast curves')
             ax4 = fig4.add_subplot(111)
@@ -422,6 +442,7 @@ if __name__ == '__main__':
                 mask_best_10p = cc_mean_val > best_10p
 
                 baseline, = ax4.plot(sep_mean, np.median(cc_mean.T, axis=1), '-', linewidth=1.9, label=filt)
+                # make sure to use the same color for the best 10% cases
                 ax4.plot(sep_mean, np.median(cc_mean.T[:, mask_best_10p], axis=1), '--', linewidth=1.2,
                          label='{:s}, best 10%'.format(filt), c=baseline.get_color())
 

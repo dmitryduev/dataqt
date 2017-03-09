@@ -1954,7 +1954,7 @@ def empty_db_record():
                 'epoch': None,
                 'radec': None,
                 'radec_str': None,
-                'radec_geojson': None,
+                # 'radec_geojson': None,
                 'azel': None
             },
             'pipelined': {
