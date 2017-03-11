@@ -311,6 +311,8 @@ if __name__ == '__main__':
                             }
                         }
                     )
+                    # reload:
+                    ob_aux = coll_aux.find_one({'_id': date_str})
                     # frames: {'obs_name': {'in_library': False, 'outdated': False,
                     #                       'failed': False, 'last_modified': datetime}
 
@@ -351,12 +353,15 @@ if __name__ == '__main__':
 
                             try:
 
-                                new_frame = ob['_id'] not in ob_aux[date_str]['psf_lib']
-                                not_done = not ob_aux[date_str]['psf_lib'][ob['_id']]['done']
-                                updated = np.abs(ob['pipelined']['automated']['last_modified'] -
-                                            ob_aux[date_str]['psf_lib'][ob['_id']]['last_modified']).total_seconds() > 60
-                                not_tried_too_many_times = ob_aux[date_str]['psf_lib'][ob['_id']]['retries'] \
-                                                                < config['max_pipelining_retries']
+                                new_frame = ob['_id'] not in ob_aux['psf_lib']
+                                not_done = (ob['_id'] in ob_aux['psf_lib']) and \
+                                           (not ob_aux['psf_lib'][ob['_id']]['done'])
+                                updated = (ob['_id'] in ob_aux['psf_lib']) and \
+                                    np.abs(ob['pipelined']['automated']['last_modified'] -
+                                            ob_aux['psf_lib'][ob['_id']]['last_modified']).total_seconds() > 60
+                                not_tried_too_many_times = (ob['_id'] in ob_aux['psf_lib']) and \
+                                                           (ob_aux['psf_lib'][ob['_id']]['retries'] \
+                                                                < config['max_pipelining_retries'])
 
                                 if new_frame or updated or (not_done and not_tried_too_many_times):
 
@@ -404,7 +409,9 @@ if __name__ == '__main__':
 
                                     if os.path.exists(os.path.join(_path, _fits_name)):
 
-                                        with open(fits.open(os.path.join(_path, _fits_name))) as _hdu:
+                                        print(os.path.join(_path, _fits_name))
+
+                                        with fits.open(os.path.join(_path, _fits_name)) as _hdu:
                                             scidata = _hdu[0].data
 
                                         _win = 100
