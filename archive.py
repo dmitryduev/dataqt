@@ -1742,7 +1742,8 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
 
     :return: image, cropped around a lock position and the lock position itself
     """
-    scidata = fits.open(os.path.join(_path, _fits_name))[0].data
+    with open(fits.open(os.path.join(_path, _fits_name))) as _hdu:
+        scidata = _hdu[0].data
 
     if _method == 'sextractor':
         # extract sources
@@ -3755,7 +3756,7 @@ def check_aux(_config, _logger, _coll, _coll_aux, _date, _seeing_frames, _n_days
                     )
                     _logger.info('Successfully generated seeing summary for {:s}'.format(_date))
 
-                    # TODO: get all observations for this UTC day, insert seeing values: median and closest in time
+                    # get all observations for this UTC day, insert seeing values: median and closest in time
                     seeing_mean = np.mean(seeing_plot[:, 1])
                     seeing_median = np.median(seeing_plot[:, 1])
 

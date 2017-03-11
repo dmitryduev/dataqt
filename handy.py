@@ -8,6 +8,10 @@ import calendar
 import argparse
 import pyprind
 import numpy as np
+import traceback
+from sklearn import linear_model
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.pipeline import make_pipeline
 
 import matplotlib
 matplotlib.use('Qt5Agg')
@@ -339,7 +343,7 @@ if __name__ == '__main__':
                     fig23 = plt.figure('Seeing vs month violin')
                     ax23 = fig23.add_subplot(211)
                     sns.violinplot(data=violin, inner='quartile', cut=0, scale_hue=False,
-                                   color=plt.cm.Blues(0.5), scale='count', linewidth=2, bw=.2)
+                                   color=plt.cm.Blues(0.5), scale='count', linewidth=1.7, bw=.2)
                     # color='steelblue'
                     # sns.violinplot(data=violin, inner='quartile', cut=2,
                     #                color=plt.cm.Blues(0.5), scale='count', linewidth=1)
@@ -374,10 +378,22 @@ if __name__ == '__main__':
             for filt in filters:
                 mask_filter = np.array(data[:, 2] == filt)
 
+                # make sure to exclude NaNs:
+                seeing_filt = np.array(data[:, 4], dtype=np.float)
+                strehl_filt = np.array(data[:, 5], dtype=np.float)
+                # print(np.min(seeing_filt), np.max(seeing_filt), np.nan in seeing_filt, np.inf in seeing_filt)
+                # print(np.min(strehl_filt), np.max(strehl_filt), np.nan in strehl_filt, np.inf in strehl_filt)
+                mask_not_a_nan = np.logical_not(np.isnan(strehl_filt))
+
+                mask_filter = np.all(np.vstack((mask_filter, mask_not_a_nan)), axis=0)
+
                 print('median Strehl in {:s}: {:.1f}'.format(filt, np.median(data[mask_filter, 5])))
 
                 ax3.plot(data[mask_filter, 4], data[mask_filter, 5], '.', alpha=0.3,
                          marker='o', markersize=4, label=filt)
+                # when there's not much data:
+                # ax3.plot(data[mask_filter, 4], data[mask_filter, 5], '.', alpha=0.4,
+                #          marker='o', markersize=5, label=filt)
 
                 if plot_new_good_data:
                     # mask_new_data = np.array(data[:, 1] > date_tcs_upgrade)
@@ -394,10 +410,30 @@ if __name__ == '__main__':
                     # ax31.plot(data[mask_filter_new_data, 4], data[mask_filter_new_data, 5], '.', alpha=0.7,
                     #           marker='o', markersize=5, label=filt, c=baseline.get_color())
                     # use different colors when plotted on the same plot:
-                    ax31.plot(data[mask_filter, 4], data[mask_filter, 5], '.', alpha=0.2,
-                              marker='o', markersize=4, label=filt)
-                    ax31.plot(data[mask_filter_new_data, 4], data[mask_filter_new_data, 5], '.', alpha=0.5,
-                              marker='o', markersize=5, label=filt)
+                    baseline_old, = ax31.plot(data[mask_filter, 4], data[mask_filter, 5], '.', alpha=0.2,
+                                              marker='o', markersize=4, label=filt)
+                    baseline_new, = ax31.plot(data[mask_filter_new_data, 4], data[mask_filter_new_data, 5],
+                                              '.', alpha=0.5, marker='o', markersize=5, label=filt)
+
+                    if False:
+                        # for better visual apprehension, make robust RANSAC fits to old/new data
+                        seeing_for_ransac_old = np.expand_dims(seeing_filt[mask_filter], axis=1)
+                        seeing_for_ransac_new = np.expand_dims(seeing_filt[mask_filter_new_data], axis=1)
+                        # seeing_for_ransac_old = data[mask_filter, 4]
+                        # seeing_for_ransac_new = data[mask_filter_new_data, 4]
+                        estimators = [('RANSAC', linear_model.RANSACRegressor()), ]
+                        for name, estimator in estimators:
+                            model = make_pipeline(PolynomialFeatures(degree=5), estimator)
+                            model.fit(seeing_for_ransac_old, np.expand_dims(strehl_filt[mask_filter], axis=0))
+                            strehl_ransac_old = model.predict(seeing_for_ransac_old)
+                            model = make_pipeline(PolynomialFeatures(degree=5), estimator)
+                            model.fit(seeing_for_ransac_new, np.expand_dims(strehl_filt[mask_filter_new_data], axis=0))
+                            strehl_ransac_new = model.predict(seeing_for_ransac_new)
+
+                            ax31.plot(data[mask_filter, 4], strehl_ransac_old, '--', c=baseline_old.get_color(),
+                                      linewidth=1, label='Robust {:s} fit'.format(name), clip_on=True)
+                            ax31.plot(data[mask_filter_new_data, 4], strehl_ransac_new, '--', c=baseline_new.get_color(),
+                                      linewidth=1, label='Robust {:s} fit'.format(name), clip_on=True)
 
             ax3.set_xlabel('Seeing [arc seconds]')
             ax3.set_ylabel('Strehl ratio, %')
@@ -455,6 +491,7 @@ if __name__ == '__main__':
             ax4.legend(loc='best', numpoints=1, fancybox=True, prop={'size': 6})
 
     except Exception as e:
+        traceback.print_exc()
         print(e)
 
     finally:
