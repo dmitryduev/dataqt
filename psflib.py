@@ -307,12 +307,7 @@ if __name__ == '__main__':
                         {'_id': date_str},
                         {
                             '$set': {
-                                'psf_lib': {
-                                    'done': False,
-                                    'retries': 0,
-                                    'frames': {},
-                                    'last_modified': datetime.datetime(2015, 9, 23)
-                                }
+                                'psf_lib': {}
                             }
                         }
                     )
@@ -339,6 +334,9 @@ if __name__ == '__main__':
                 # consider reliable Strehls only:
                 # query['pipelined.automated.strehl.flag'] = {'$eq': 'OK'}
 
+                # consider only 'done' stuff:
+                query['pipelined.automated.status.done'] = True
+
                 # discard observations marked as "zero_flux" by the automated pipeline
                 query['pipelined.automated.classified_as'] = {'$nin': ['zero_flux', 'failed']}
 
@@ -353,17 +351,51 @@ if __name__ == '__main__':
 
                             try:
 
-                                # check last_updated. if after corresponding entry in database, proceed
-                                if ob['pipelined']['automated']['status']['done'] and \
-                                        (ob['_id'] not in ob_aux[date_str]['frames'] or
-                                                 np.abs(ob['pipelined']['automated']['last_modified'] -
-                                                            ob_aux[date_str]['frames'][ob['_id']]['last_modified'])
-                                                         .total_seconds() > 60):
+                                new_frame = ob['_id'] not in ob_aux[date_str]['psf_lib']
+                                not_done = not ob_aux[date_str]['psf_lib'][ob['_id']]['done']
+                                updated = np.abs(ob['pipelined']['automated']['last_modified'] -
+                                            ob_aux[date_str]['psf_lib'][ob['_id']]['last_modified']).total_seconds() > 60
+                                not_tried_too_many_times = ob_aux[date_str]['psf_lib'][ob['_id']]['retries'] \
+                                                                < config['max_pipelining_retries']
 
-                                    if ob['_id'] not in ob_aux[date_str]['frames']:
+                                if new_frame or updated or (not_done and not_tried_too_many_times):
+
+                                    if new_frame:
                                         # init entry:
-                                        ob_aux[date_str]['frames'][ob['_id']] = {'in_library': False, 'outdated': False,
-                                          'failed': False, 'last_modified': ob['pipelined']['automated']['last_modified']}
+                                        coll_aux.update_one(
+                                            {'_id': date_str},
+                                            {
+                                                '$set': {
+                                                    'psf_lib.{:s}.done'.format(ob['_id']): False,
+                                                    'psf_lib.{:s}.in_library'.format(ob['_id']): False,
+                                                    'psf_lib.{:s}.outdated'.format(ob['_id']): False,
+                                                    'psf_lib.{:s}.failed'.format(ob['_id']): False,
+                                                    'psf_lib.{:s}.retries'.format(ob['_id']): 0,
+                                                    'psf_lib.{:s}.last_modified'.format(ob['_id']): utc_now()
+                                                }
+                                            }
+                                        )
+
+                                    elif updated:
+                                        coll_aux.update_one(
+                                            {'_id': date_str},
+                                            {
+                                                '$set': {
+                                                    'psf_lib.{:s}.done'.format(ob['_id']): False,
+                                                    'psf_lib.{:s}.outdated'.format(ob['_id']): True,
+                                                    'psf_lib.{:s}.last_modified'.format(ob['_id']): utc_now()
+                                                }
+                                            }
+                                        )
+                                    elif not_done:
+                                        coll_aux.update_one(
+                                            {'_id': date_str},
+                                            {
+                                                '$inc': {
+                                                        'psf_lib.{:s}.retries'.format(ob['_id']): 1
+                                                    }
+                                            }
+                                        )
 
                                     ''' preprocess 100p.fits, high-pass, cut '''
                                     tag = str(ob['pipelined']['automated']['classified_as'])
@@ -384,7 +416,17 @@ if __name__ == '__main__':
                                         # out of the frame? fix that!
                                         if x - _win < 0 or x + _win + 1 >= scidata.shape[0] \
                                                 or y - _win < 0 or y + _win + 1 >= scidata.shape[1]:
-                                            ob_aux[date_str]['frames'][ob['_id']]['failed'] = True
+                                            coll_aux.update_one(
+                                                {'_id': date_str},
+                                                {
+                                                    '$set': {
+                                                        'psf_lib.{:s}.done'.format(ob['_id']): False,
+                                                        'psf_lib.{:s}.outdated'.format(ob['_id']): False,
+                                                        'psf_lib.{:s}.failed'.format(ob['_id']): True,
+                                                        'psf_lib.{:s}.last_modified'.format(ob['_id']): utc_now()
+                                                    }
+                                                }
+                                            )
 
                                         _trimmed_frame = scidata[x - _win: x + _win + 1,
                                                                  y - _win: y + _win + 1]
@@ -455,6 +497,19 @@ if __name__ == '__main__':
                                         # if not (os.path.exists(_path_out)):
                                         #     os.makedirs(_path_out)
                                         # fig.savefig(os.path.join(_path_out, png_name), dpi=300)
+
+                                        # mark done:
+                                        coll_aux.update_one(
+                                            {'_id': date_str},
+                                            {
+                                                '$set': {
+                                                    'psf_lib.{:s}.failed'.format(ob['_id']): False,
+                                                    'psf_lib.{:s}.done'.format(ob['_id']): True,
+                                                    'psf_lib.{:s}.outdated'.format(ob['_id']): False,
+                                                    'psf_lib.{:s}.last_modified'.format(ob['_id']): utc_now()
+                                                }
+                                            }
+                                        )
 
                                         # TODO: this is a button to add to the web interface
                                         ''' force_redo automated.pca for all obs on that date '''
