@@ -161,7 +161,7 @@ if __name__ == '__main__':
         stop = datetime.datetime.utcnow() + datetime.timedelta(days=1)
 
         # get and plot only new (good-ish) stuff:
-        start = date_good_data
+        # start = date_good_data
         # stop = datetime.datetime.utcnow()
 
         select_aux = coll_aux.find({'_id': {'$gte': start.strftime('%Y%m%d'), '$lt': stop.strftime('%Y%m%d')}})
@@ -254,8 +254,11 @@ if __name__ == '__main__':
             for ob in select:
                 # print('matching:', ob['_id'])
                 bar.update(iterations=1)
+                # correct seeing for Zenith distance and reference to 500 nm:
                 data.append([ob['_id'], ob['date_utc'], ob['filter'],
-                             ob['seeing']['nearest'][0], ob['seeing']['nearest'][1]*scale_factors[ob['filter']],
+                             ob['seeing']['nearest'][0],
+                             ob['seeing']['nearest'][1]*scale_factors[ob['filter']] *
+                                (np.cos(np.pi/2 - ob['coordinates']['azel'][1])**0.6),
                              ob['pipelined']['automated']['strehl']['ratio_percent'],
                              ob['pipelined']['automated']['pca']['contrast_curve'],
                              ob['coordinates']['azel'][1]*180/np.pi])
