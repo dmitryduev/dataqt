@@ -1,4 +1,9 @@
 from __future__ import print_function
+
+import matplotlib
+# matplotlib.use('Qt5Agg')
+matplotlib.use('Agg')
+
 import os
 from pymongo import MongoClient
 import inspect
@@ -18,9 +23,6 @@ from sklearn import linear_model
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import make_pipeline
 
-import matplotlib
-# matplotlib.use('Qt5Agg')
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.offsetbox import AnchoredOffsetbox, AuxTransformBox, VPacker, TextArea
 from matplotlib.patches import Rectangle
