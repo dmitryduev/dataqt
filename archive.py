@@ -566,8 +566,7 @@ def job_pca(_config, _path_in, _fits_name, _obs, _path_out,
         print('running PCA pipeline for {:s}/{:s}'.format(_path_in, _fits_name))
         with fits.open(_config['pca']['path_psf_reference_library']) as _lib:
             _library = _lib[0].data
-        _library_names_short = np.genfromtxt(_config['pca']['path_psf_reference_library_short_names'],
-                                             dtype='|S')
+            _library_names_short = _lib[-1].data['obj_names']
 
         _win = _config['pca']['win']
         _sigma = _config['pca']['sigma']
@@ -712,7 +711,7 @@ def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_fact
 
     except Exception as _e:
         print(_obs, _e)
-        # traceback.print_exc()
+        traceback.print_exc()
         # x, y = 0, 0
         # core, halo = 0, 999
         # SR, FWHM = 0, 0
@@ -1742,7 +1741,7 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
 
     :return: image, cropped around a lock position and the lock position itself
     """
-    with open(fits.open(os.path.join(_path, _fits_name))) as _hdu:
+    with fits.open(os.path.join(_path, _fits_name)) as _hdu:
         scidata = _hdu[0].data
 
     if _method == 'sextractor':
@@ -2149,8 +2148,7 @@ def get_config(_abs_path=None, _config_file='config.ini'):
             raise IOError('Failed to find config file')
 
     _config = dict()
-    # planetary program number (do no crop planetary images!)
-    _config['program_num_planets'] = int(config.get('Programs', 'planets'))
+
     # path to raw data:
     _config['path_raw'] = config.get('Path', 'path_raw')
     # path to lucky-pipeline data:
@@ -2180,14 +2178,8 @@ def get_config(_abs_path=None, _config_file='config.ini'):
     _config['pca'] = dict()
     # path to PSF library:
     _config['pca']['path_psf_reference_library'] = config.get('Path', 'path_psf_reference_library')
-    _config['pca']['path_psf_reference_library_short_names'] = \
-        config.get('Path', 'path_psf_reference_library_short_names')
     # have to do it inside job_pca - otherwise will have to send hundreds of Mb
     # back and forth between redis queue and task consumer. luckily, it's pretty fast to do
-    # with fits.open(path_psf_reference_library) as _lib:
-    #     _config['pca']['psf_reference_library'] = _lib[0].data
-    # _config['pca']['psf_reference_library_short_names'] = np.genfromtxt(path_psf_reference_library_short_names,
-    #                                                              dtype='|S')
 
     _config['pca']['win'] = int(config.get('PCA', 'win'))
     _config['pca']['sigma'] = float(config.get('PCA', 'sigma'))
@@ -2822,7 +2814,7 @@ def check_strehl(_config, _logger, _coll, _select, _date, _obs, _pipe='automated
                         }
                     }
                 )
-                if not inqueue('job_strehl', _obs, '{:s}'.format(_pipe), 'strehl'):
+                if not inqueue('job_strehl', _obs, '{:s}'.format(_pipe)):
                     # update database entry
                     _coll.update_one(
                         {'_id': _obs},

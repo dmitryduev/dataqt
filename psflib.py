@@ -119,8 +119,7 @@ def get_config(_abs_path=None, _config_file='config.ini'):
             raise IOError('Failed to find config file')
 
     _config = dict()
-    # planetary program number (do no crop planetary images!)
-    _config['program_num_planets'] = int(config.get('Programs', 'planets'))
+
     # path to raw data:
     _config['path_raw'] = config.get('Path', 'path_raw')
     # path to lucky-pipeline data:
@@ -150,14 +149,8 @@ def get_config(_abs_path=None, _config_file='config.ini'):
     _config['pca'] = dict()
     # path to PSF library:
     _config['pca']['path_psf_reference_library'] = config.get('Path', 'path_psf_reference_library')
-    _config['pca']['path_psf_reference_library_short_names'] = \
-        config.get('Path', 'path_psf_reference_library_short_names')
     # have to do it inside job_pca - otherwise will have to send hundreds of Mb
     # back and forth between redis queue and task consumer. luckily, it's pretty fast to do
-    # with fits.open(path_psf_reference_library) as _lib:
-    #     _config['pca']['psf_reference_library'] = _lib[0].data
-    # _config['pca']['psf_reference_library_short_names'] = np.genfromtxt(path_psf_reference_library_short_names,
-    #                                                              dtype='|S')
 
     _config['pca']['win'] = int(config.get('PCA', 'win'))
     _config['pca']['sigma'] = float(config.get('PCA', 'sigma'))
@@ -265,16 +258,17 @@ def connect_to_db(_config):
 def remove_from_lib(_psf_library_fits, _obs):
     try:
         with fits.open(_psf_library_fits) as hdulist:
-            if len(hdulist) < 3:
+            # print(hdulist[0].data.shape)
+            if hdulist[0].data.shape[0] < 3:
                 raise Exception('Kennot remove {:s}! Must have at least five PSF in the library'.format(_obs))
 
             # get index of the frame to be removed:
             index_obs = np.argmax(hdulist[-1].data['obs_names'] == _obs)
 
             # remove from table with names:
-            hdulist[-1].remove_row(index_obs)
+            hdulist[-1].data = np.delete(hdulist[-1].data, index_obs, axis=0)
             # remove from images:
-            hdulist.pop(index_obs)
+            hdulist[0].data = np.delete(hdulist[0].data, index_obs, axis=0)
             # update library:
             hdulist.writeto(_psf_library_fits, overwrite=True)
     except Exception as _e:
@@ -284,7 +278,7 @@ def remove_from_lib(_psf_library_fits, _obs):
 
 
 def add_to_lib(_psf_library_fits, _path, _obs, _obj_name='unknown'):
-    # last HDU contains a table with obs names and short names, the rest are actual PSFs
+    # first extension HDU contains a table with obs names and short names, the first contains actual PSFs
     try:
         # get frame:
         with fits.open(_path) as f:
@@ -299,7 +293,7 @@ def add_to_lib(_psf_library_fits, _path, _obs, _obj_name='unknown'):
                                                                array=frame_names),
                                                    fits.Column(name='obj_names', format='80A',
                                                                array=frame_short_names)])
-            thdulist = fits.HDUList([fits.PrimaryHDU(frame), tbhdu])
+            thdulist = fits.HDUList([fits.PrimaryHDU([frame]), tbhdu])
             thdulist.writeto(_psf_library_fits, overwrite=True)
         else:
             # get library:
@@ -310,7 +304,7 @@ def add_to_lib(_psf_library_fits, _path, _obs, _obj_name='unknown'):
                 tbhdu.data['obj_names'][-1] = _obj_name
                 hdulist[-1] = tbhdu
                 # append frame:
-                hdulist.insert(len(hdulist)-1, fits.ImageHDU(frame))
+                hdulist[0].data = np.vstack((hdulist[0].data, [frame]))
                 # update library:
                 hdulist.writeto(_psf_library_fits, overwrite=True)
 
@@ -363,7 +357,8 @@ if __name__ == '__main__':
         client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = connect_to_db(config)
 
         # PSF library fits file name
-        psf_library_fits = os.path.join(config['path_archive'], 'psf_library.fits')
+        # psf_library_fits = os.path.join(config['path_archive'], 'psf_library.fits')
+        psf_library_fits = config['pca']['path_psf_reference_library']
 
         ''' get aux data '''
         print(config['archiving_start_date'])
@@ -410,7 +405,7 @@ if __name__ == '__main__':
                 query['date_utc'] = {'$gte': date, '$lt': date + datetime.timedelta(days=1)}
 
                 # exclude planetary data:
-                query['science_program.program_id'] = {'$ne': '24'}
+                query['science_program.program_id'] = {'$ne': config['planets_prog_num']}
 
                 # azimuth and elevation range:
                 # query['coordinates.azel.0'] = {'$gte': 0 * np.pi / 180.0, '$lte': 360 * np.pi / 180.0}
@@ -543,6 +538,21 @@ if __name__ == '__main__':
                                                     }
                                                 }
                                             )
+                                        else:
+                                            # not enqueued? check if marked correctly:
+                                            in_lib = ob_aux['psf_lib'][ob_id_db]['in_lib']
+
+                                            if in_lib != in_fits(_psf_library_fits=psf_library_fits, _obs=ob_id_db):
+                                                coll_aux.update_one(
+                                                    {'_id': date_str},
+                                                    {
+                                                        '$set': {
+                                                            'psf_lib.{:s}.in_lib'.format(ob_id_db):
+                                                                in_fits(_psf_library_fits=psf_library_fits,
+                                                                        _obs=ob_id_db)
+                                                        }
+                                                    }
+                                                )
 
                                     else:
                                         ''' Process if tried not too many times and high_flux or faint '''
