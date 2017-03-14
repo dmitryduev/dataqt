@@ -15,6 +15,7 @@ import os
 from pymongo import MongoClient
 import json
 import datetime
+import pytz
 import ConfigParser
 import argparse
 import sys
@@ -735,6 +736,101 @@ def force_redo():
                 return flask.jsonify(result={'success': False, 'status': 'could not enqueue'})
         else:
             return flask.jsonify(result={'success': False, 'status': 'already enqueued'})
+    except Exception as _e:
+        print(_e)
+        return flask.jsonify(result={'success': False, 'status': 'failed to enqueue'})
+
+
+@app.route('/_enqueue_lib')
+@flask_login.login_required
+def enqueue_lib():
+    """
+    """
+    try:
+        user_id = flask_login.current_user.id
+
+        if user_id == 'admin':
+            # get parameters from the AJAX GET request
+            _date = flask.request.args.get('date', 0, type=str)
+            _obs = flask.request.args.get('source', 1, type=str)
+            _action = flask.request.args.get('action', 2, type=str)
+
+            assert _action in ('add', 'remove'), 'bad action requested'
+            if _action == 'add':
+                _status = 'add_to_lib'
+            elif _action == 'remove':
+                _status = 'remove_from_lib'
+
+            _, _, _, _, _coll_aux, _, _ = get_db(config)
+
+            _d = _coll_aux.find_one({'_id': _date})
+            assert _obs in _d['psf_lib'], 'could not find {:s} in {:s}'.format(_obs, _date)
+
+            # check that it's not being redone at the moment already:
+            go_ahead = not _d['psf_lib'][_obs]['enqueued']
+
+            if go_ahead:
+                _status = _coll_aux.update_one(
+                    {'_id': _date},
+                    {
+                        '$set': {
+                            'psf_lib.{:s}.enqueued'.format(_obs): True,
+                            'psf_lib.{:s}.status'.format(_obs): _status
+                        }
+                    }
+                )
+                if _status.matched_count == 1:
+                    return flask.jsonify(result={'success': True, 'status': 'successfully enqueued'})
+                # not found in the database?
+                else:
+                    return flask.jsonify(result={'success': False, 'status': 'could not enqueue'})
+            else:
+                return flask.jsonify(result={'success': False, 'status': 'already enqueued'})
+
+        else:
+            return flask.jsonify(result={'success': False, 'status': 'not an admin'})
+
+    except Exception as _e:
+        print(_e)
+        return flask.jsonify(result={'success': False, 'status': 'failed to enqueue'})
+
+
+@app.route('/_rerun_pca_date')
+@flask_login.login_required
+def rerun_pca_date():
+    """
+    """
+    try:
+        user_id = flask_login.current_user.id
+
+        if user_id == 'admin':
+            # get parameters from the AJAX GET request
+            _date = flask.request.args.get('date', 0, type=str)
+
+            start = datetime.datetime.strptime(_date, '%Y%m%d')
+            start = start.replace(tzinfo=pytz.utc)
+            stop = start + datetime.timedelta(days=1)
+
+            _, _, _coll, _, _, _, _ = get_db(config)
+
+            query = dict()
+            query['date_utc'] = {'$gte': start, '$lt': stop}
+            query['pipelined.automated.pca.status.done'] = {'$eq': True}
+
+            _status = _coll.update_many(
+                query,
+                {
+                    '$set': {
+                        'pipelined.automated.pca.status.force_redo': True
+                    }
+                }
+            )
+
+            return flask.jsonify(result={'success': True, 'status': 'will force redo!'})
+
+        else:
+            return flask.jsonify(result={'success': False, 'status': 'not an admin'})
+
     except Exception as _e:
         print(_e)
         return flask.jsonify(result={'success': False, 'status': 'failed to enqueue'})

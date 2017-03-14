@@ -197,30 +197,48 @@
             <div class="container">
                 <div class="row">
                     <div class="col-md-12">
-                        <h3 style="color: #286090">{{ date[:4]+'/' + date[4:6]+'/' + date[6:] }}</h3>
+                        <h3 style="color: #286090">
+                            {{ date[:4]+'/' + date[4:6]+'/' + date[6:] }}
+                            <button id="button_{{ object }}" type="button" class="btn btn-sm btn-default"
+                                    onclick="rerun_pca_date('{{ date }}');">
+                                Rerun PCA pipeline</button>
+                        </h3>
                         {% for object in data %}
                             <div class="img-wrapper">
-                                <img src="/data/{{date}}/summary/psflib/{{object}}.png"
-                                     alt="{{ object }}"
-                                     style="height:120px; cursor: pointer; margin-bottom: 3px;"
-                                     class="preview pop">
+                                <div>
+                                    <img src="/data/{{date}}/summary/psflib/{{object}}.png"
+                                         alt="{{ object }}"
+                                         style="height:120px; cursor: pointer; margin-bottom: 3px;"
+                                         class="preview pop">
 
-                                <div class="overlay" data-toggle="modal" data-target="#aux_image_modal"
-                                     data-date="{{date}}"
-                                     data-source="{{ object }}"
-                                     style="cursor: pointer; word-wrap: break-word;">
-                                     {{object}}
+                                    <div class="overlay" data-toggle="modal" data-target="#aux_image_modal"
+                                         data-date="{{date}}"
+                                         data-source="{{ object }}"
+                                         style="cursor: pointer; word-wrap: break-word;">
+                                         {{object}}
+                                    </div>
+                                </div>
+                                <div style="position:relative; bottom:0; left: 0;">
+                                    {% if data[object]['in_lib'] and not data[object]['enqueued'] %}
+                                        <button id="button_{{ object }}" type="button" class="btn btn-xs btn-success"
+                                                onclick="enqueue_lib('{{ date }}', '{{ object }}', 'remove');">in lib</button>
+                                    {% elif data[object]['in_lib'] and data[object]['updated'] %}
+                                        <button id="button_{{ object }}" type="button" class="btn btn-xs btn-warning"
+                                                onclick="enqueue_lib('{{ date }}', '{{ object }}', 'add');">
+                                            in lib (outdated)</button>
+                                    {% elif data[object]['in_lib'] and data[object]['enqueued'] %}
+                                        <button id="button_{{ object }}" type="button" class="btn btn-xs btn-warning disabled">
+                                            in lib (enqueued)</button>
+                                    {% elif (not data[object]['in_lib']) and (not data[object]['enqueued']) %}
+                                        <button id="button_{{ object }}" type="button" class="btn btn-xs btn-danger"
+                                                onclick="enqueue_lib('{{ date }}', '{{ object }}', 'add');">
+                                            not in lib</button>
+                                    {% elif (not data[object]['in_lib']) and (data[object]['enqueued']) %}
+                                        <button id="button_{{ object }}" type="button" class="btn btn-xs btn-warning disabled">
+                                            not in lib (enqueued)</button>
+                                    {% endif %}
                                 </div>
                             </div>
-                            {% if data[object]['in_lib'] and not data[object]['enqueued'] %}
-                                <button type="button" class="btn btn-sm btn-success">in lib</button>
-                            {% elif data[object]['in_lib'] and data[object]['enqueued'] %}
-                                <button type="button" class="btn btn-sm btn-warning">in lib</button>
-                            {% elif (not data[object]['in_lib']) and (not data[object]['enqueued']) %}
-                                <button type="button" class="btn btn-sm btn-danger">not in lib</button>
-                            {% elif (not data[object]['in_lib']) and (data[object]['enqueued']) %}
-                                <button type="button" class="btn btn-sm btn-warning">not in lib</button>
-                            {% endif %}
                         {% endfor %}
                         </div>
                     </div>
@@ -248,7 +266,7 @@
 
 <!-- Modal template to display aux images -->
 <div class="modal fade" id="aux_image_modal" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog"> {# modal-lg"> #}
         <div class="modal-content">
             <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal">
@@ -282,6 +300,7 @@
 <script src="/static/js/bootstrap-notify.js"></script>
 <script src="/static/js/moment.min.js"></script>
 <script src="/static/js/daterangepicker.js"></script>
+<script src="/static/js/bootbox.js"></script>
 
 <script>
     // for AJAX requests [absolute website's uri]:
@@ -450,6 +469,86 @@ $(document).ready(function() {
 });
 </script>
 
+<script>
+    // send AJAX GET request to server to add PSF to library
+    function enqueue_lib(date, source, action) {
+        bootbox.confirm({
+            title: "PSF library",
+            message: "Do you want to " + action + " " + source + "?",
+            buttons: {
+                cancel: {
+                    label: '<i class="fa fa-times"></i> Cancel'
+                },
+                confirm: {
+                    label: '<i class="fa fa-check"></i> Confirm'
+                }
+            },
+            callback: function (result) {
+                // console.log('This was logged in the callback: ' + result);
+                // confirmed? send AJAX request to server:
+                if (result) {
+                    $.getJSON($SCRIPT_ROOT + '/_enqueue_lib', {
+                        date: date,
+                        source: source,
+                        action: action
+                    }, function(status) {
+                        var enqueued = status.result;
+{#                        console.log(enqueued);#}
+{#                        console.log(enqueued['status']);#}
+                        if (enqueued['success']) {
+                            // turn badge yellow if successfully enqueued
+                            document.getElementById("button_" + source).setAttribute('class', 'btn btn-xs btn-warning');
+                        }
+                    });
+                }
+            }
+        });
+
+    }
+
+    // send AJAX GET request to server to add PSF to library
+    function rerun_pca_date(date) {
+        bootbox.confirm({
+            title: "Rerun PCA pipeline",
+            message: "Do you want to rerun PSF subtraction for all sources observed on " + date + "?",
+            buttons: {
+                cancel: {
+                    label: '<i class="fa fa-times"></i> Cancel'
+                },
+                confirm: {
+                    label: '<i class="fa fa-check"></i> Confirm'
+                }
+            },
+            callback: function (result) {
+                // console.log('This was logged in the callback: ' + result);
+                // confirmed? send AJAX request to server:
+                if (result) {
+                    $.getJSON($SCRIPT_ROOT + '/_rerun_pca_date', {
+                        date: date
+                    }, function(status) {
+                        var enqueued = status.result;
+{#                        console.log(enqueued);#}
+{#                        console.log(enqueued['status']);#}
+                        if (enqueued['success']) {
+                            // notify!
+                            $.notify({
+                                title: '<strong>Success:</strong>',
+                                    message: 'Observations enqueued for reprocessing.'
+                            },{
+                                type: 'success',
+                                offset: {
+                                    x: 50,
+                                    y: 70
+                                }
+                            });
+                        }
+                    });
+                }
+            }
+        });
+
+    }
+</script>
 
 {# propagate date ranges #}
 {% if request.args.get('start') != None and request.args.get('stop') != None %}

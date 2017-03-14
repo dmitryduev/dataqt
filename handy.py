@@ -309,6 +309,27 @@ if __name__ == '__main__':
                 nightly_seeing.append(seeing_night_median)
             nightly_seeing = np.array(nightly_seeing)
 
+            median_seeing = np.median(nightly_seeing)
+            q1_seeing = np.percentile(nightly_seeing, 25)
+            q3_seeing = np.percentile(nightly_seeing, 75)
+            print('For the nightly median values:')
+            print('median: {:.2f}", 25%: {:.2f}", 75% {:.2f}"'.format(median_seeing, q1_seeing, q3_seeing))
+
+            # the histogram of the seeing vs strehl data
+            fig20 = plt.figure('seeing hist for nightly median values')
+            ax20 = fig20.add_subplot(111)
+            n, bins, patches = ax20.hist(nightly_seeing, bins=20, normed=1)
+
+            # add percentiles:
+            plt.axvline(x=q1_seeing, label='25%: {:.2f}\"'.format(q1_seeing), color=plt.cm.Pastel1(0))
+            plt.axvline(x=median_seeing, label='median: {:.2f}\"'.format(median_seeing), color=plt.cm.Pastel1(1))
+            plt.axvline(x=q3_seeing, label='75%: {:.2f}\"'.format(q3_seeing), color=plt.cm.Pastel1(2))
+
+            ax20.set_xlabel('Seeing scaled to 500 nm [arc seconds]')
+            ax20.set_ylabel('Normalized counts')
+            # ax2.grid(linewidth=0.5)
+            ax20.legend(loc='best', fancybox=True, prop={'size': 10})
+
             # FIXME: switch
             plot_seeing_vs_time = False
 
