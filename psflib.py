@@ -19,7 +19,8 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import make_pipeline
 
 import matplotlib
-matplotlib.use('Qt5Agg')
+# matplotlib.use('Qt5Agg')
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.offsetbox import AnchoredOffsetbox, AuxTransformBox, VPacker, TextArea
 from matplotlib.patches import Rectangle
@@ -261,6 +262,82 @@ def connect_to_db(_config):
     return _client, _db, _coll, _coll_usr, _coll_aux, _coll_weather, _program_pi
 
 
+def remove_from_lib(_psf_library_fits, _obs):
+    try:
+        with fits.open(_psf_library_fits) as hdulist:
+            if len(hdulist) < 3:
+                raise Exception('Kennot remove {:s}! Must have at least five PSF in the library'.format(_obs))
+
+            # get index of the frame to be removed:
+            index_obs = np.argmax(hdulist[-1].data['obs_names'] == _obs)
+
+            # remove from table with names:
+            hdulist[-1].remove_row(index_obs)
+            # remove from images:
+            hdulist.pop(index_obs)
+            # update library:
+            hdulist.writeto(_psf_library_fits, overwrite=True)
+    except Exception as _e:
+        traceback.print_exc()
+        print(_e)
+        raise Exception('Failed to remove {:s} from PSF library'.format(_obs))
+
+
+def add_to_lib(_psf_library_fits, _path, _obs, _obj_name='unknown'):
+    # last HDU contains a table with obs names and short names, the rest are actual PSFs
+    try:
+        # get frame:
+        with fits.open(_path) as f:
+            frame = f[0].data
+
+        if not os.path.exists(_psf_library_fits):
+            # library does not exist yet?
+            frame_names = np.array([_obs])
+            frame_short_names = np.array([_obj_name])
+            # create a binary table to keep full obs names and "short" (object) names
+            tbhdu = fits.BinTableHDU.from_columns([fits.Column(name='obs_names', format='80A',
+                                                               array=frame_names),
+                                                   fits.Column(name='obj_names', format='80A',
+                                                               array=frame_short_names)])
+            thdulist = fits.HDUList([fits.PrimaryHDU(frame), tbhdu])
+            thdulist.writeto(_psf_library_fits, overwrite=True)
+        else:
+            # get library:
+            with fits.open(_psf_library_fits) as hdulist:
+                # append names:
+                tbhdu = fits.BinTableHDU.from_columns(hdulist[-1].columns, nrows=hdulist[-1].data.shape[0]+1)
+                tbhdu.data['obs_names'][-1] = _obs
+                tbhdu.data['obj_names'][-1] = _obj_name
+                hdulist[-1] = tbhdu
+                # append frame:
+                hdulist.insert(len(hdulist)-1, fits.ImageHDU(frame))
+                # update library:
+                hdulist.writeto(_psf_library_fits, overwrite=True)
+
+    except:
+        traceback.print_exc()
+        raise Exception('Failed to add {:s} to PSF library'.format(_obs))
+
+
+def in_fits(_psf_library_fits, _obs):
+    """
+        Check if _obs is in PSF library
+    :param _psf_library_fits:
+    :param _obs:
+    :return:
+    """
+    try:
+        with fits.open(_psf_library_fits) as hdulist:
+            if _obs in hdulist[-1].data['obs_names']:
+                return True
+            else:
+                return False
+    except Exception as _e:
+        traceback.print_exc()
+        print(_e)
+        return False
+
+
 if __name__ == '__main__':
     ''' Create command line argument parser '''
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -285,6 +362,9 @@ if __name__ == '__main__':
         # connect to db, pull out collections:
         client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = connect_to_db(config)
 
+        # PSF library fits file name
+        psf_library_fits = os.path.join(config['path_archive'], 'psf_library.fits')
+
         ''' get aux data '''
         print(config['archiving_start_date'])
         select_aux = coll_aux.find({'_id': {'$gte': config['archiving_start_date'].strftime('%Y%m%d')}})
@@ -298,6 +378,9 @@ if __name__ == '__main__':
                 date = datetime.datetime.strptime(ob_aux['_id'], '%Y%m%d')
 
                 print(date)
+
+                # path to store data for individual frames:
+                _path_out = os.path.join(config['path_archive'], date_str, 'summary', 'psflib')
 
                 ''' TODO: create psflib field in aux collection in the database, or make sure it's there '''
                 # check when last updated
@@ -353,58 +436,158 @@ if __name__ == '__main__':
 
                             try:
 
-                                new_frame = ob['_id'] not in ob_aux['psf_lib']
-                                not_done = (ob['_id'] in ob_aux['psf_lib']) and \
-                                           (not ob_aux['psf_lib'][ob['_id']]['done'])
-                                updated = (ob['_id'] in ob_aux['psf_lib']) and \
-                                    np.abs(ob['pipelined']['automated']['last_modified'] -
-                                            ob_aux['psf_lib'][ob['_id']]['last_modified']).total_seconds() > 60
-                                not_tried_too_many_times = (ob['_id'] in ob_aux['psf_lib']) and \
-                                                           (ob_aux['psf_lib'][ob['_id']]['retries'] \
-                                                                < config['max_pipelining_retries'])
+                                # see lucidchart.com for the processing flowchart
 
-                                if new_frame or updated or (not_done and not_tried_too_many_times):
+                                ob_id = ob['_id']
+                                # field names in MongoDB cannot contain dots:
+                                ob_id_db = ob['_id'].split('.')[0]
 
-                                    if new_frame:
-                                        # init entry:
-                                        coll_aux.update_one(
-                                            {'_id': date_str},
-                                            {
-                                                '$set': {
-                                                    'psf_lib.{:s}.done'.format(ob['_id']): False,
-                                                    'psf_lib.{:s}.in_library'.format(ob['_id']): False,
-                                                    'psf_lib.{:s}.outdated'.format(ob['_id']): False,
-                                                    'psf_lib.{:s}.failed'.format(ob['_id']): False,
-                                                    'psf_lib.{:s}.retries'.format(ob['_id']): 0,
-                                                    'psf_lib.{:s}.last_modified'.format(ob['_id']): utc_now()
-                                                }
-                                            }
-                                        )
+                                in_db = ob_id_db in ob_aux['psf_lib']
 
-                                    elif updated:
-                                        coll_aux.update_one(
-                                            {'_id': date_str},
-                                            {
-                                                '$set': {
-                                                    'psf_lib.{:s}.done'.format(ob['_id']): False,
-                                                    'psf_lib.{:s}.outdated'.format(ob['_id']): True,
-                                                    'psf_lib.{:s}.last_modified'.format(ob['_id']): utc_now()
-                                                }
-                                            }
-                                        )
-                                    elif not_done:
-                                        coll_aux.update_one(
-                                            {'_id': date_str},
-                                            {
-                                                '$inc': {
-                                                        'psf_lib.{:s}.retries'.format(ob['_id']): 1
+                                # last pipelined:
+                                last_pipelined = ob['pipelined']['automated']['last_modified']
+
+                                execute_processing = False
+
+                                ''' in DB? '''
+                                if in_db:
+                                    ''' Done? '''
+                                    done = ob_aux['psf_lib'][ob_id_db]['done']
+                                    if done:
+                                        ''' Updated? '''
+                                        updated = np.abs(last_pipelined -
+                                                    ob_aux['psf_lib'][ob_id_db]['last_modified']).total_seconds() > 60
+                                        if updated:
+                                            # mark in DB:
+                                            coll_aux.update_one(
+                                                {'_id': date_str},
+                                                {
+                                                    '$set': {
+                                                        'psf_lib.{:s}.done'.format(ob_id_db): False,
+                                                        'psf_lib.{:s}.updated'.format(ob_id_db): True,
+                                                        'psf_lib.{:s}.last_modified'.format(ob_id_db): last_pipelined
                                                     }
+                                                }
+                                            )
+                                            #
+                                            execute_processing = True
+
+                                        ''' Check status from web interface '''
+                                        enqueued = ob_aux['psf_lib'][ob_id_db]['enqueued']
+                                        if enqueued:
+                                            status = ob_aux['psf_lib'][ob_id_db]['status']
+                                            if status == 'add_to_lib':
+                                                try:
+                                                    in_lib = ob_aux['psf_lib'][ob_id_db]['in_lib']
+                                                    if in_lib or updated:
+                                                        # remove from lib, mark updated: false
+                                                        remove_from_lib(_psf_library_fits=psf_library_fits,
+                                                                        _obs=ob_id_db)
+                                                        # execute add to psf lib
+                                                        add_to_lib(_psf_library_fits=psf_library_fits,
+                                                                   _path=os.path.join(_path_out,
+                                                                                      '{:s}.fits'.format(ob_id)),
+                                                                   _obs=ob_id_db, _obj_name=ob['name'])
+                                                    else:
+                                                        # execute add to psf lib
+                                                        add_to_lib(_psf_library_fits=psf_library_fits,
+                                                                   _path=os.path.join(_path_out,
+                                                                                      '{:s}.fits'.format(ob_id)),
+                                                                   _obs=ob_id_db, _obj_name=ob['name'])
+
+                                                    coll_aux.update_one(
+                                                        {'_id': date_str},
+                                                        {
+                                                            '$set': {
+                                                                'psf_lib.{:s}.in_lib'.format(ob_id_db): True
+                                                            }
+                                                        }
+                                                    )
+                                                except Exception as e:
+                                                    print(e)
+                                                    coll_aux.update_one(
+                                                        {'_id': date_str},
+                                                        {
+                                                            '$set': {
+                                                                'psf_lib.{:s}.in_lib'.format(ob_id_db): False
+                                                            }
+                                                        }
+                                                    )
+
+                                            elif status == 'remove_from_lib':
+                                                try:
+                                                    # check if actually in lib
+                                                    if in_fits(_psf_library_fits=psf_library_fits, _obs=ob_id_db):
+                                                        # remove from lib
+                                                        remove_from_lib(_psf_library_fits=psf_library_fits,
+                                                                        _obs=ob_id_db)
+                                                except Exception as e:
+                                                    print(e)
+
+                                                coll_aux.update_one(
+                                                    {'_id': date_str},
+                                                    {
+                                                        '$set': {
+                                                            'psf_lib.{:s}.in_lib'.format(ob_id_db): False
+                                                        }
+                                                    }
+                                                )
+
+                                            coll_aux.update_one(
+                                                {'_id': date_str},
+                                                {
+                                                    '$set': {
+                                                        'psf_lib.{:s}.updated'.format(ob_id_db): False,
+                                                        'psf_lib.{:s}.enqueued'.format(ob_id_db): False,
+                                                        'psf_lib.{:s}.status'.format(ob_id_db): None
+                                                    }
+                                                }
+                                            )
+
+                                    else:
+                                        ''' Process if tried not too many times and high_flux or faint '''
+                                        tried_too_many_times = ob_aux['psf_lib'][ob_id_db]['retries'] \
+                                                                > config['max_pipelining_retries']
+                                        tag = str(ob['pipelined']['automated']['classified_as'])
+                                        if (not tried_too_many_times) and (tag not in ('failed', 'zero_flux')):
+                                            execute_processing = True
+
+                                else:
+                                    # init entry for a new record:
+                                    coll_aux.update_one(
+                                        {'_id': date_str},
+                                        {
+                                            '$set': {
+                                                'psf_lib.{:s}'.format(ob_id_db): {
+                                                    'done': False,
+                                                    'in_lib': False,
+                                                    'updated': False,
+                                                    'enqueued': False,
+                                                    'status': False,
+                                                    'retries': 0,
+                                                    'last_modified': utc_now()
+                                                }
                                             }
-                                        )
+                                        }
+                                    )
+                                    #
+                                    execute_processing = True
+
+                                if execute_processing:
+
+                                    # number of processing attempts++
+                                    coll_aux.update_one(
+                                        {'_id': date_str},
+                                        {
+                                            '$inc': {
+                                                    'psf_lib.{:s}.retries'.format(ob_id_db): 1
+                                                }
+                                        }
+                                    )
 
                                     ''' preprocess 100p.fits, high-pass, cut '''
                                     tag = str(ob['pipelined']['automated']['classified_as'])
-                                    _path = os.path.join(config['path_pipe'], date_str, tag, ob['_id'])
+                                    _path = os.path.join(config['path_pipe'], date_str, tag, ob_id)
                                     _fits_name = '100p.fits'
 
                                     if os.path.exists(os.path.join(_path, _fits_name)):
@@ -420,20 +603,19 @@ if __name__ == '__main__':
                                         y *= 2.0
                                         x, y = map(int, [x, y])
 
-                                        # out of the frame? fix that!
+                                        # out of the frame? do not try to fix that, just skip!
                                         if x - _win < 0 or x + _win + 1 >= scidata.shape[0] \
                                                 or y - _win < 0 or y + _win + 1 >= scidata.shape[1]:
                                             coll_aux.update_one(
                                                 {'_id': date_str},
                                                 {
                                                     '$set': {
-                                                        'psf_lib.{:s}.done'.format(ob['_id']): False,
-                                                        'psf_lib.{:s}.outdated'.format(ob['_id']): False,
-                                                        'psf_lib.{:s}.failed'.format(ob['_id']): True,
-                                                        'psf_lib.{:s}.last_modified'.format(ob['_id']): utc_now()
+                                                        'psf_lib.{:s}.done'.format(ob_id_db): False,
+                                                        'psf_lib.{:s}.last_modified'.format(ob_id_db): utc_now()
                                                     }
                                                 }
                                             )
+                                            continue
 
                                         _trimmed_frame = scidata[x - _win: x + _win + 1,
                                                                  y - _win: y + _win + 1]
@@ -484,7 +666,7 @@ if __name__ == '__main__':
                                         # add scale bar:
                                         _drizzled = True
                                         _fow_x = 36
-                                        _pix_x = 0.01735
+                                        _pix_x = 1024
                                         # draw a horizontal bar with length of 0.1*x_size
                                         # (ax.transData) with a label underneath.
                                         bar_len = centered_frame.shape[0] * 0.1
@@ -497,23 +679,26 @@ if __name__ == '__main__':
                                                               loc=4, pad=0.3, borderpad=0.5, sep=10, frameon=False)
                                         ax.add_artist(asb)
 
-                                        plt.show()
+                                        # plt.show()
 
                                         ''' store both fits and png for the web interface '''
-                                        # png_name = '{:s}.png'.format(ob['_id'])
-                                        # if not (os.path.exists(_path_out)):
-                                        #     os.makedirs(_path_out)
-                                        # fig.savefig(os.path.join(_path_out, png_name), dpi=300)
+                                        png_name = '{:s}.png'.format(ob_id)
+                                        fits_name = '{:s}.png'.format(ob_id)
+                                        if not (os.path.exists(_path_out)):
+                                            os.makedirs(_path_out)
+                                        fig.savefig(os.path.join(_path_out, png_name), dpi=300)
+                                        # save box around selected object:
+                                        hdu = fits.PrimaryHDU(centered_frame)
+                                        hdu.writeto(os.path.join(_path_out, '{:s}.fits'.format(ob_id)),
+                                                    overwrite=True)
 
                                         # mark done:
                                         coll_aux.update_one(
                                             {'_id': date_str},
                                             {
                                                 '$set': {
-                                                    'psf_lib.{:s}.failed'.format(ob['_id']): False,
-                                                    'psf_lib.{:s}.done'.format(ob['_id']): True,
-                                                    'psf_lib.{:s}.outdated'.format(ob['_id']): False,
-                                                    'psf_lib.{:s}.last_modified'.format(ob['_id']): utc_now()
+                                                    'psf_lib.{:s}.done'.format(ob_id_db): True,
+                                                    'psf_lib.{:s}.last_modified'.format(ob_id_db): last_pipelined
                                                 }
                                             }
                                         )
@@ -524,12 +709,21 @@ if __name__ == '__main__':
                             except Exception as e:
                                 traceback.print_exc()
                                 print(e)
+                                coll_aux.update_one(
+                                    {'_id': date_str},
+                                    {
+                                        '$set': {
+                                            'psf_lib.{:s}.done'.format(ob_id_db): False,
+                                            'psf_lib.{:s}.last_modified'.format(ob_id_db): utc_now()
+                                        }
+                                    }
+                                )
 
     except Exception as e:
         traceback.print_exc()
         print(e)
 
     finally:
-        plt.show()
+        # plt.show()
 
         client.close()

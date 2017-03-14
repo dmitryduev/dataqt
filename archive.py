@@ -733,7 +733,7 @@ def job_strehl(_path_in, _fits_name, _obs, _path_out, _plate_scale, _Strehl_fact
 
         # save box around selected object:
         hdu = fits.PrimaryHDU(box)
-        hdu.writeto(os.path.join(_path_out, '{:s}_box.fits'.format(_obs)), clobber=True)
+        hdu.writeto(os.path.join(_path_out, '{:s}_box.fits'.format(_obs)), overwrite=True)
 
         # save the Strehl data to txt-file:
         with open(os.path.join(_path_out, '{:s}_strehl.txt'.format(_obs)), 'w') as _f:
@@ -1089,7 +1089,7 @@ def export_fits(path, _data, _header=None):
     else:
         hdu = fits.PrimaryHDU(_data)
     hdulist = fits.HDUList([hdu])
-    hdulist.writeto(path, clobber=True)
+    hdulist.writeto(path, overwrite=True)
 
 
 def image_center(_path, _fits_name, _x0=None, _y0=None, _win=None):
