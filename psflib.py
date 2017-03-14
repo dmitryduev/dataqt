@@ -486,13 +486,13 @@ if __name__ == '__main__':
                                                         # execute add to psf lib
                                                         add_to_lib(_psf_library_fits=psf_library_fits,
                                                                    _path=os.path.join(_path_out,
-                                                                                      '{:s}.fits'.format(ob_id)),
+                                                                                      '{:s}.fits'.format(ob_id_db)),
                                                                    _obs=ob_id_db, _obj_name=ob['name'])
                                                     else:
                                                         # execute add to psf lib
                                                         add_to_lib(_psf_library_fits=psf_library_fits,
                                                                    _path=os.path.join(_path_out,
-                                                                                      '{:s}.fits'.format(ob_id)),
+                                                                                      '{:s}.fits'.format(ob_id_db)),
                                                                    _obs=ob_id_db, _obj_name=ob['name'])
 
                                                     coll_aux.update_one(
@@ -682,14 +682,14 @@ if __name__ == '__main__':
                                         # plt.show()
 
                                         ''' store both fits and png for the web interface '''
-                                        png_name = '{:s}.png'.format(ob_id)
-                                        fits_name = '{:s}.png'.format(ob_id)
+                                        png_name = '{:s}.png'.format(ob_id_db)
+                                        fits_name = '{:s}.png'.format(ob_id_db)
                                         if not (os.path.exists(_path_out)):
                                             os.makedirs(_path_out)
                                         fig.savefig(os.path.join(_path_out, png_name), dpi=300)
                                         # save box around selected object:
                                         hdu = fits.PrimaryHDU(centered_frame)
-                                        hdu.writeto(os.path.join(_path_out, '{:s}.fits'.format(ob_id)),
+                                        hdu.writeto(os.path.join(_path_out, '{:s}.fits'.format(ob_id_db)),
                                                     overwrite=True)
 
                                         # mark done:

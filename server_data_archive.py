@@ -427,7 +427,7 @@ def get_dates(user_id, coll, coll_aux, start=None, stop=None):
             print(_e)
             stop = datetime.datetime.utcnow()
 
-    # create indeces not to perform in-memory sorting:
+    # create indices not to perform in-memory sorting:
     coll.create_index([('date_utc', -1)])
     coll_aux.create_index([('_id', 1)])
 
@@ -500,6 +500,66 @@ def get_dates(user_id, coll, coll_aux, start=None, stop=None):
     # print(dates)
     # latest obs - first
     # dates = sorted(list(set(dates)), reverse=True)
+
+    return dates
+
+
+def get_dates_psflib(coll_aux, start=None, stop=None):
+    """
+        Get science and auxiliary data from start to stop
+    :param coll_aux:
+    :param start:
+    :param stop:
+    :return:
+    """
+    if start is None:
+        # this is ~when we moved to KP:
+        # start = datetime.datetime(2015, 10, 1)
+        # by default -- last 30 days:
+        start = datetime.datetime.utcnow() - datetime.timedelta(days=10)
+    else:
+        try:
+            start = datetime.datetime.strptime(start, '%Y%m%d')
+        except Exception as _e:
+            print(_e)
+            start = datetime.datetime.utcnow() - datetime.timedelta(days=10)
+
+    if stop is None:
+        stop = datetime.datetime.utcnow()
+    else:
+        try:
+            stop = datetime.datetime.strptime(stop, '%Y%m%d')
+            # if stop < start:
+            #     stop = datetime.datetime.utcnow()
+        except Exception as _e:
+            print(_e)
+            stop = datetime.datetime.utcnow()
+
+    # create indices not to perform in-memory sorting:
+    coll_aux.create_index([('_id', 1)])
+
+    # dictionary: {date: {ob_id: {data}}}
+    dates = dict()
+
+    # get aux data
+    cursor_aux = coll_aux.find({'_id': {'$gte': start.strftime('%Y%m%d'), '$lt': stop.strftime('%Y%m%d')}})
+
+    # iterate over query result for aux data:
+    try:
+        for date_data in cursor_aux:
+            # string date
+            date = date_data['_id']
+
+            psfdata = OrderedDict()
+
+            if 'psf_lib' in date_data:
+                for _obs in date_data['psf_lib']:
+                    psfdata[_obs] = date_data['psf_lib'][_obs]
+
+            if len(psfdata) > 0:
+                dates[date] = psfdata
+    except Exception as _e:
+        print(_e)
 
     return dates
 
@@ -1050,6 +1110,52 @@ def manage_users():
         return flask.render_template('template-users.html',
                                      user=flask_login.current_user.id,
                                      users=_users)
+    else:
+        flask.abort(403)
+
+
+# manage PSF library
+@app.route('/manage_psflib')
+@flask_login.login_required
+def manage_psflib():
+    if flask_login.current_user.id == 'admin':
+
+        if 'start' in flask.request.args:
+            start = flask.request.args['start']
+        else:
+            start = None
+        if 'stop' in flask.request.args:
+            stop = flask.request.args['stop']
+        else:
+            stop = None
+
+        user_id = flask_login.current_user.id
+
+        def iter_dates(_dates):
+            """
+                instead of first loading and then sending everything to user all at once,
+                 yield data for a single date at a time and stream to user
+            :param _dates:
+            :return:
+            """
+            if len(_dates) > 0:
+                for _date in sorted(_dates.keys())[::-1]:
+                    # print(_date, _dates[_date])
+                    yield _date, _dates[_date]
+            else:
+                yield None, None
+
+        # get db connection
+        client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
+
+        # get science and aux data for all dates:
+        dates = get_dates_psflib(coll_aux, start=start, stop=stop)
+        # print(dates)
+
+        return flask.Response(stream_template('template-psflib.html', user=user_id,
+                                              start=start, stop=stop,
+                                              dates=iter_dates(dates)))
+
     else:
         flask.abort(403)
 

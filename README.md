@@ -338,6 +338,9 @@ The processed data are structured in the way described below. It should be strai
    │  └──programID_objectName_camera_filter_mark_yyyymmdd_HHMMSS.SSSSSS.tar.bz2
    ├──.../
    ├──summary/
+   │  ├──psflib/
+   │  │  ├──programID_objectName_camera_filter_mark_yyyymmdd_HHMMSS.png
+   │  │  ├──programID_objectName_camera_filter_mark_yyyymmdd_HHMMSS.fits
    │  ├──seeing/
    │  │  ├──yyyymmdd_hhmmss.png
    │  │  ├──...
@@ -346,7 +349,8 @@ The processed data are structured in the way described below. It should be strai
    │  ├──contrast_curve.yyyymmdd.png
    │  └──strehl.yyyymmdd.png
    └──calib/?
-└──.../
+|──.../
+└──psf_library.fits
 ```
 
 ---
