@@ -348,3 +348,13 @@ The processed data are structured in the way described below. It should be strai
    └──calib/?
 └──.../
 ```
+
+---
+
+## Processing flowcharts
+If you're seeking to understand that
+
+### PSF library management
+![alt text](/doc/psflib1.png)
+![alt text](/doc/psflib2.png)
+
