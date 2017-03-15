@@ -971,7 +971,7 @@ def lbunzip2(_path_in, _files, _path_out, _keep=True, _v=False):
         # else go ahead
         # print('lbunzip2 <{:s} >{:s}'.format(file_in, file_out))
         with open(file_in, 'r') as _f_in, open(file_out, 'w') as _f_out:
-            _p = subprocess.Popen('lbunzip2'.split(), stdin=subprocess.PIPE,
+            _p = subprocess.Popen('lbunzip2 -n 4'.split(), stdin=subprocess.PIPE,
                                  stdout=_f_out)
             _p.communicate(input=_f_in.read())
             # wait for it to finish
