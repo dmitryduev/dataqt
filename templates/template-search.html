@@ -521,7 +521,8 @@
                                                 {% endif %}
                                             </td>
                                             <td>
-                                                {% if object['seeing']['nearest'] != None %}
+                                                {% if ('seeing' in object) and ('nearest' in object['seeing']) and
+                                                    (object['seeing']['nearest'] != None) %}
                                                     {{ '%.2f' | format(object['seeing']['nearest'][1]) }}
                                                 {% else %}
                                                     <span class="label label-danger">None</span>
