@@ -616,7 +616,10 @@ def job_pca(_config, _path_in, _fits_name, _obs, _path_out,
             len(centered_frame) / 2 - 3 * _fwhm:len(centered_frame) / 2 + 3 * _fwhm])
 
         # Choose reference frames via cross correlation
-        library_notmystar = _library[~np.in1d(_library_names_short, _obs)]
+        # source short name:
+        _, _, _sou_name, _, _, _, _ = parse_obs_name(_obs, {})
+        # make sure not to use any observations of the source:
+        library_notmystar = _library[~np.in1d(_library_names_short, _sou_name)]
         cross_corr = np.zeros(len(library_notmystar))
         flattened_frame = np.ndarray.flatten(centered_frame)
 
