@@ -937,9 +937,11 @@ def search():
     # got a request?
     if flask.request.method == 'POST':
         # print(flask.request.form)
+        # drop indices? no need to do that every time! MongoDB is clever enough to keep things updated
+        # coll.drop_indexes()
         # create indices before searching:
-        coll.drop_indexes()
         # coll.create_index([('name', 1)])
+        # this operation only commences if indices have not been created yet
         coll.create_index([('coordinates.radec_geojson', '2dsphere'), ('name', 1)])
 
         # query db
