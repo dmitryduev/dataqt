@@ -13,6 +13,7 @@ import traceback
 from sklearn import linear_model
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import make_pipeline
+from astropy.io import fits
 
 import matplotlib
 matplotlib.use('Qt5Agg')
@@ -158,12 +159,12 @@ if __name__ == '__main__':
         date_good_data = datetime.datetime(2017, 2, 21, 10, 0, 0).replace(tzinfo=pytz.utc)
         date_dec_amp_fixed = datetime.datetime(2017, 3, 1, 0, 0, 0).replace(tzinfo=pytz.utc)
 
-        start = date_first_KP_light
-        stop = (datetime.datetime.utcnow() + datetime.timedelta(days=1)).replace(tzinfo=pytz.utc)
+        # start = date_first_KP_light
+        # stop = (datetime.datetime.utcnow() + datetime.timedelta(days=1)).replace(tzinfo=pytz.utc)
 
         # get and plot only new (good-ish) stuff:
-        # start = date_good_data
-        # stop = datetime.datetime.utcnow()
+        start = date_good_data
+        stop = (datetime.datetime.utcnow() + datetime.timedelta(days=1)).replace(tzinfo=pytz.utc)
 
         select_aux = coll_aux.find({'_id': {'$gte': start.strftime('%Y%m%d'), '$lt': stop.strftime('%Y%m%d')}})
 
@@ -218,6 +219,12 @@ if __name__ == '__main__':
             ax.grid(linewidth=0.5)
             ax.legend(loc='best', fancybox=True, prop={'size': 10})
 
+        # load PSF library:
+        from astropy.io import fits
+        with fits.open('/Users/dmitryduev/_caltech/roboao/_archive/psf_library.fits') as _lib:
+            _library = _lib[0].data
+            _library_names = _lib[-1].data['obs_names']
+
         # dict to store query to be executed on the main collection (with obs data):
         query = dict()
 
@@ -228,8 +235,10 @@ if __name__ == '__main__':
         query['date_utc'] = {'$gte': start, '$lt': stop}
 
         # only grab observations with updated contrast curves:
-        query['pipelined.automated.pca.last_modified'] = {'$gte': datetime.datetime(2017, 3, 15,
-                                                                                    21, 30, 0).replace(tzinfo=pytz.utc)}
+        # query['pipelined.automated.pca.last_modified'] = {'$gte':
+        #                                                   datetime.datetime(2017, 3, 16).replace(tzinfo=pytz.utc)}
+
+        # get stuff
 
         # exclude planetary data:
         query['science_program.program_id'] = {'$ne': '24'}
@@ -258,6 +267,10 @@ if __name__ == '__main__':
             bar = pyprind.ProgBar(select.count(), stream=1, title='Loading query results', monitor=True)
             for ob in select:
                 # print('matching:', ob['_id'])
+                # FIXME: only get stuff that is in the PSF library:
+                if ob['_id'].split('.')[0] not in _library_names:
+                    continue
+
                 bar.update(iterations=1)
                 # correct seeing for Zenith distance and reference to 500 nm:
                 data.append([ob['_id'], ob['date_utc'], ob['filter'],
@@ -269,6 +282,8 @@ if __name__ == '__main__':
                              ob['coordinates']['azel'][1]*180/np.pi])
 
             data = np.array(data)
+
+            print('\nloaded {:d} observations'.format(data.shape[0]))
 
             print('median elevation: ', np.median(data[:, 7]))
 
