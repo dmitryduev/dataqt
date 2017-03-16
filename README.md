@@ -300,6 +300,11 @@ db.getCollection('objects').update({'science_program.program_id':'4'},
 )
 ```
 
+Remove psflib data from _aux_ collection in the database:
+```
+    db.getCollection('aux').update({}, {$unset: {'psf_lib': ''}}, {multi: true})
+```
+
 ---
 
 ## Archive structure
