@@ -11,8 +11,11 @@ import ConfigParser
 import datetime
 import pytz
 import calendar
+import time
 import argparse
+import logging
 import pyprind
+import sys
 import numpy as np
 from astropy.io import fits
 import traceback
@@ -183,7 +186,7 @@ def get_config(_abs_path=None, _config_file='config.ini'):
 
     # consider data from:
     _config['archiving_start_date'] = datetime.datetime.strptime(
-        config.get('Misc', 'archiving_start_date'), '%Y/%m/%d')
+                            config.get('Misc', 'archiving_start_date'), '%Y/%m/%d')
     # how many times to try to rerun pipelines:
     _config['max_pipelining_retries'] = int(config.get('Misc', 'max_pipelining_retries'))
 
@@ -200,7 +203,7 @@ def get_config(_abs_path=None, _config_file='config.ini'):
     return _config
 
 
-def connect_to_db(_config):
+def connect_to_db(_config, _logger=None):
     """ Connect to the mongodb database
 
     :return:
@@ -208,38 +211,78 @@ def connect_to_db(_config):
     try:
         _client = MongoClient(host=_config['mongo_host'], port=_config['mongo_port'])
         _db = _client[_config['mongo_db']]
-        # print('ok')
+        if _logger is not None:
+            _logger.debug('Connecting to the Robo-AO database at {:s}:{:d}'.
+                          format(_config['mongo_host'], _config['mongo_port']))
     except Exception as _e:
-        print(_e)
         _db = None
+        if _logger is not None:
+            _logger.error(_e)
+            _logger.error('Failed to connect to the Robo-AO database at {:s}:{:d}'.
+                          format(_config['mongo_host'], _config['mongo_port']))
     try:
         _db.authenticate(_config['mongo_user'], _config['mongo_pwd'])
-        # print('auth ok')
+        if _logger is not None:
+            _logger.debug('Successfully authenticated with the Robo-AO database at {:s}:{:d}'.
+                          format(_config['mongo_host'], _config['mongo_port']))
     except Exception as _e:
-        print(_e)
         _db = None
+        if _logger is not None:
+            _logger.error(_e)
+            _logger.error('Authentication failed for the Robo-AO database at {:s}:{:d}'.
+                          format(_config['mongo_host'], _config['mongo_port']))
     try:
         _coll = _db[_config['mongo_collection_obs']]
+        # cursor = coll.find()
+        # for doc in cursor:
+        #     print(doc)
+        if _logger is not None:
+            _logger.debug('Using collection {:s} with obs data in the database'.
+                          format(_config['mongo_collection_obs']))
     except Exception as _e:
-        print(_e)
         _coll = None
+        if _logger is not None:
+            _logger.error(_e)
+            _logger.error('Failed to use a collection {:s} with obs data in the database'.
+                          format(_config['mongo_collection_obs']))
     try:
         _coll_aux = _db[_config['mongo_collection_aux']]
+        if _logger is not None:
+            _logger.debug('Using collection {:s} with aux data in the database'.
+                          format(_config['mongo_collection_aux']))
     except Exception as _e:
-        print(_e)
         _coll_aux = None
+        if _logger is not None:
+            _logger.error(_e)
+            _logger.error('Failed to use a collection {:s} with aux data in the database'.
+                          format(_config['mongo_collection_aux']))
     try:
         _coll_weather = _db[_config['mongo_collection_weather']]
+        if _logger is not None:
+            _logger.debug('Using collection {:s} with KP weather data in the database'.
+                          format(_config['mongo_collection_weather']))
     except Exception as _e:
-        print(_e)
         _coll_weather = None
+        if _logger is not None:
+            _logger.error(_e)
+            _logger.error('Failed to use a collection {:s} with KP weather data in the database'.
+                          format(_config['mongo_collection_weather']))
     try:
         _coll_usr = _db[_config['mongo_collection_pwd']]
+        # cursor = coll.find()
+        # for doc in cursor:
+        #     print(doc)
+        if _logger is not None:
+            _logger.debug('Using collection {:s} with user access credentials in the database'.
+                          format(_config['mongo_collection_pwd']))
     except Exception as _e:
-        print(_e)
         _coll_usr = None
+        if _logger is not None:
+            _logger.error(_e)
+            _logger.error('Failed to use a collection {:s} with user access credentials in the database'.
+                          format(_config['mongo_collection_pwd']))
     try:
-        # build dictionary program num -> pi username
+        # build dictionary program num -> pi name
         cursor = _coll_usr.find()
         _program_pi = {}
         for doc in cursor:
@@ -251,10 +294,15 @@ def connect_to_db(_config):
                 _program_pi[str(v)] = doc['_id'].encode('ascii', 'ignore')
                 # print(program_pi)
     except Exception as _e:
-        print(_e)
         _program_pi = None
+        if _logger is not None:
+            _logger.error(_e)
 
-    return _client, _db, _coll, _coll_usr, _coll_aux, _coll_weather, _program_pi
+    if _logger is not None:
+        _logger.debug('Successfully connected to the Robo-AO database at {:s}:{:d}'.
+                      format(_config['mongo_host'], _config['mongo_port']))
+
+    return _client, _db, _coll, _coll_aux, _coll_weather, _program_pi
 
 
 def remove_from_lib(_psf_library_fits, _obs):
@@ -334,174 +382,340 @@ def in_fits(_psf_library_fits, _obs):
         return False
 
 
+def set_up_logging(_path='logs', _name='archive', _level=logging.DEBUG, _mode='w'):
+    """ Set up logging
+
+    :param _path:
+    :param _name:
+    :param _level: DEBUG, INFO, etc.
+    :param _mode: overwrite log-file or append: w or a
+    :return: logger instance
+    """
+
+    if not os.path.exists(_path):
+        os.makedirs(_path)
+    utc_now = datetime.datetime.utcnow()
+
+    # http://www.blog.pythonlibrary.org/2012/08/02/python-101-an-intro-to-logging/
+    _logger = logging.getLogger(_name)
+
+    _logger.setLevel(_level)
+    # create the logging file handler
+    fh = logging.FileHandler(os.path.join(_path,
+                                          '{:s}.{:s}.log'.format(_name, utc_now.strftime('%Y%m%d'))),
+                             mode=_mode)
+    logging.Formatter.converter = time.gmtime
+
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    # formatter = logging.Formatter('%(asctime)s %(message)s')
+    fh.setFormatter(formatter)
+
+    # add handler to logger object
+    _logger.addHandler(fh)
+
+    return _logger, utc_now.strftime('%Y%m%d')
+
+
+def shut_down_logger(_logger):
+    """
+        prevent writing to multiple log-files after 'manual rollover'
+    :param _logger:
+    :return:
+    """
+    handlers = _logger.handlers[:]
+    for handler in handlers:
+        handler.close()
+        _logger.removeHandler(handler)
+
+
+def naptime(_config):
+    """
+        Return time to sleep in seconds for the archiving engine
+        before waking up to rerun itself.
+         In the daytime, it's 1 hour
+         In the nap time, it's nap_time_start_utc - utc_now()
+    :return:
+    """
+    try:
+        # local or UTC?
+        tz = pytz.utc if _config['nap_time']['frame'] == 'UTC' else None
+        now = datetime.datetime.now(tz)
+
+        if _config['nap_time']['sleep_at_night']:
+
+            last_midnight = datetime.datetime(now.year, now.month, now.day, tzinfo=tz)
+            next_midnight = datetime.datetime(now.year, now.month, now.day, tzinfo=tz) \
+                            + datetime.timedelta(days=1)
+
+            hm_start = map(int, _config['nap_time']['start'].split(':'))
+            hm_stop = map(int, _config['nap_time']['stop'].split(':'))
+
+            if hm_stop[0] < hm_start[0]:
+                h_before_midnight = 24 - (hm_start[0] + hm_start[1] / 60.0)
+                h_after_midnight = hm_stop[0] + hm_stop[1] / 60.0
+
+                # print((next_midnight - now).total_seconds() / 3600.0, h_before_midnight)
+                # print((now - last_midnight).total_seconds() / 3600.0, h_after_midnight)
+
+                if (next_midnight - now).total_seconds() / 3600.0 < h_before_midnight:
+                    sleep_until = next_midnight + datetime.timedelta(hours=h_after_midnight)
+                    print('sleep until:', sleep_until)
+                elif (now - last_midnight).total_seconds() / 3600.0 < h_after_midnight:
+                    sleep_until = last_midnight + datetime.timedelta(hours=h_after_midnight)
+                    print('sleep until:', sleep_until)
+                else:
+                    sleep_until = now + datetime.timedelta(minutes=_config['loop_interval'])
+                    print('sleep until:', sleep_until)
+
+            else:
+                h_after_midnight_start = hm_start[0] + hm_start[1] / 60.0
+                h_after_midnight_stop = hm_stop[0] + hm_stop[1] / 60.0
+
+                if (last_midnight + datetime.timedelta(hours=h_after_midnight_start) <
+                        now < last_midnight + datetime.timedelta(hours=h_after_midnight_stop)):
+                    sleep_until = last_midnight + datetime.timedelta(hours=h_after_midnight_stop)
+                    print('sleep until:', sleep_until)
+                else:
+                    sleep_until = now + datetime.timedelta(minutes=_config['loop_interval'])
+                print('sleep until:', sleep_until)
+
+            return (sleep_until - now).total_seconds()
+
+        else:
+            # sleep for loop_interval minutes otherwise (return seconds)
+            return _config['loop_interval'] * 60.0
+
+    except Exception as _e:
+        print(_e)
+        traceback.print_exc()
+        # return _config['loop_interval']*60
+        # sys.exit()
+        return False
+
+
 if __name__ == '__main__':
     ''' Create command line argument parser '''
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
-                                     description='Manage Robo-AO')
+                                     description='Manage Robo-AO\'s PSF library')
 
     parser.add_argument('config_file', metavar='config_file',
                         action='store', help='path to config file.', type=str)
 
     args = parser.parse_args()
-    config_file = args.config_file
 
-    ''' script absolute location '''
-    abs_path = os.path.dirname(inspect.getfile(inspect.currentframe()))
+    ''' set up logging at init '''
+    logger, logger_utc_date = set_up_logging(_path='logs', _name='psflib', _level=logging.INFO, _mode='a')
 
-    ''' load config data '''
-    try:
-        config = get_config(_abs_path=abs_path, _config_file=args.config_file)
-    except IOError:
-        config = get_config(_abs_path=abs_path, _config_file='config.ini')
+    while True:
+        # check if a new log file needs to be started:
+        if datetime.datetime.utcnow().strftime('%Y%m%d') != logger_utc_date:
+            # reset
+            shut_down_logger(logger)
+            logger, logger_utc_date = set_up_logging(_path='logs', _name='psflib', _level=logging.INFO, _mode='a')
 
-    try:
-        # connect to db, pull out collections:
-        client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = connect_to_db(config)
+        # if you start me up... if you start me up I'll never stop (hopefully not)
+        logger.info('Started cycle.')
 
-        # PSF library fits file name
-        # psf_library_fits = os.path.join(config['path_archive'], 'psf_library.fits')
-        psf_library_fits = config['pca']['path_psf_reference_library']
+        try:
+            ''' script absolute location '''
+            abs_path = os.path.dirname(inspect.getfile(inspect.currentframe()))
 
-        ''' get aux data '''
-        print(config['archiving_start_date'])
-        select_aux = coll_aux.find({'_id': {'$gte': config['archiving_start_date'].strftime('%Y%m%d')}})
+            ''' load config data '''
+            try:
+                config = get_config(_abs_path=abs_path, _config_file=args.config_file)
+                logger.debug('Successfully read in the config file {:s}'.format(args.config_file))
+            except Exception as e:
+                traceback.print_exc()
+                logger.error(e)
+                logger.error('Failed to read in the config file {:s}'.format(args.config_file))
+                sys.exit()
 
-        if select_aux.count() > 0:
+            ''' Connect to the mongodb database '''
+            try:
+                client, db, coll, coll_aux, coll_weather, program_pi = connect_to_db(_config=config, _logger=logger)
+                if None in (db, coll, program_pi):
+                    raise Exception('Failed to connect to the database')
+            except Exception as e:
+                traceback.print_exc()
+                logger.error(e)
+                sys.exit()
 
-            # iterate over all dates from coll_aux:
-            for ob_aux in select_aux:
+            '''
+             #############################
+             COMMENCE OPERATION PROCESSING
+             #############################
+            '''
+            # PSF library fits file name
+            # psf_library_fits = os.path.join(config['path_archive'], 'psf_library.fits')
+            psf_library_fits = config['pca']['path_psf_reference_library']
 
-                date_str = ob_aux['_id']
-                date = datetime.datetime.strptime(ob_aux['_id'], '%Y%m%d')
+            ''' get aux data '''
+            print(config['archiving_start_date'])
+            select_aux = coll_aux.find({'_id': {'$gte': config['archiving_start_date'].strftime('%Y%m%d')}})
 
-                print(date)
+            if select_aux.count() > 0:
 
-                # path to store data for individual frames:
-                _path_out = os.path.join(config['path_archive'], date_str, 'summary', 'psflib')
+                # iterate over all dates from coll_aux:
+                for ob_aux in select_aux:
 
-                ''' TODO: create psflib field in aux collection in the database, or make sure it's there '''
-                # check when last updated
-                if 'psf_lib' not in ob_aux:
-                    # init if necessary
-                    coll_aux.update_one(
-                        {'_id': date_str},
-                        {
-                            '$set': {
-                                'psf_lib': {}
+                    date_str = ob_aux['_id']
+                    date = datetime.datetime.strptime(ob_aux['_id'], '%Y%m%d')
+
+                    print(date)
+
+                    # path to store data for individual frames:
+                    _path_out = os.path.join(config['path_archive'], date_str, 'summary', 'psflib')
+
+                    ''' TODO: create psflib field in aux collection in the database, or make sure it's there '''
+                    # check when last updated
+                    if 'psf_lib' not in ob_aux:
+                        # init if necessary
+                        coll_aux.update_one(
+                            {'_id': date_str},
+                            {
+                                '$set': {
+                                    'psf_lib': {}
+                                }
                             }
-                        }
-                    )
-                    # reload:
-                    ob_aux = coll_aux.find_one({'_id': date_str})
-                    # frames: {'obs_name': {'in_library': False, 'outdated': False,
-                    #                       'failed': False, 'last_modified': datetime}
+                        )
+                        # reload:
+                        ob_aux = coll_aux.find_one({'_id': date_str})
+                        # frames: {'obs_name': {'in_library': False, 'outdated': False,
+                        #                       'failed': False, 'last_modified': datetime}
 
-                ''' grab obs credentials from the database '''
-                # dict to store query to be executed on the main collection (with obs data):
-                query = dict()
+                    ''' grab obs credentials from the database '''
+                    # dict to store query to be executed on the main collection (with obs data):
+                    query = dict()
 
-                # query['filter'] = 'Si'
+                    # query['filter'] = 'Si'
 
-                # query['seeing.median'] = {'$ne': None}
+                    # query['seeing.median'] = {'$ne': None}
 
-                query['date_utc'] = {'$gte': date, '$lt': date + datetime.timedelta(days=1)}
+                    query['date_utc'] = {'$gte': date, '$lt': date + datetime.timedelta(days=1)}
 
-                # exclude planetary data:
-                query['science_program.program_id'] = {'$ne': config['planets_prog_num']}
+                    # exclude planetary data:
+                    query['science_program.program_id'] = {'$ne': config['planets_prog_num']}
 
-                # azimuth and elevation range:
-                # query['coordinates.azel.0'] = {'$gte': 0 * np.pi / 180.0, '$lte': 360 * np.pi / 180.0}
-                # query['coordinates.azel.1'] = {'$gte': 0 * np.pi / 180.0, '$lte': 90 * np.pi / 180.0}
+                    # azimuth and elevation range:
+                    # query['coordinates.azel.0'] = {'$gte': 0 * np.pi / 180.0, '$lte': 360 * np.pi / 180.0}
+                    # query['coordinates.azel.1'] = {'$gte': 0 * np.pi / 180.0, '$lte': 90 * np.pi / 180.0}
 
-                # consider reliable Strehls only:
-                # query['pipelined.automated.strehl.flag'] = {'$eq': 'OK'}
+                    # consider reliable Strehls only:
+                    # query['pipelined.automated.strehl.flag'] = {'$eq': 'OK'}
 
-                # consider only 'done' stuff:
-                query['pipelined.automated.status.done'] = True
+                    # consider only 'done' stuff:
+                    query['pipelined.automated.status.done'] = True
 
-                # discard observations marked as "zero_flux" by the automated pipeline
-                query['pipelined.automated.classified_as'] = {'$nin': ['zero_flux', 'failed']}
+                    # discard observations marked as "zero_flux" and "failed" by the automated pipeline
+                    query['pipelined.automated.classified_as'] = {'$nin': ['zero_flux', 'failed']}
 
-                # execute query:
-                if len(query) > 0:
-                    # print('executing query:\n{:s}'.format(query))
-                    select = coll.find(query)
+                    # execute query:
+                    if len(query) > 0:
+                        # print('executing query:\n{:s}'.format(query))
+                        select = coll.find(query)
 
-                    if select.count() > 0:
+                        if select.count() > 0:
 
-                        for ob in select:
+                            for ob in select:
 
-                            try:
+                                try:
+                                    # see lucidchart.com for the processing flowchart
 
-                                # see lucidchart.com for the processing flowchart
+                                    ob_id = ob['_id']
+                                    # field names (keys) in MongoDB cannot contain dots, so let's replace them with _:
+                                    ob_id_db = ob['_id'].replace('.', '_')
 
-                                ob_id = ob['_id']
-                                # field names in MongoDB cannot contain dots:
-                                ob_id_db = ob['_id'].split('.')[0]
+                                    in_db = ob_id_db in ob_aux['psf_lib']
 
-                                in_db = ob_id_db in ob_aux['psf_lib']
+                                    # last pipelined:
+                                    last_pipelined = ob['pipelined']['automated']['last_modified']
 
-                                # last pipelined:
-                                last_pipelined = ob['pipelined']['automated']['last_modified']
+                                    execute_processing = False
 
-                                execute_processing = False
-
-                                ''' in DB? '''
-                                if in_db:
-                                    ''' Done? '''
-                                    done = ob_aux['psf_lib'][ob_id_db]['done']
-                                    if done:
-                                        ''' Updated? '''
-                                        updated = np.abs(last_pipelined -
+                                    ''' in DB? '''
+                                    if in_db:
+                                        ''' Done? '''
+                                        done = ob_aux['psf_lib'][ob_id_db]['done']
+                                        if done:
+                                            ''' Updated? '''
+                                            updated = np.abs(last_pipelined -
                                                     ob_aux['psf_lib'][ob_id_db]['last_modified']).total_seconds() > 60
-                                        if updated:
-                                            # mark in DB:
-                                            coll_aux.update_one(
-                                                {'_id': date_str},
-                                                {
-                                                    '$set': {
-                                                        'psf_lib.{:s}.done'.format(ob_id_db): False,
-                                                        'psf_lib.{:s}.updated'.format(ob_id_db): True,
-                                                        'psf_lib.{:s}.last_modified'.format(ob_id_db): last_pipelined
-                                                    }
-                                                }
-                                            )
-                                            #
-                                            execute_processing = True
-
-                                        ''' Check status from web interface '''
-                                        enqueued = ob_aux['psf_lib'][ob_id_db]['enqueued']
-                                        if enqueued:
-                                            status = ob_aux['psf_lib'][ob_id_db]['status']
-                                            if status == 'add_to_lib':
-                                                try:
-                                                    in_lib = ob_aux['psf_lib'][ob_id_db]['in_lib']
-                                                    if in_lib or updated:
-                                                        # remove from lib, mark updated: false
-                                                        remove_from_lib(_psf_library_fits=psf_library_fits,
-                                                                        _obs=ob_id_db)
-                                                        # execute add to psf lib
-                                                        add_to_lib(_psf_library_fits=psf_library_fits,
-                                                                   _path=os.path.join(_path_out,
-                                                                                      '{:s}.fits'.format(ob_id_db)),
-                                                                   _obs=ob_id_db, _obj_name=ob['name'])
-                                                    else:
-                                                        # execute add to psf lib
-                                                        add_to_lib(_psf_library_fits=psf_library_fits,
-                                                                   _path=os.path.join(_path_out,
-                                                                                      '{:s}.fits'.format(ob_id_db)),
-                                                                   _obs=ob_id_db, _obj_name=ob['name'])
-
-                                                    coll_aux.update_one(
-                                                        {'_id': date_str},
-                                                        {
-                                                            '$set': {
-                                                                'psf_lib.{:s}.in_lib'.format(ob_id_db): True
-                                                            }
+                                            if updated:
+                                                # mark in DB:
+                                                coll_aux.update_one(
+                                                    {'_id': date_str},
+                                                    {
+                                                        '$set': {
+                                                            'psf_lib.{:s}.done'.format(ob_id_db): False,
+                                                            'psf_lib.{:s}.updated'.format(ob_id_db): True,
+                                                            'psf_lib.{:s}.last_modified'.format(ob_id_db):
+                                                                last_pipelined
                                                         }
-                                                    )
-                                                except Exception as e:
-                                                    print(e)
+                                                    }
+                                                )
+                                                #
+                                                execute_processing = True
+                                                logger.info('{:s} was modified, updated entry'.format(ob_id))
+
+                                            ''' Check status from web interface '''
+                                            enqueued = ob_aux['psf_lib'][ob_id_db]['enqueued']
+                                            if enqueued:
+                                                status = ob_aux['psf_lib'][ob_id_db]['status']
+                                                if status == 'add_to_lib':
+                                                    try:
+                                                        in_lib = ob_aux['psf_lib'][ob_id_db]['in_lib']
+                                                        if in_lib or updated:
+                                                            # remove from lib, mark updated: false
+                                                            remove_from_lib(_psf_library_fits=psf_library_fits,
+                                                                            _obs=ob_id_db)
+                                                            # execute add to psf lib
+                                                            add_to_lib(_psf_library_fits=psf_library_fits,
+                                                                       _path=os.path.join(_path_out,
+                                                                                          '{:s}.fits'.format(ob_id_db)),
+                                                                       _obs=ob_id_db, _obj_name=ob['name'])
+                                                        else:
+                                                            # execute add to psf lib
+                                                            add_to_lib(_psf_library_fits=psf_library_fits,
+                                                                       _path=os.path.join(_path_out,
+                                                                                          '{:s}.fits'.format(ob_id_db)),
+                                                                       _obs=ob_id_db, _obj_name=ob['name'])
+
+                                                        coll_aux.update_one(
+                                                            {'_id': date_str},
+                                                            {
+                                                                '$set': {
+                                                                    'psf_lib.{:s}.in_lib'.format(ob_id_db): True
+                                                                }
+                                                            }
+                                                        )
+                                                        logger.info('{:s} added to the library'.format(ob_id))
+                                                    except Exception as e:
+                                                        print(e)
+                                                        coll_aux.update_one(
+                                                            {'_id': date_str},
+                                                            {
+                                                                '$set': {
+                                                                    'psf_lib.{:s}.in_lib'.format(ob_id_db): False
+                                                                }
+                                                            }
+                                                        )
+                                                        logger.error('failed to add {:s} to the library'.format(ob_id))
+
+                                                elif status == 'remove_from_lib':
+                                                    try:
+                                                        # check if actually in lib
+                                                        if in_fits(_psf_library_fits=psf_library_fits, _obs=ob_id_db):
+                                                            # remove from lib
+                                                            remove_from_lib(_psf_library_fits=psf_library_fits,
+                                                                            _obs=ob_id_db)
+                                                            logger.info('removed {:s} from the library'.format(ob_id))
+                                                        else:
+                                                            logger.info('{:s} not in the library, cannot remove'.
+                                                                        format(ob_id))
+                                                    except Exception as e:
+                                                        print(e)
+                                                        logger.error('failed to remove {:s}'.format(ob_id))
+
                                                     coll_aux.update_one(
                                                         {'_id': date_str},
                                                         {
@@ -511,231 +725,241 @@ if __name__ == '__main__':
                                                         }
                                                     )
 
-                                            elif status == 'remove_from_lib':
-                                                try:
-                                                    # check if actually in lib
-                                                    if in_fits(_psf_library_fits=psf_library_fits, _obs=ob_id_db):
-                                                        # remove from lib
-                                                        remove_from_lib(_psf_library_fits=psf_library_fits,
-                                                                        _obs=ob_id_db)
-                                                except Exception as e:
-                                                    print(e)
-
                                                 coll_aux.update_one(
                                                     {'_id': date_str},
                                                     {
                                                         '$set': {
-                                                            'psf_lib.{:s}.in_lib'.format(ob_id_db): False
+                                                            'psf_lib.{:s}.updated'.format(ob_id_db): False,
+                                                            'psf_lib.{:s}.enqueued'.format(ob_id_db): False,
+                                                            'psf_lib.{:s}.status'.format(ob_id_db): None
                                                         }
                                                     }
                                                 )
+                                            else:
+                                                # not enqueued? check if marked correctly:
+                                                in_lib = ob_aux['psf_lib'][ob_id_db]['in_lib']
 
-                                            coll_aux.update_one(
-                                                {'_id': date_str},
-                                                {
-                                                    '$set': {
-                                                        'psf_lib.{:s}.updated'.format(ob_id_db): False,
-                                                        'psf_lib.{:s}.enqueued'.format(ob_id_db): False,
-                                                        'psf_lib.{:s}.status'.format(ob_id_db): None
-                                                    }
-                                                }
-                                            )
+                                                if in_lib != in_fits(_psf_library_fits=psf_library_fits, _obs=ob_id_db):
+                                                    coll_aux.update_one(
+                                                        {'_id': date_str},
+                                                        {
+                                                            '$set': {
+                                                                'psf_lib.{:s}.in_lib'.format(ob_id_db):
+                                                                    in_fits(_psf_library_fits=psf_library_fits,
+                                                                            _obs=ob_id_db)
+                                                            }
+                                                        }
+                                                    )
+                                                    logger.info('corrected {:s} status in database'.format(ob_id))
+
                                         else:
-                                            # not enqueued? check if marked correctly:
-                                            in_lib = ob_aux['psf_lib'][ob_id_db]['in_lib']
-
-                                            if in_lib != in_fits(_psf_library_fits=psf_library_fits, _obs=ob_id_db):
-                                                coll_aux.update_one(
-                                                    {'_id': date_str},
-                                                    {
-                                                        '$set': {
-                                                            'psf_lib.{:s}.in_lib'.format(ob_id_db):
-                                                                in_fits(_psf_library_fits=psf_library_fits,
-                                                                        _obs=ob_id_db)
-                                                        }
-                                                    }
-                                                )
+                                            ''' Process if tried not too many times and high_flux or faint '''
+                                            tried_too_many_times = ob_aux['psf_lib'][ob_id_db]['retries'] \
+                                                                    > config['max_pipelining_retries']
+                                            tag = str(ob['pipelined']['automated']['classified_as'])
+                                            if (not tried_too_many_times) and (tag not in ('failed', 'zero_flux')):
+                                                execute_processing = True
 
                                     else:
-                                        ''' Process if tried not too many times and high_flux or faint '''
-                                        tried_too_many_times = ob_aux['psf_lib'][ob_id_db]['retries'] \
-                                                                > config['max_pipelining_retries']
-                                        tag = str(ob['pipelined']['automated']['classified_as'])
-                                        if (not tried_too_many_times) and (tag not in ('failed', 'zero_flux')):
-                                            execute_processing = True
-
-                                else:
-                                    # init entry for a new record:
-                                    coll_aux.update_one(
-                                        {'_id': date_str},
-                                        {
-                                            '$set': {
-                                                'psf_lib.{:s}'.format(ob_id_db): {
-                                                    'done': False,
-                                                    'in_lib': False,
-                                                    'updated': False,
-                                                    'enqueued': False,
-                                                    'status': False,
-                                                    'retries': 0,
-                                                    'last_modified': utc_now()
-                                                }
-                                            }
-                                        }
-                                    )
-                                    #
-                                    execute_processing = True
-
-                                if execute_processing:
-
-                                    # number of processing attempts++
-                                    coll_aux.update_one(
-                                        {'_id': date_str},
-                                        {
-                                            '$inc': {
-                                                    'psf_lib.{:s}.retries'.format(ob_id_db): 1
-                                                }
-                                        }
-                                    )
-
-                                    ''' preprocess 100p.fits, high-pass, cut '''
-                                    tag = str(ob['pipelined']['automated']['classified_as'])
-                                    _path = os.path.join(config['path_pipe'], date_str, tag, ob_id)
-                                    _fits_name = '100p.fits'
-
-                                    if os.path.exists(os.path.join(_path, _fits_name)):
-
-                                        print(os.path.join(_path, _fits_name))
-
-                                        with fits.open(os.path.join(_path, _fits_name)) as _hdu:
-                                            scidata = _hdu[0].data
-
-                                        _win = 100
-                                        y, x = get_xy_from_pipeline_settings_txt(_path)
-                                        x *= 2.0
-                                        y *= 2.0
-                                        x, y = map(int, [x, y])
-
-                                        # out of the frame? do not try to fix that, just skip!
-                                        if x - _win < 0 or x + _win + 1 >= scidata.shape[0] \
-                                                or y - _win < 0 or y + _win + 1 >= scidata.shape[1]:
-                                            coll_aux.update_one(
-                                                {'_id': date_str},
-                                                {
-                                                    '$set': {
-                                                        'psf_lib.{:s}.done'.format(ob_id_db): False,
-                                                        'psf_lib.{:s}.last_modified'.format(ob_id_db): utc_now()
-                                                    }
-                                                }
-                                            )
-                                            continue
-
-                                        _trimmed_frame = scidata[x - _win: x + _win + 1,
-                                                                 y - _win: y + _win + 1]
-
-                                        # Filter the trimmed frame with IUWT filter, 2 coeffs
-                                        filtered_frame = (vip.var.cube_filter_iuwt(
-                                            np.reshape(_trimmed_frame,
-                                                       (1, np.shape(_trimmed_frame)[0], np.shape(_trimmed_frame)[1])),
-                                            coeff=5, rel_coeff=2))
-                                        print(filtered_frame.shape)
-
-                                        mean_y, mean_x, fwhm_y, fwhm_x, amplitude, theta = \
-                                            (vip.var.fit_2dgaussian(filtered_frame[0], crop=True, cropsize=50, debug=False,
-                                                                    full_output=True))
-                                        _fwhm = np.mean([fwhm_y, fwhm_x])
-
-                                        # Print the resolution element size
-                                        # print('Using resolution element size = ', _fwhm)
-                                        if _fwhm < 2:
-                                            _fwhm = 2.0
-                                            # print('Too small, changing to ', _fwhm)
-                                        _fwhm = int(_fwhm)
-
-                                        # Center the filtered frame
-                                        centered_cube, shy, shx = \
-                                            (vip.calib.cube_recenter_gauss2d_fit(array=filtered_frame, xy=(_win, _win),
-                                                                                 fwhm=_fwhm,
-                                                                                 subi_size=6, nproc=1, full_output=True))
-
-                                        centered_frame = centered_cube[0]
-
-                                        ''' create preview '''
-                                        fig = plt.figure()
-                                        ax = fig.add_subplot(111)
-
-                                        ''' cropped image: '''
-                                        # save cropped image
-                                        plt.close('all')
-                                        fig = plt.figure()
-                                        fig.set_size_inches(3, 3, forward=False)
-                                        # ax = fig.add_subplot(111)
-                                        ax = plt.Axes(fig, [0., 0., 1., 1.])
-                                        ax.set_axis_off()
-                                        fig.add_axes(ax)
-                                        ax.imshow(centered_frame, cmap=plt.cm.magma, origin='lower',
-                                                  interpolation='nearest')
-
-                                        # add scale bar:
-                                        _drizzled = True
-                                        _fow_x = 36
-                                        _pix_x = 1024
-                                        # draw a horizontal bar with length of 0.1*x_size
-                                        # (ax.transData) with a label underneath.
-                                        bar_len = centered_frame.shape[0] * 0.1
-                                        mltplr = 2 if _drizzled else 1
-                                        bar_len_str = '{:.1f}'.format(bar_len * _fow_x / _pix_x / mltplr)
-                                        asb = AnchoredSizeBar(ax.transData,
-                                                              bar_len,
-                                                              bar_len_str[0] + r"$^{\prime\prime}\!\!\!.$" + bar_len_str[
-                                                                  -1],
-                                                              loc=4, pad=0.3, borderpad=0.5, sep=10, frameon=False)
-                                        ax.add_artist(asb)
-
-                                        # plt.show()
-
-                                        ''' store both fits and png for the web interface '''
-                                        png_name = '{:s}.png'.format(ob_id_db)
-                                        fits_name = '{:s}.png'.format(ob_id_db)
-                                        if not (os.path.exists(_path_out)):
-                                            os.makedirs(_path_out)
-                                        fig.savefig(os.path.join(_path_out, png_name), dpi=300)
-                                        # save box around selected object:
-                                        hdu = fits.PrimaryHDU(centered_frame)
-                                        hdu.writeto(os.path.join(_path_out, '{:s}.fits'.format(ob_id_db)),
-                                                    overwrite=True)
-
-                                        # mark done:
+                                        # init entry for a new record:
                                         coll_aux.update_one(
                                             {'_id': date_str},
                                             {
                                                 '$set': {
-                                                    'psf_lib.{:s}.done'.format(ob_id_db): True,
-                                                    'psf_lib.{:s}.last_modified'.format(ob_id_db): last_pipelined
+                                                    'psf_lib.{:s}'.format(ob_id_db): {
+                                                        'done': False,
+                                                        'in_lib': False,
+                                                        'updated': False,
+                                                        'enqueued': False,
+                                                        'status': False,
+                                                        'retries': 0,
+                                                        'last_modified': utc_now()
+                                                    }
                                                 }
                                             }
                                         )
+                                        #
+                                        execute_processing = True
+                                        logger.info('initialized {:s}'.format(ob_id))
 
-                                        # TODO: this is a button to add to the web interface
-                                        ''' force_redo automated.pca for all obs on that date '''
+                                    if execute_processing:
 
-                            except Exception as e:
-                                traceback.print_exc()
-                                print(e)
-                                coll_aux.update_one(
-                                    {'_id': date_str},
-                                    {
-                                        '$set': {
-                                            'psf_lib.{:s}.done'.format(ob_id_db): False,
-                                            'psf_lib.{:s}.last_modified'.format(ob_id_db): utc_now()
+                                        # number of processing attempts++
+                                        coll_aux.update_one(
+                                            {'_id': date_str},
+                                            {
+                                                '$inc': {
+                                                        'psf_lib.{:s}.retries'.format(ob_id_db): 1
+                                                    }
+                                            }
+                                        )
+
+                                        ''' preprocess 100p.fits, high-pass, cut '''
+                                        tag = str(ob['pipelined']['automated']['classified_as'])
+                                        _path = os.path.join(config['path_pipe'], date_str, tag, ob_id)
+                                        _fits_name = '100p.fits'
+
+                                        if os.path.exists(os.path.join(_path, _fits_name)):
+
+                                            print(os.path.join(_path, _fits_name))
+
+                                            with fits.open(os.path.join(_path, _fits_name)) as _hdu:
+                                                scidata = _hdu[0].data
+
+                                            _win = config['pca']['win']
+                                            y, x = get_xy_from_pipeline_settings_txt(_path)
+                                            # drizzled
+                                            x *= 2.0
+                                            y *= 2.0
+                                            x, y = map(int, [x, y])
+
+                                            # out of the frame? do not try to fix that, just skip!
+                                            if x - _win < 0 or x + _win + 1 >= scidata.shape[0] \
+                                                    or y - _win < 0 or y + _win + 1 >= scidata.shape[1]:
+                                                coll_aux.update_one(
+                                                    {'_id': date_str},
+                                                    {
+                                                        '$set': {
+                                                            'psf_lib.{:s}.done'.format(ob_id_db): False,
+                                                            'psf_lib.{:s}.last_modified'.format(ob_id_db): utc_now()
+                                                        }
+                                                    }
+                                                )
+                                                continue
+
+                                            _trimmed_frame = scidata[x - _win: x + _win + 1,
+                                                                     y - _win: y + _win + 1]
+
+                                            # Filter the trimmed frame with IUWT filter, 2 coeffs
+                                            filtered_frame = (vip.var.cube_filter_iuwt(
+                                                np.reshape(_trimmed_frame, (1, np.shape(_trimmed_frame)[0],
+                                                            np.shape(_trimmed_frame)[1])),
+                                                coeff=5, rel_coeff=2))
+                                            print(filtered_frame.shape)
+
+                                            mean_y, mean_x, fwhm_y, fwhm_x, amplitude, theta = \
+                                                (vip.var.fit_2dgaussian(filtered_frame[0], crop=True,
+                                                                        cropsize=50, debug=False, full_output=True))
+                                            _fwhm = np.mean([fwhm_y, fwhm_x])
+
+                                            # Print the resolution element size
+                                            # print('Using resolution element size = ', _fwhm)
+                                            if _fwhm < 2:
+                                                _fwhm = 2.0
+                                                # print('Too small, changing to ', _fwhm)
+                                            _fwhm = int(_fwhm)
+
+                                            # Center the filtered frame
+                                            centered_cube, shy, shx = \
+                                                (vip.calib.cube_recenter_gauss2d_fit(array=filtered_frame,
+                                                                                     xy=(_win, _win), fwhm=_fwhm,
+                                                                                     subi_size=6, nproc=1,
+                                                                                     full_output=True))
+
+                                            centered_frame = centered_cube[0]
+
+                                            ''' create preview '''
+                                            fig = plt.figure()
+                                            ax = fig.add_subplot(111)
+
+                                            ''' cropped image: '''
+                                            # save cropped image
+                                            plt.close('all')
+                                            fig = plt.figure()
+                                            fig.set_size_inches(3, 3, forward=False)
+                                            # ax = fig.add_subplot(111)
+                                            ax = plt.Axes(fig, [0., 0., 1., 1.])
+                                            ax.set_axis_off()
+                                            fig.add_axes(ax)
+                                            ax.imshow(centered_frame, cmap=plt.cm.magma, origin='lower',
+                                                      interpolation='nearest')
+
+                                            # add scale bar:
+                                            _drizzled = True
+                                            _fow_x = 36
+                                            _pix_x = 1024
+                                            # draw a horizontal bar with length of 0.1*x_size
+                                            # (ax.transData) with a label underneath.
+                                            bar_len = centered_frame.shape[0] * 0.1
+                                            mltplr = 2 if _drizzled else 1
+                                            bar_len_str = '{:.1f}'.format(bar_len * _fow_x / _pix_x / mltplr)
+                                            asb = AnchoredSizeBar(ax.transData,
+                                                                  bar_len,
+                                                                  bar_len_str[0] + r"$^{\prime\prime}\!\!\!.$" +
+                                                                  bar_len_str[-1],
+                                                                  loc=4, pad=0.3, borderpad=0.5, sep=10, frameon=False)
+                                            ax.add_artist(asb)
+
+                                            # plt.show()
+
+                                            ''' store both fits and png for the web interface '''
+                                            png_name = '{:s}.png'.format(ob_id_db)
+                                            fits_name = '{:s}.png'.format(ob_id_db)
+                                            if not (os.path.exists(_path_out)):
+                                                os.makedirs(_path_out)
+                                            fig.savefig(os.path.join(_path_out, png_name), dpi=300)
+                                            # save box around selected object:
+                                            hdu = fits.PrimaryHDU(centered_frame)
+                                            hdu.writeto(os.path.join(_path_out, '{:s}.fits'.format(ob_id_db)),
+                                                        overwrite=True)
+
+                                            # mark done:
+                                            coll_aux.update_one(
+                                                {'_id': date_str},
+                                                {
+                                                    '$set': {
+                                                        'psf_lib.{:s}.done'.format(ob_id_db): True,
+                                                        'psf_lib.{:s}.last_modified'.format(ob_id_db): last_pipelined
+                                                    }
+                                                }
+                                            )
+                                            logger.info('successfully processed {:s}'.format(ob_id))
+
+                                except Exception as e:
+                                    traceback.print_exc()
+                                    print(e)
+                                    coll_aux.update_one(
+                                        {'_id': date_str},
+                                        {
+                                            '$set': {
+                                                'psf_lib.{:s}.done'.format(ob_id_db): False,
+                                                'psf_lib.{:s}.last_modified'.format(ob_id_db): utc_now()
+                                            }
                                         }
-                                    }
-                                )
+                                    )
+                                    logger.error('failed to process {:s}'.format(ob_id))
 
-    except Exception as e:
-        traceback.print_exc()
-        print(e)
+                logger.info('Finished cycle.')
+                sleep_for = naptime(config)  # seconds
+                if sleep_for:
+                    # disconnect from database not to keep the connection alive while sleeping
+                    if 'client' in locals():
+                        client.close()
+                    time.sleep(sleep_for)
+                else:
+                    logger.error('Could not fall asleep, exiting.')
+                    break
 
-    finally:
-        # plt.show()
+        except KeyboardInterrupt:
+            logger.error('User exited.')
+            logger.info('Finished cycle.')
+            # try disconnecting from the database (if connected)
+            try:
+                if 'client' in locals():
+                    client.close()
+            finally:
+                break
 
-        client.close()
+        except Exception as e:
+            print(e)
+            traceback.print_exc()
+            logger.error(e)
+            logger.error('Unknown error, exiting. Please check the logs')
+            # TODO: send out an email with an alert
+            logger.info('Finished cycle.')
+            # try disconnecting from the database (if connected)
+            try:
+                if 'client' in locals():
+                    client.close()
+            finally:
+                break

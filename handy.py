@@ -492,7 +492,7 @@ if __name__ == '__main__':
                 ax31.set_ylabel('Strehl ratio, %')
                 ax31.legend(loc='best', numpoints=1, fancybox=True, prop={'size': 10})
 
-            fig4 = plt.figure('contrast curves')
+            fig4 = plt.figure('contrast curves', figsize=(10, 7))
             ax4 = fig4.add_subplot(111)
 
             sep_mean = np.linspace(0.2, 1.45, num=100)
@@ -527,12 +527,12 @@ if __name__ == '__main__':
                          label='{:s}, best 10%'.format(filt), c=baseline.get_color())
 
             ax4.set_xlim([0.2, 1.45])
-            ax4.set_xlabel('Separation [arc seconds]')  # , fontsize=18)
-            ax4.set_ylabel('5-sigma contrast [$\Delta$mag]')  # , fontsize=18)
+            ax4.set_xlabel('Separation [arc seconds]', fontsize=18)
+            ax4.set_ylabel('5-sigma contrast [$\Delta$mag]', fontsize=18)
             ax4.set_ylim([0, 8])
             ax4.set_ylim(ax4.get_ylim()[::-1])
             ax4.grid(linewidth=0.5)
-            ax4.legend(loc='best', numpoints=1, fancybox=True, prop={'size': 6})
+            ax4.legend(loc='best', numpoints=1, fancybox=True, prop={'size': 16})
 
     except Exception as e:
         traceback.print_exc()

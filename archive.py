@@ -4258,7 +4258,7 @@ if __name__ == '__main__':
 
     ''' Create command line argument parser '''
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
-                                     description='Data archive for Robo-AO')
+                                     description='Manage data archive for Robo-AO')
 
     parser.add_argument('config_file', metavar='config_file',
                         action='store', help='path to config file.', type=str)
@@ -4266,14 +4266,14 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     ''' set up logging at init '''
-    logger, logger_utc_date = set_up_logging(_path='logs', _name='archive', _level=logging.DEBUG, _mode='a')
+    logger, logger_utc_date = set_up_logging(_path='logs', _name='archive', _level=logging.INFO, _mode='a')
 
     while True:
         # check if a new log file needs to be started:
         if datetime.datetime.utcnow().strftime('%Y%m%d') != logger_utc_date:
             # reset
             shut_down_logger(logger)
-            logger, logger_utc_date = set_up_logging(_path='logs', _name='archive', _level=logging.DEBUG, _mode='a')
+            logger, logger_utc_date = set_up_logging(_path='logs', _name='archive', _level=logging.INFO, _mode='a')
 
         # if you start me up... if you start me up I'll never stop (hopefully not)
         logger.info('Started archiving cycle.')
@@ -4449,6 +4449,9 @@ if __name__ == '__main__':
             logger.info('Finished archiving cycle.')
             sleep_for = naptime(config)  # seconds
             if sleep_for:
+                # disconnect from database not to keep the connection alive while sleeping
+                if 'client' in locals():
+                    client.close()
                 time.sleep(sleep_for)
             else:
                 logger.error('Could not fall asleep, exiting.')
