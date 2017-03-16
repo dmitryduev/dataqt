@@ -4,6 +4,7 @@ from pymongo import MongoClient
 import inspect
 import ConfigParser
 import datetime
+import pytz
 import calendar
 import argparse
 import pyprind
@@ -152,13 +153,13 @@ if __name__ == '__main__':
 
         ''' get aux data '''
 
-        date_first_KP_light = datetime.datetime(2015, 12, 17)
-        date_tcs_upgrade = datetime.datetime(2016, 10, 1)
-        date_good_data = datetime.datetime(2017, 2, 21, 10, 0, 0)
-        date_dec_amp_fixed = datetime.datetime(2017, 3, 1, 0, 0, 0)
+        date_first_KP_light = datetime.datetime(2015, 12, 17).replace(tzinfo=pytz.utc)
+        date_tcs_upgrade = datetime.datetime(2016, 10, 1).replace(tzinfo=pytz.utc)
+        date_good_data = datetime.datetime(2017, 2, 21, 10, 0, 0).replace(tzinfo=pytz.utc)
+        date_dec_amp_fixed = datetime.datetime(2017, 3, 1, 0, 0, 0).replace(tzinfo=pytz.utc)
 
         start = date_first_KP_light
-        stop = datetime.datetime.utcnow() + datetime.timedelta(days=1)
+        stop = (datetime.datetime.utcnow() + datetime.timedelta(days=1)).replace(tzinfo=pytz.utc)
 
         # get and plot only new (good-ish) stuff:
         # start = date_good_data
@@ -225,6 +226,10 @@ if __name__ == '__main__':
         query['seeing.median'] = {'$ne': None}
 
         query['date_utc'] = {'$gte': start, '$lt': stop}
+
+        # only grab observations with updated contrast curves:
+        query['pipelined.automated.pca.last_modified'] = {'$gte': datetime.datetime(2017, 3, 15,
+                                                                                    21, 30, 0).replace(tzinfo=pytz.utc)}
 
         # exclude planetary data:
         query['science_program.program_id'] = {'$ne': '24'}
