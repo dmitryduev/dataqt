@@ -974,10 +974,10 @@ $(document).ready(function(){
     // With JQuery
     $(document).ready(function() {
         $("#preview_size").slider();
-        $("#preview_size").on("slide", function (slideEvt) {
-            $("#preview_size_val").text(slideEvt.value);
+        $("#preview_size").on("change", function (slideEvt) {
+            $("#preview_size_val").text(slideEvt.value.newValue);
             // change preview sizes
-            $(".preview").css('height', slideEvt.value);
+            $(".preview").css('height', slideEvt.value.newValue);
         });
     });
 
