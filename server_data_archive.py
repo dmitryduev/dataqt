@@ -11,6 +11,7 @@ monkey.patch_all()
 import matplotlib
 matplotlib.use('Agg')
 
+import ast
 import os
 from pymongo import MongoClient
 import json
@@ -871,6 +872,50 @@ def wget_script():
         response.headers['Content-Disposition'] = \
             'attachment; filename=program_{:s}_{:s}.wget.sh'.format(_program, _date_str)
         return response
+
+
+@app.route('/get_data_by_id', methods=['GET'])
+@flask_login.login_required
+def wget_script_by_id():
+    """
+        Generate bash script to fetch data by id with wget
+    :return:
+    """
+    url = urlparse(flask.request.url).netloc
+    # flask.request.form['ids'] contains 'stringified' list with obs names, must eval that:
+    # _ids = ast.literal_eval(flask.request.form['ids'])
+    # print(flask.request.args['ids'])
+    # _ids = ast.literal_eval(flask.request.args['ids'])
+    _ids = flask.request.args['ids'].split(',')[:-1]
+    # print(_ids)
+
+    user_id = flask_login.current_user.id
+    # get db connection
+    client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
+
+    # trying to get something you're not supposed to get?
+    _programs = []
+    for _obs in _ids:
+        _program, _, _, _, _, _, _ = parse_obs_name(_obs, program_pi)
+        _programs.append(_program)
+
+    for _program in set(_programs):
+        if user_id != 'admin' and program_pi[_program] != user_id:
+            flask.abort(403)
+
+    cursor = coll.find({'_id': {'$in': _ids}, 'distributed.status': True})
+    response_text = '#!/usr/bin/env bash\n'
+    for obs in cursor:
+        _date_str = obs['date_utc'].strftime('%Y%m%d')
+        response_text += 'wget http://{:s}/data/{:s}/{:s}/{:s}.tar.bz2\n'.format(url, _date_str,
+                                                                                 obs['_id'], obs['_id'])
+    # print(response_text)
+
+    # generate .sh file on the fly
+    # print(response_text)
+    response = flask.make_response(response_text)
+    response.headers['Content-Disposition'] = 'attachment; filename=wget.sh'
+    return response
 
 
 # serve root

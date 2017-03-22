@@ -639,6 +639,13 @@
                                     {% endfor %}
                                     </tbody>
                                 </table>
+                                Master wget-script to fetch all data:
+                                <abbr title="Dont't forget to 'chmod u+x'">
+                                    <a href="get_data_by_id?ids={% for object in obs %}
+                                                {{ object['_id']|replace('+', '%2B') }},{% endfor %}">
+                                        wget.sh
+                                    </a><br>
+                                </abbr>
                             </div>
                         {% endif %}
                         {% if form['output_thumbnail'] == 'on' %}
@@ -970,6 +977,7 @@ $(document).ready(function(){
             $(".preview").css('height', slideEvt.value);
         });
     });
+
 </script>
 
 {# init tooltips #}
