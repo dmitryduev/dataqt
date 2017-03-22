@@ -639,10 +639,13 @@
                                     {% endfor %}
                                     </tbody>
                                 </table>
-                                Master wget-script to fetch all data:
+                                Master wget-script to fetch all available data:
                                 <abbr title="Dont't forget to 'chmod u+x'">
-                                    <a href="get_data_by_id?ids={% for object in obs %}
-                                                {{ object['_id']|replace('+', '%2B') }},{% endfor %}">
+{#                                    <a href="get_data_by_id?ids={% for object in obs %}#}
+{#                                                {{ object['_id']|replace('+', '%2B') }},{% endfor %}">#}
+{#                                        wget.sh#}
+{#                                    </a><br>#}
+                                    <a href="#" id="fetch-all" onclick="fetch_all()">
                                         wget.sh
                                     </a><br>
                                 </abbr>
@@ -978,6 +981,38 @@ $(document).ready(function(){
         });
     });
 
+</script>
+
+{# fetch-all #}
+<script>
+    function fetch_all() {
+        // Data to post
+        var data = {
+            ids: [{% for object in obs %}'{{ object['_id'] }}',{% endfor %}]
+        };
+
+        // Use XMLHttpRequest instead of Jquery $ajax
+        var xhttp = new XMLHttpRequest();
+        xhttp.onreadystatechange = function() {
+            var a;
+            if (xhttp.readyState === 4 && xhttp.status === 200) {
+                // Trick for making downloadable link
+                a = document.createElement('a');
+                a.href = window.URL.createObjectURL(xhttp.response);
+                // Give filename you wish to download
+                a.download = "wget.sh";
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+            }
+        };
+        // Post data to URL which handles post request
+        xhttp.open("POST", 'get_data_by_id');
+        xhttp.setRequestHeader("Content-Type", "application/json");
+        // You should set responseType as blob for binary responses
+        xhttp.responseType = 'blob';
+        xhttp.send(JSON.stringify(data));
+    }
 </script>
 
 {# init tooltips #}

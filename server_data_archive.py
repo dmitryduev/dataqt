@@ -874,7 +874,7 @@ def wget_script():
         return response
 
 
-@app.route('/get_data_by_id', methods=['GET'])
+@app.route('/get_data_by_id', methods=['POST'])
 @flask_login.login_required
 def wget_script_by_id():
     """
@@ -882,11 +882,9 @@ def wget_script_by_id():
     :return:
     """
     url = urlparse(flask.request.url).netloc
+    # print(flask.request.data)
     # flask.request.form['ids'] contains 'stringified' list with obs names, must eval that:
-    # _ids = ast.literal_eval(flask.request.form['ids'])
-    # print(flask.request.args['ids'])
-    # _ids = ast.literal_eval(flask.request.args['ids'])
-    _ids = flask.request.args['ids'].split(',')[:-1]
+    _ids = ast.literal_eval(flask.request.data)['ids']
     # print(_ids)
 
     user_id = flask_login.current_user.id
@@ -912,7 +910,7 @@ def wget_script_by_id():
     # print(response_text)
 
     # generate .sh file on the fly
-    # print(response_text)
+    print(response_text)
     response = flask.make_response(response_text)
     response.headers['Content-Disposition'] = 'attachment; filename=wget.sh'
     return response
