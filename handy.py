@@ -171,6 +171,7 @@ if __name__ == '__main__':
         if select_aux.count() > 0:
 
             data_aux = []
+            psflib_ids = []
             bar = pyprind.ProgBar(select_aux.count(), stream=1, title='Loading seeing data from aux collection',
                                   monitor=True)
             for ob in select_aux:
@@ -182,8 +183,13 @@ if __name__ == '__main__':
                         scaled_seeing = [frame[3]*scale_factors[frame[2]], frame[4]*scale_factors[frame[2]],
                                          frame[5] * scale_factors[frame[2]]]
                         data_aux.append([frame[1]] + scaled_seeing + [frame[6]])
+                # get obs ids that are in the PSF library:
+                for _id in ob['psf_lib']:
+                    if ob['psf_lib'][_id]['in_lib']:
+                        psflib_ids.append(_id)
 
             data_aux = np.array(data_aux)
+            psflib_ids = np.array(psflib_ids)
             # print(data_aux)
 
             # consider only measurements below 3 and above 0.5 arc seconds:
@@ -219,11 +225,11 @@ if __name__ == '__main__':
             ax.grid(linewidth=0.5)
             ax.legend(loc='best', fancybox=True, prop={'size': 10})
 
-        # load PSF library:
-        from astropy.io import fits
-        with fits.open('/Users/dmitryduev/_caltech/roboao/_archive/psf_library.fits') as _lib:
-            _library = _lib[0].data
-            _library_names = _lib[-1].data['obs_names']
+        # # load PSF library:
+        # from astropy.io import fits
+        # with fits.open('/Users/dmitryduev/_caltech/roboao/_archive/psf_library.fits') as _lib:
+        #     _library = _lib[0].data
+        #     psflib_ids = _lib[-1].data['obs_names']
 
         # dict to store query to be executed on the main collection (with obs data):
         query = dict()
@@ -268,8 +274,9 @@ if __name__ == '__main__':
             for ob in select:
                 # print('matching:', ob['_id'])
                 # FIXME: only get stuff that is in the PSF library:
-                if ob['_id'].split('.')[0] not in _library_names:
-                    continue
+                if ob['_id'].replace('.', '_') not in psflib_ids:
+                    # continue
+                    pass
 
                 bar.update(iterations=1)
                 # correct seeing for Zenith distance and reference to 500 nm:

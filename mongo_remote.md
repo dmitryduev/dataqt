@@ -6,5 +6,5 @@
     - add rule for port 27017 to redirect traffic to analysis machine (currently 192.168.1.10)
 - connect to analysis machine over ssh with the -X option
     - su -
-    - firewall-config -> ports -> add 27017
+    - firewall-config -> ports -> add 27017 (both in runtime and permanent configuration)
     - check in /etc/mongod.cond: bindIP either commented or 0.0.0.0 to listen at all interfaces
