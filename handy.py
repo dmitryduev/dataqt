@@ -275,8 +275,8 @@ if __name__ == '__main__':
                 # print('matching:', ob['_id'])
                 # FIXME: only get stuff that is in the PSF library:
                 if ob['_id'].replace('.', '_') not in psflib_ids:
-                    # continue
-                    pass
+                    continue
+                    # pass
 
                 bar.update(iterations=1)
                 # correct seeing for Zenith distance and reference to 500 nm:

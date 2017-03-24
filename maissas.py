@@ -60,9 +60,11 @@ def bad_obs_check(p, ps=0.0175797):
 
     # Icy, Icx = numpy.unravel_index(p.argmax(), p.shape)
 
-    for x in range(p.shape[1] / 2 - 20, p.shape[1] / 2 + 20 + 1):
-        for y in range(p.shape[0] / 2 - 20, p.shape[0] / 2 + 20 + 1):
-            r = sqrt((x - p.shape[1] / 2) ** 2 + (y - p.shape[0] / 2) ** 2)
+    x_shape = p.shape[1]
+    y_shape = p.shape[0]
+    for x in range(x_shape / 2 - 20, x_shape / 2 + 20 + 1):
+        for y in range(y_shape / 2 - 20, y_shape / 2 + 20 + 1):
+            r = sqrt((x - x_shape / 2) ** 2 + (y - y_shape / 2) ** 2)
             if r > 3:  # remove core
                 pix_rad.append(r)
                 pix_vals.append(p[y][x])
@@ -79,7 +81,7 @@ def bad_obs_check(p, ps=0.0175797):
         core_p = fmin(residuals, p0, args=(core_pix_rad, core_pix_vals), maxiter=1000000, maxfun=1000000,
                       ftol=1e-3, xtol=1e-3, disp=False)
     except OverflowError:
-        return 0, 0
+        return 0, 10
 
     _core = core_p[2] * ps
     _halo = p[2] * ps

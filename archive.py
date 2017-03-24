@@ -1660,6 +1660,7 @@ def residuals(p, x, y):
     return res
 
 
+@jit
 def bad_obs_check(p, return_halo=True, ps=0.0175797):
     pix_rad = []
     pix_vals = []
@@ -2653,8 +2654,10 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
                         )
                     _logger.info('Updated faint pipeline entry for {:s}'.format(_obs))
                 # check on Strehl:
-                check_strehl(_config, _logger, _coll, _coll.find_one({'_id': _obs}),
-                             _date, _obs, _pipe='faint')
+                # FIXME: do not calculate Strehl on faint data until it's fixed
+                if True is False:
+                    check_strehl(_config, _logger, _coll, _coll.find_one({'_id': _obs}),
+                                 _date, _obs, _pipe='faint')
                 # check on PCA
                 # reload entry from db:
                 _select = _coll.find_one({'_id': _obs})
