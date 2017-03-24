@@ -1660,7 +1660,7 @@ def residuals(p, x, y):
     return res
 
 
-@jit
+# @jit
 def bad_obs_check(p, return_halo=True, ps=0.0175797):
     pix_rad = []
     pix_vals = []
