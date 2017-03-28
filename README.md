@@ -113,6 +113,14 @@ Start mongod without authorization requirement:
 ```bash
 mongod --dbpath /Users/dmitryduev/web/mongodb/ 
 ```
+
+If you're running MongoDB on a NUMA machive 
+(connect with the ```mongo``` command and it will tell you if that's the case):
+```bash
+numactl --interleave=all mongod -f /etc/mongod.conf
+```
+
+
 Connect to mongodb with mongo and create superuser (on Fedora, proceed as root):
 ```bash
 # Create your superuser
@@ -187,6 +195,9 @@ result = coll.insert_one(
          'last_modified': datetime.datetime.now()}
 )
 ```
+
+Refer to this [tutorial](https://docs.mongodb.com/manual/tutorial/convert-standalone-to-replica-set/)
+to replicate the database.
 
 **Use [Robomongo](https://robomongo.org) to display/edit DB data!! It's super handy!**  
 Useful tip: check [this](https://docs.mongodb.com/manual/tutorial/enable-authentication/) out.

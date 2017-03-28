@@ -2206,6 +2206,7 @@ def get_config(_abs_path=None, _config_file='config.ini'):
     _config['mongo_collection_weather'] = config.get('Database', 'collection_weather')
     _config['mongo_user'] = config.get('Database', 'user')
     _config['mongo_pwd'] = config.get('Database', 'pwd')
+    _config['mongo_replicaset'] = config.get('Database', 'replicaset')
 
     # server ip addresses
     _config['analysis_machine_external_host'] = config.get('Server', 'analysis_machine_external_host')
@@ -2236,7 +2237,8 @@ def connect_to_db(_config, _logger=None):
     :return:
     """
     try:
-        _client = MongoClient(host=_config['mongo_host'], port=_config['mongo_port'])
+        _client = MongoClient(host=_config['mongo_host'], port=_config['mongo_port'],
+                              replicaset=_config['mongo_replicaset'])
         _db = _client[_config['mongo_db']]
         if _logger is not None:
             _logger.debug('Connecting to the Robo-AO database at {:s}:{:d}'.
