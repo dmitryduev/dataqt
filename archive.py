@@ -2593,13 +2593,16 @@ def check_pipe_faint(_config, _logger, _coll, _select, _date, _obs):
 
     """
     try:
-        # ran through lucky pipeline? computed Strehl? is it bad? all positive - then proceed
+        # # ran through lucky pipeline? computed Strehl? is it bad? all positive - then proceed
+        # if _select['pipelined']['faint']['status']['force_redo'] or \
+        #         (_select['pipelined']['automated']['status']['done'] and
+        #          _select['pipelined']['automated']['strehl']['status']['done'] and
+        #              (_select['pipelined']['automated']['strehl']['core_arcsec'] < _config['core_min'] or
+        #               _select['pipelined']['automated']['strehl']['halo_arcsec'] > _config['halo_max']))\
+        #         or (_select['pipelined']['faint']['status']['retries'] > 0):
+        # ran through lucky pipeline?
         if _select['pipelined']['faint']['status']['force_redo'] or \
-                (_select['pipelined']['automated']['status']['done'] and
-                 _select['pipelined']['automated']['strehl']['status']['done'] and
-                     (_select['pipelined']['automated']['strehl']['core_arcsec'] < _config['core_min'] or
-                      _select['pipelined']['automated']['strehl']['halo_arcsec'] > _config['halo_max']))\
-                or (_select['pipelined']['faint']['status']['retries'] > 0):
+                _select['pipelined']['automated']['status']['done']:
             _logger.debug('{:s} suitable for faint pipeline'.format(_obs))
 
             # following structure.md:
