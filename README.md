@@ -248,7 +248,7 @@ mongod --auth --dbpath /Users/dmitryduev/web/mongodb/
 ```
 
 **Run the archiver!**
-```python
+```bash
 python archive.py config.ini
 ```
 

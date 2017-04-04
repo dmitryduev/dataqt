@@ -39,13 +39,13 @@ import numpy as np
 
 def get_filter_code(_filter):
     # print(_filter)
-    if _filter == 'Sloan g\'':
+    if _filter == 'Sloan g':
         return 'Sg'
-    elif _filter == 'Sloan r\'':
+    elif _filter == 'Sloan r':
         return 'Sr'
-    elif _filter == 'Sloan i\'':
+    elif _filter == 'Sloan i':
         return 'Si'
-    elif _filter == 'Sloan z\'':
+    elif _filter == 'Sloan z':
         return 'Sz'
     elif _filter == 'Longpass 600nm':
         return 'lp600'
@@ -113,6 +113,9 @@ def get_config(config_file='config.ini'):
         ''' server location '''
         conf['server_host'] = _config.get('Server', 'host')
         conf['server_port'] = _config.get('Server', 'port')
+
+        # environment (test or production):
+        conf['environment'] = _config.get('Server', 'environment')
 
         # VO server:
         conf['vo_server'] = _config.get('Misc', 'vo_url')
@@ -268,15 +271,22 @@ login_manager = flask_login.LoginManager()
 login_manager.init_app(app)
 
 
-''' Create command line argument parser '''
-parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
-                                 description='Data archive for Robo-AO')
+''' Create command line argument parser if run from command line in test environment '''
+# FIXME:
+env = 'production'
 
-parser.add_argument('config_file', metavar='config_file',
-                    action='store', help='path to config file.', type=str)
+if env != 'production':
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
+                                     description='Data archive for Robo-AO')
 
-args = parser.parse_args()
-config_file = args.config_file
+    parser.add_argument('config_file', metavar='config_file',
+                        action='store', help='path to config file.', type=str)
+
+    args = parser.parse_args()
+    config_file = args.config_file
+else:
+    # FIXME:
+    config_file = 'config.archive.ini'
 
 
 ''' get config data '''
@@ -302,17 +312,17 @@ http://stackoverflow.com/questions/31298755/how-to-get-apache-to-serve-static-fi
 Once deployed, comment the following definition:
 '''
 
-
 # FIXME:
-@app.route('/data/<path:filename>')
-def data_static(filename):
-    """
-        Get files from the archive
-    :param filename:
-    :return:
-    """
-    _p, _f = os.path.split(filename)
-    return flask.send_from_directory(os.path.join(config['path_archive'], _p), _f)
+if config['environment'] != 'production':
+    @app.route('/data/<path:filename>')
+    def data_static(filename):
+        """
+            Get files from the archive
+        :param filename:
+        :return:
+        """
+        _p, _f = os.path.split(filename)
+        return flask.send_from_directory(os.path.join(config['path_archive'], _p), _f)
 
 
 ''' handle user login'''
