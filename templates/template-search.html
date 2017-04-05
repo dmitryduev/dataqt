@@ -1010,7 +1010,7 @@ $(document).ready(function(){
             }
         };
         // Post data to URL which handles post request
-        xhttp.open("POST", 'get_data_by_id');
+        xhttp.open("POST", $SCRIPT_ROOT + 'get_data_by_id');
         xhttp.setRequestHeader("Content-Type", "application/json");
         // You should set responseType as blob for binary responses
         xhttp.responseType = 'blob';
@@ -1227,7 +1227,7 @@ $(function() {
         var faint_pca = trigger.data('faint-pca'); // lucky data?
 
         // download link:
-        $('#previewModalDonloadLink').attr('href', '/data/' + date + '/' +
+        $('#previewModalDonloadLink').attr('href', '{{-script_root-}}/data/' + date + '/' +
                     source + '/' + source + '.tar.bz2');
 
         //var cc = trigger.data('cc'); // type of contrast curve
