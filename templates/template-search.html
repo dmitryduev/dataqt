@@ -930,7 +930,8 @@ $(document).ready(function(){
 
 <script>
     // for AJAX requests [absolute website's uri]:
-    $SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
+    $SCRIPT_ROOT = {{ script_root|tojson|safe }};
+{#    console.log($SCRIPT_ROOT);#}
 
     // switch tabs
     $(document).ready(function() {
