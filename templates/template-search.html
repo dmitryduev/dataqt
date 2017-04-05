@@ -144,7 +144,7 @@
         <div id="navbar" class="navbar-collapse collapse">
             <ul class="nav navbar-nav">
                 <li><a href="/">Data</a></li>
-                <li class="active"><a href="/search">Search</a></li>
+                <li class="active"><a href="search">Search</a></li>
             </ul>
             <ul class="nav navbar-nav navbar-right">
                 <li class="dropdown">
@@ -154,8 +154,8 @@
                     <ul class="dropdown-menu">
                         {# administration tasks #}
                         {% if user == 'admin' %}
-                            <li><a href="/manage_users">Manage users</a></li>
-                            <li><a href="/manage_psflib">Manage PSF library</a></li>
+                            <li><a href="manage_users">Manage users</a></li>
+                            <li><a href="manage_psflib">Manage PSF library</a></li>
                             {# Manage reobserving requests #}
                             {#<li><a href="manage_requests">Manage requests</a></li> #}
                             <li class='disabled'><a href="#">Manage requests</a></li>
@@ -185,7 +185,7 @@
 
             <div class="panel panel-default">
                 <div class="panel-body">
-                    <form class="form-horizontal " action="/search" method="POST">
+                    <form class="form-horizontal " action="search" method="POST">
                         <div class="form-group">
                             <label for="source_name" class="col-md-2 control-label">Source name</label>
                             <div class="col-md-8">

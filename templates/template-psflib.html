@@ -130,8 +130,8 @@
                     <ul class="dropdown-menu">
                         {# administration tasks #}
                         {% if user == 'admin' %}
-                            <li><a href="/manage_users">Manage users</a></li>
-                            <li><a href="/manage_psflib">Manage PSF library</a></li>
+                            <li><a href="manage_users">Manage users</a></li>
+                            <li><a href="manage_psflib">Manage PSF library</a></li>
                             {# Manage reobserving requests #}
                             {#<li><a href="manage_requests">Manage requests</a></li> #}
                             <li class='disabled'><a href="#">Manage requests</a></li>
@@ -139,7 +139,7 @@
                             {#<li><a href="view_logs">View logs</a></li>#}
                             <li class='disabled'><a href="#">View logs</a></li>
                         {% endif %}
-                        <li><a href="/logout">Log out</a></li>
+                        <li><a href="logout">Log out</a></li>
                     </ul>
                 </li>
 
