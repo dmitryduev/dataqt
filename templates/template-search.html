@@ -1,3 +1,5 @@
+{# set root path in case if run from sub-url #}
+{% set script_root = '' if request.script_root == '/' else request.script_root %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -143,8 +145,8 @@
         </div>
         <div id="navbar" class="navbar-collapse collapse">
             <ul class="nav navbar-nav">
-                <li><a href="/">Data</a></li>
-                <li class="active"><a href="search">Search</a></li>
+                <li><a href="{{-script_root-}}/">Data</a></li>
+                <li class="active"><a href="{{-script_root-}}/search">Search</a></li>
             </ul>
             <ul class="nav navbar-nav navbar-right">
                 <li class="dropdown">
@@ -173,7 +175,7 @@
 </nav>
 
 <div class="container">
-    {{ request.url }}<br>{{ request.script_root }}<br>{{ request.url_root }}
+{#    {{ request.url }}<br>{{ request.script_root }}<br>{{ request.url_root }}#}
     <div class="row">
         <div class="col-md-12">
             <h2>
