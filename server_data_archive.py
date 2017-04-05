@@ -287,7 +287,7 @@ app.wsgi_app = ReverseProxied(app.wsgi_app)
 app.secret_key = 'roboaokicksass'
 # add 'do' statement to jinja environment (does the same as {{ }}, but return nothing):
 app.jinja_env.add_extension('jinja2.ext.do')
-print(app['wsgi.url_scheme'])
+# print(app['wsgi.url_scheme'])
 
 
 def get_db(_config):
