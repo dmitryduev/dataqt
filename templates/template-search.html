@@ -141,7 +141,7 @@
                 <span class="icon-bar"></span>
                 <span class="icon-bar"></span>
             </button>
-            <a class="navbar-brand" href="/">Robo-AO data archive</a>
+            <a class="navbar-brand" href="{{-script_root-}}/">Robo-AO data archive</a>
         </div>
         <div id="navbar" class="navbar-collapse collapse">
             <ul class="nav navbar-nav">
@@ -156,8 +156,8 @@
                     <ul class="dropdown-menu">
                         {# administration tasks #}
                         {% if user == 'admin' %}
-                            <li><a href="manage_users">Manage users</a></li>
-                            <li><a href="manage_psflib">Manage PSF library</a></li>
+                            <li><a href="{{-script_root-}}/manage_users">Manage users</a></li>
+                            <li><a href="{{-script_root-}}/manage_psflib">Manage PSF library</a></li>
                             {# Manage reobserving requests #}
                             {#<li><a href="manage_requests">Manage requests</a></li> #}
                             <li class='disabled'><a href="#">Manage requests</a></li>
@@ -165,7 +165,7 @@
                             {#<li><a href="view_logs">View logs</a></li>#}
                             <li class='disabled'><a href="#">View logs</a></li>
                         {% endif %}
-                        <li><a href="logout">Log out</a></li>
+                        <li><a href="{{-script_root-}}/logout">Log out</a></li>
                     </ul>
                 </li>
 
@@ -188,7 +188,7 @@
 
             <div class="panel panel-default">
                 <div class="panel-body">
-                    <form class="form-horizontal " action="search" method="POST">
+                    <form class="form-horizontal " action="{{-script_root-}}/search" method="POST">
                         <div class="form-group">
                             <label for="source_name" class="col-md-2 control-label">Source name</label>
                             <div class="col-md-8">
@@ -613,7 +613,7 @@
                                             {# obs distributed? #}
                                             <td>
                                                 {% if object['distributed']['status'] %}
-                                                    <a href="/data/{{object['date_utc'].strftime('%Y%m%d')}}/{{object['_id']}}/{{object['_id']}}.tar.bz2">
+                                                    <a href="{{-script_root-}}/data/{{object['date_utc'].strftime('%Y%m%d')}}/{{object['_id']}}/{{object['_id']}}.tar.bz2">
                                                         <span class="glyphicon glyphicon-download"></span></a>
                                                 {% else %}
                                                     <span class="label label-danger">None</span>
@@ -679,12 +679,12 @@
                                             {% set date = object['date_utc'].strftime('%Y%m%d') %}
                                             <div class="img-wrapper">
                                                 {% if object['pipelined']['automated']['status']['done'] %}
-                                                    <img src="/data/{{date}}/{{object['_id']}}/automated/preview/{{object['_id']}}_cropped.png"
+                                                    <img src="{{-script_root-}}/data/{{date}}/{{object['_id']}}/automated/preview/{{object['_id']}}_cropped.png"
                                                          alt="{{ object['_id'] }}"
                                                          style="height:120px; cursor: pointer; margin-bottom: 3px;"
                                                          class="preview">
                                                 {% elif object['pipelined']['faint']['status']['done'] %}
-                                                    <img src="/data/{{date}}/{{object['_id']}}/faint/preview/{{object['_id']}}_cropped.png"
+                                                    <img src="{{-script_root-}}/data/{{date}}/{{object['_id']}}/faint/preview/{{object['_id']}}_cropped.png"
                                                          alt="{{ object['_id'] }}"
                                                          style="height:120px; cursor: pointer;"
                                                          class="preview">
@@ -895,14 +895,14 @@
 ================================================== -->
 <!-- Placed at the end of the document so the pages load faster -->
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
-<script type="text/javascript" src="/static/js/jquery.tablesorter.min.js"></script>
-<script src="/static/js/bootstrap.min.js"></script>
-<script src="/static/js/bootstrap-magnify.js"></script>
-<script src="/static/js/bootstrap-notify.js"></script>
-<script src="/static/js/moment.min.js"></script>
-<script src="/static/js/daterangepicker.js"></script>
-<script src="/static/js/bootstrap-slider.min.js"></script>
-<script src="/static/js/bootbox.js"></script>
+<script type="text/javascript" src="{{-script_root-}}/static/js/jquery.tablesorter.min.js"></script>
+<script src="{{-script_root-}}/static/js/bootstrap.min.js"></script>
+<script src="{{-script_root-}}/static/js/bootstrap-magnify.js"></script>
+<script src="{{-script_root-}}/static/js/bootstrap-notify.js"></script>
+<script src="{{-script_root-}}/static/js/moment.min.js"></script>
+<script src="{{-script_root-}}/static/js/daterangepicker.js"></script>
+<script src="{{-script_root-}}/static/js/bootstrap-slider.min.js"></script>
+<script src="{{-script_root-}}/static/js/bootbox.js"></script>
 
 <script>
 $(document).ready(function(){
@@ -1245,18 +1245,18 @@ $(function() {
         if (JSON.parse(lucky.toLowerCase())) {
             $('#luckyImagesTabContent').show();
             $('#luckyImagesTabEmpty').hide();
-            modal.find('#lucky_sou_full').attr('src', '/data/' + date + '/' +
+            modal.find('#lucky_sou_full').attr('src', '{{-script_root-}}/data/' + date + '/' +
                     source + '/automated/preview/' + source + '_full.png');
-            modal.find('#lucky_sou_cropped').attr('src', '/data/' + date + '/' +
+            modal.find('#lucky_sou_cropped').attr('src', '{{-script_root-}}/data/' + date + '/' +
                     source + '/automated/preview/' + source + '_cropped.png');
             // pca
             if (JSON.parse(lucky_pca.toLowerCase())) {
                 $('#lucky_sou_pca_label').show();
                 $('#lucky_sou_pca').show();
-                modal.find('#lucky_sou_pca').attr('src', '/data/' + date + '/' +
+                modal.find('#lucky_sou_pca').attr('src', '{{-script_root-}}/data/' + date + '/' +
                     source + '/automated/pca/' + source + '_pca.png');
                 $('#lucky_sou_cc').show();
-                modal.find('#lucky_sou_cc').attr('src', '/data/' + date + '/' +
+                modal.find('#lucky_sou_cc').attr('src', '{{-script_root-}}/data/' + date + '/' +
                     source + '/automated/pca/' + source + '_contrast_curve.png');
             }
             else {
@@ -1283,18 +1283,18 @@ $(function() {
         if (JSON.parse(faint.toLowerCase())) {
             $('#faintImagesTabContent').show();
             $('#faintImagesTabEmpty').hide();
-            modal.find('#faint_sou_full').attr('src', '/data/'+date+'/'+
+            modal.find('#faint_sou_full').attr('src', '{{-script_root-}}/data/'+date+'/'+
                     source+'/faint/preview/'+source+'_full.png');
-            modal.find('#faint_sou_cropped').attr('src', '/data/'+date+'/'+
+            modal.find('#faint_sou_cropped').attr('src', '{{-script_root-}}/data/'+date+'/'+
                     source+'/faint/preview/'+source+'_cropped.png');
             // pca
             if (JSON.parse(faint_pca.toLowerCase())) {
                 $('#faint_sou_pca_label').show();
                 $('#faint_sou_pca').show();
-                modal.find('#faint_sou_pca').attr('src', '/data/' + date + '/' +
+                modal.find('#faint_sou_pca').attr('src', '{{-script_root-}}/data/' + date + '/' +
                     source + '/faint/pca/' + source + '_pca.png');
                 $('#faint_sou_cc').show();
-                modal.find('#faint_sou_cc').attr('src', '/data/' + date + '/' +
+                modal.find('#faint_sou_cc').attr('src', '{{-script_root-}}/data/' + date + '/' +
                     source + '/faint/pca/' + source + '_contrast_curve.png');
             }
             else {
