@@ -50,6 +50,7 @@ def get_config(_config_file='config.ini'):
         conf['mongo_collection_weather'] = _config.get('Database', 'collection_weather')
         conf['mongo_user'] = _config.get('Database', 'user')
         conf['mongo_pwd'] = _config.get('Database', 'pwd')
+        conf['mongo_replicaset'] = _config.get('Database', 'replicaset')
 
         ''' server location '''
         conf['server_host'] = _config.get('Server', 'host')
@@ -71,7 +72,8 @@ def connect_to_db(_config):
     :return:
     """
     try:
-        _client = MongoClient(host=_config['mongo_host'], port=_config['mongo_port'])
+        _client = MongoClient(host=_config['mongo_host'], port=_config['mongo_port'],
+                              replicaset=_config['mongo_replicaset'])
         _db = _client[_config['mongo_db']]
         # print('ok')
     except Exception as _e:
