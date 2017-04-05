@@ -1,3 +1,5 @@
+{# set root path in case if run from sub-url #}
+{% set script_root = '' if request.script_root == '/' else request.script_root %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,17 +9,17 @@
     <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
     <meta name="description" content="">
     <meta name="author" content="Dmitry A. Duev">
-    <link rel="icon" type="image/png" href="/static/robot-favicon.png">
+    <link rel="icon" type="image/png" href="{{-script_root-}}/static/robot-favicon.png">
 
-    <title>Robo-AO data archive</title>
+    <title>Robo-AO data archive: manage PSF library</title>
 
     <!-- Bootstrap core CSS -->
-    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
-    <link rel="stylesheet" href="/static/css/bootstrap-magnify.min.css">
-    <link rel="stylesheet" href="/static/css/daterangepicker.css">
-    <link rel="stylesheet" href="/static/css/bootstrap-submenu.min.css">
+    <link rel="stylesheet" href="{{-script_root-}}/static/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{-script_root-}}/static/css/bootstrap-magnify.min.css">
+    <link rel="stylesheet" href="{{-script_root-}}/static/css/daterangepicker.css">
+    <link rel="stylesheet" href="{{-script_root-}}/static/css/bootstrap-submenu.min.css">
 
-    <link rel="stylesheet" href="/static/css/animate.css">
+    <link rel="stylesheet" href="{{-script_root-}}/static/css/animate.css">
 
     <style>
         html {
@@ -115,12 +117,12 @@
                 <span class="icon-bar"></span>
                 <span class="icon-bar"></span>
             </button>
-            <a class="navbar-brand" href="/">Robo-AO data archive</a>
+            <a class="navbar-brand" href="{{-script_root-}}/">Robo-AO data archive</a>
         </div>
         <div id="navbar" class="navbar-collapse collapse">
             <ul class="nav navbar-nav">
-                <li><a href="/">Data</a></li>
-                <li><a href="/search">Search</a></li>
+                <li><a href="{{-script_root-}}/">Data</a></li>
+                <li><a href="{{-script_root-}}/search">Search</a></li>
             </ul>
             <ul class="nav navbar-nav navbar-right">
                 <li class="dropdown">
@@ -130,8 +132,8 @@
                     <ul class="dropdown-menu">
                         {# administration tasks #}
                         {% if user == 'admin' %}
-                            <li><a href="manage_users">Manage users</a></li>
-                            <li><a href="manage_psflib">Manage PSF library</a></li>
+                            <li><a href="{{-script_root-}}/manage_users">Manage users</a></li>
+                            <li><a href="{{-script_root-}}/manage_psflib">Manage PSF library</a></li>
                             {# Manage reobserving requests #}
                             {#<li><a href="manage_requests">Manage requests</a></li> #}
                             <li class='disabled'><a href="#">Manage requests</a></li>
@@ -139,7 +141,7 @@
                             {#<li><a href="view_logs">View logs</a></li>#}
                             <li class='disabled'><a href="#">View logs</a></li>
                         {% endif %}
-                        <li><a href="logout">Log out</a></li>
+                        <li><a href="{{-script_root-}}/logout">Log out</a></li>
                     </ul>
                 </li>
 
@@ -206,7 +208,7 @@
                         {% for object in data %}
                             <div class="img-wrapper">
                                 <div>
-                                    <img src="/data/{{date}}/summary/psflib/{{object}}.png"
+                                    <img src="{{-script_root-}}/data/{{date}}/summary/psflib/{{object}}.png"
                                          alt="{{ object }}"
                                          style="height:120px; cursor: pointer; margin-bottom: 3px;"
                                          class="preview pop">
@@ -295,12 +297,12 @@
 ================================================== -->
 <!-- Placed at the end of the document so the pages load faster -->
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
-<script src="/static/js/bootstrap.min.js"></script>
-<script src="/static/js/bootstrap-magnify.js"></script>
-<script src="/static/js/bootstrap-notify.js"></script>
-<script src="/static/js/moment.min.js"></script>
-<script src="/static/js/daterangepicker.js"></script>
-<script src="/static/js/bootbox.js"></script>
+<script src="{{-script_root-}}/static/js/bootstrap.min.js"></script>
+<script src="{{-script_root-}}/static/js/bootstrap-magnify.js"></script>
+<script src="{{-script_root-}}/static/js/bootstrap-notify.js"></script>
+<script src="{{-script_root-}}/static/js/moment.min.js"></script>
+<script src="{{-script_root-}}/static/js/daterangepicker.js"></script>
+<script src="{{-script_root-}}/static/js/bootbox.js"></script>
 
 <script>
     // for AJAX requests [absolute website's uri]:
@@ -375,7 +377,7 @@ $('#aux_image_modal').on('show.bs.modal', function (event) {
     var date = trigger.data('date'); // date of observation
     var source = trigger.data('source'); // full source name
 
-    $('#aux_image_preview').attr('src', '/data/'+date+'/summary/psflib/'+source+'.png');
+    $('#aux_image_preview').attr('src', '{{-script_root-}}/data/'+date+'/summary/psflib/'+source+'.png');
 
     // modal title:
     var modal = $(this);
