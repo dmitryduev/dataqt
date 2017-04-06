@@ -204,8 +204,11 @@ def connect_to_db(_config):
     :return:
     """
     try:
-        _client = MongoClient(host=_config['mongo_host'], port=_config['mongo_port'],
-                              replicaset=_config['mongo_replicaset'])
+        if _config['environment'] == 'production':
+            _client = MongoClient(host=_config['mongo_host'], port=_config['mongo_port'],
+                                  replicaset=_config['mongo_replicaset'])
+        else:
+            _client = MongoClient(host=_config['mongo_host'], port=_config['mongo_port'])
         _db = _client[_config['mongo_db']]
     except Exception as _e:
         print(_e)
@@ -315,7 +318,8 @@ login_manager.init_app(app)
 
 ''' Create command line argument parser if run from command line in test environment '''
 # FIXME:
-env = 'production'
+# env = 'production'
+env = 'test'
 
 if env != 'production':
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -328,7 +332,8 @@ if env != 'production':
     config_file = args.config_file
 else:
     # FIXME:
-    config_file = 'config.archive.ini'
+    # config_file = 'config.archive.ini'
+    config_file = 'config.ini'
 
 
 ''' get config data '''
@@ -1046,6 +1051,7 @@ def search():
     else:
         obs = dict()
         errors = []
+        # flask.flash('')
 
     return flask.Response(stream_template('template-search.html', form=flask.request.form,
                                           user=user_id, program_ids=program_ids, obs=obs, errors=errors))
