@@ -174,7 +174,7 @@ sudo semanage permissive -a httpd_t
 
 Remember to `sudo service nginx restart` after each change.
 
-#### Installing `superwisord` process manager
+#### Installing `supervisord` process manager
 
 With the proper `pip`:
 ```
