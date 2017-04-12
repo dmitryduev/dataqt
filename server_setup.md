@@ -162,7 +162,7 @@ http {
 }
 ```
 
-Make sure the `nginx` process all the necessary `RHEL7` privileges
+Make sure the `nginx` process has all the necessary `RHEL7` privileges
     to access/execute stuff. `ls -Z` is your friend here. 
     May have to do (one of) the following:
 ```
