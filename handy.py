@@ -260,7 +260,9 @@ if __name__ == '__main__':
 
         # discard observations marked as "zero_flux" by the automated pipeline
         # query['pipelined.automated.classified_as'] = {'$ne': 'zero_flux'}
-        query['pipelined.automated.classified_as'] = {'$nin': ['zero_flux', 'failed', 'faint']}
+        # query['pipelined.automated.classified_as'] = {'$nin': ['zero_flux', 'failed', 'faint']}
+        # query['pipelined.automated.classified_as'] = {'$nin': ['zero_flux', 'failed']}
+        query['pipelined.automated.classified_as'] = {'$nin': ['failed']}
 
         # execute query:
         if len(query) > 0:
@@ -277,18 +279,21 @@ if __name__ == '__main__':
                 # print('matching:', ob['_id'])
                 # FIXME: only get stuff that is in the PSF library:
                 if ob['_id'].replace('.', '_') not in psflib_ids:
-                    continue
-                    # pass
+                    # continue
+                    pass
 
                 bar.update(iterations=1)
-                # correct seeing for Zenith distance and reference to 500 nm:
+                # correct seeing for Zenith distance and reference to 500 nm
                 data.append([ob['_id'], ob['date_utc'], ob['filter'],
                              ob['seeing']['nearest'][0],
                              ob['seeing']['nearest'][1]*scale_factors[ob['filter']] *
                                 (np.cos(np.pi/2 - ob['coordinates']['azel'][1])**0.6),
                              ob['pipelined']['automated']['strehl']['ratio_percent'],
                              ob['pipelined']['automated']['pca']['contrast_curve'],
-                             ob['coordinates']['azel'][1]*180/np.pi])
+                             ob['coordinates']['azel'][1]*180/np.pi,
+                             ob['magnitude'],
+                             ob['pipelined']['automated']['strehl']['flag']
+                             ])
 
             data = np.array(data)
 
@@ -442,10 +447,12 @@ if __name__ == '__main__':
 
                 print('median Strehl in {:s}: {:.1f}'.format(filt, np.median(data[mask_filter, 5])))
 
-                ax3.plot(data[mask_filter, 4], data[mask_filter, 5], '.', alpha=0.3,
-                         marker='o', markersize=4, label=filt)
+                # ax3.plot(data[mask_filter, 4], data[mask_filter, 5], '.', alpha=0.3,
+                #          marker='o', markersize=4, label=filt)
                 # when there's not much data:
-                # ax3.plot(data[mask_filter, 4], data[mask_filter, 5], '.', alpha=0.4,
+                ax3.plot(data[mask_filter, 4], data[mask_filter, 5], '.', alpha=0.5,
+                         marker='o', markersize=4, label=filt)
+                # ax3.plot(data[mask_filter, 4], data[mask_filter, 5], '.', alpha=0.6,
                 #          marker='o', markersize=5, label=filt)
 
                 if plot_new_good_data:
@@ -468,7 +475,7 @@ if __name__ == '__main__':
                     baseline_new, = ax31.plot(data[mask_filter_new_data, 4], data[mask_filter_new_data, 5],
                                               '.', alpha=0.5, marker='o', markersize=5, label=filt)
 
-                    if False:
+                    if True:
                         # for better visual apprehension, make robust RANSAC fits to old/new data
                         seeing_for_ransac_old = np.expand_dims(seeing_filt[mask_filter], axis=1)
                         seeing_for_ransac_new = np.expand_dims(seeing_filt[mask_filter_new_data], axis=1)
@@ -541,7 +548,44 @@ if __name__ == '__main__':
             ax4.set_ylim([0, 8])
             ax4.set_ylim(ax4.get_ylim()[::-1])
             ax4.grid(linewidth=0.5)
-            ax4.legend(loc='best', numpoints=1, fancybox=True, prop={'size': 16})
+            # ax4.legend(loc='best', numpoints=1, fancybox=True, prop={'size': 16})
+            ax4.legend(loc='best', numpoints=1, fancybox=True, prop={'size': 10})
+
+            ''' Strehl vs guide star mag '''
+            if False:
+                fig5 = plt.figure('Strehl vs guide star mag')
+                ax5 = fig5.add_subplot(111)
+
+                # exclude data taken more than 3 minutes before/after corresponding science observations:
+                mask_real_close = np.abs(data[:, 3] - data[:, 1]) < datetime.timedelta(seconds=60 * 3)
+                mask_i = np.array(data[:, 2] == u'Si')
+                mask_lp600 = np.array(data[:, 2] == u'lp600')
+                mask_ok = np.array(data[:, 9] == u'OK')
+                mask_bad = np.array(data[:, 9] == u'BAD?')
+                mask_no_bright = data[:, 8] > 10
+
+                # print(np.max(mask_i), np.max(mask_ok), )
+                # print(data[:, 8])
+
+                for seeing in (0.8, 1.0, 1.2, 1.4, 1.6, 1.8):
+
+                    mask_median_seeing = np.abs(data[:, 4] - seeing) < 0.1
+
+                    mask_master_ok = np.all(np.vstack((mask_real_close, mask_no_bright, mask_i,
+                                                       mask_ok, mask_median_seeing)), axis=0)
+                    mask_master_bad = np.all(np.vstack((mask_real_close, mask_no_bright, mask_i,
+                                                        mask_bad, mask_median_seeing)), axis=0)
+
+                    baseline, = ax5.plot(data[mask_master_ok, 8], data[mask_master_ok, 5], '.', alpha=0.2,
+                             marker='o', markersize=4, label='Si at {:.1f}\'\''.format(seeing))
+                    ax5.plot(data[mask_master_bad, 8], data[mask_master_bad, 5], '.', alpha=0.6,
+                             marker='o', markersize=5, label='Si_bad at {:.1f}\'\''.format(seeing),
+                             c=baseline.get_color())
+
+                ax5.set_xlabel('Magnitude')
+                ax5.set_ylabel('Strehl ratio, %')
+                ax5.grid(linewidth=0.5)
+                ax5.legend(loc='best', numpoints=1, fancybox=True, prop={'size': 10})
 
     except Exception as e:
         traceback.print_exc()
