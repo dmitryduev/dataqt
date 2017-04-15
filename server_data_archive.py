@@ -602,7 +602,10 @@ def get_dates_psflib(coll_aux, start=None, stop=None):
             stop = datetime.datetime.utcnow()
 
     # create indices not to perform in-memory sorting:
-    coll_aux.create_index([('_id', 1)])
+    try:
+        coll_aux.create_index([('_id', 1)])
+    except Exception as _e:
+        print(_e)
 
     # dictionary: {date: {ob_id: {data}}}
     dates = dict()
@@ -1049,7 +1052,10 @@ def search():
         # create indices before searching:
         # coll.create_index([('name', 1)])
         # this operation only commences if indices have not been created yet
-        coll.create_index([('coordinates.radec_geojson', '2dsphere'), ('name', 1)])
+        try:
+            coll.create_index([('coordinates.radec_geojson', '2dsphere'), ('name', 1)])
+        except Exception as _e:
+            print(_e)
 
         # query db
         obs, errors = query_db(search_form=flask.request.form, _coll=coll, _program_ids=program_ids, _user_id=user_id)
