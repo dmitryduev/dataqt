@@ -489,8 +489,11 @@ def get_dates(user_id, coll, coll_aux, start=None, stop=None):
             stop = datetime.datetime.utcnow()
 
     # create indices not to perform in-memory sorting:
-    coll.create_index([('date_utc', -1)])
-    coll_aux.create_index([('_id', 1)])
+    try:
+        coll.create_index([('date_utc', -1)])
+        coll_aux.create_index([('_id', 1)])
+    except Exception as _e:
+        print(_e)
 
     # dictionary: {date: {data: {program_N: [observations]}, aux: {}}}
     dates = dict()
