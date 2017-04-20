@@ -1266,7 +1266,7 @@ def reduce_faint_object_noram(_path_in, _files, _path_calib, _path_out, _obs,
             bar = pyprind.ProgBar(numFrames, stream=1, title='Registering frames')
 
         fn = 0
-        from time import time as _time
+        # from time import time as _time
         for jj, _file in enumerate(_files_list):
             with fits.open(os.path.join(_path_in, _file)) as _hdulist:
                 # frames_before = sum(n_frames_files[:jj])

@@ -334,6 +334,7 @@ else:
     # FIXME:
     config_file = 'config.archive.ini'
     # config_file = 'config.ini'
+    # config_file = 'config.analysis.ini'
 
 
 ''' get config data '''
@@ -1046,7 +1047,7 @@ def search():
 
     # got a request?
     if flask.request.method == 'POST':
-        # print(flask.request.form)
+        print(flask.request.form)
         # drop indices? no need to do that every time! MongoDB is clever enough to keep things updated
         # coll.drop_indexes()
         # create indices before searching:
@@ -1209,6 +1210,7 @@ def query_db(search_form, _coll, _program_ids, _user_id):
             val = search_form[key]
             if len(val) > 0:
                 rng = map(float, val.split(','))
+                print(key, rng)
                 assert rng[0] <= rng[1], 'invalid range for {:s}'.format(key)
                 if key == 'azimuth':
                     # not to complicate things, just ignore and don't add to query if full range is requested:
@@ -1246,7 +1248,7 @@ def query_db(search_form, _coll, _program_ids, _user_id):
                 elif key == 'exposure':
                     if rng == [0.0, 600.0]:
                         continue
-                    key_query = 'magnitude'
+                    key_query = 'exposure'
                 else:
                     key_query = key
                 # add to query
