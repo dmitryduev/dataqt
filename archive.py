@@ -2238,7 +2238,7 @@ def connect_to_db(_config, _logger=None):
     """
     try:
         _client = MongoClient(host=_config['mongo_host'], port=_config['mongo_port'],
-                              replicaset=_config['mongo_replicaset'])
+                              replicaset=_config['mongo_replicaset'], readPreference='primaryPreferred')
         _db = _client[_config['mongo_db']]
         if _logger is not None:
             _logger.debug('Connecting to the Robo-AO database at {:s}:{:d}'.

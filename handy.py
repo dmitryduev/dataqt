@@ -233,6 +233,18 @@ if __name__ == '__main__':
         #     _library = _lib[0].data
         #     psflib_ids = _lib[-1].data['obs_names']
 
+        # get total open shutter time:
+        if False:
+            select = coll.find({'exposure': {'$gte': 10}})
+            print('total observations:', select.count())
+            # display a progress bar
+            bar = pyprind.ProgBar(select.count(), stream=1, title='Loading query results', monitor=True)
+            exposure = 0
+            for ob in select:
+                exposure += ob['exposure']
+                bar.update(iterations=1)
+            print('total open shutter time: {:.1f} h'.format(exposure / 3600.0))
+
         # dict to store query to be executed on the main collection (with obs data):
         query = dict()
 
