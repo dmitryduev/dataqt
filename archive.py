@@ -9,6 +9,8 @@
 from __future__ import print_function
 
 import matplotlib
+from pymongo.errors import ExecutionTimeout
+
 matplotlib.use('Agg')
 
 import ConfigParser
@@ -24,6 +26,7 @@ import pytz
 import time
 from astropy.io import fits
 from pymongo import MongoClient
+from bson.objectid import ObjectId
 import sys
 import re
 from collections import OrderedDict
@@ -2211,6 +2214,7 @@ def get_config(_abs_path=None, _config_file='config.ini'):
     # server ip addresses
     _config['analysis_machine_external_host'] = config.get('Server', 'analysis_machine_external_host')
     _config['analysis_machine_external_port'] = config.get('Server', 'analysis_machine_external_port')
+    _config['environment'] = config.get('Server', 'environment')
 
     # consider data from:
     _config['archiving_start_date'] = datetime.datetime.strptime(
@@ -2237,8 +2241,12 @@ def connect_to_db(_config, _logger=None):
     :return:
     """
     try:
-        _client = MongoClient(host=_config['mongo_host'], port=_config['mongo_port'],
-                              replicaset=_config['mongo_replicaset'], readPreference='primaryPreferred')
+        if _config['environment'] == 'production':
+            _client = MongoClient(host=_config['mongo_host'], port=_config['mongo_port'],
+                                  replicaset=_config['mongo_replicaset'], readPreference='primaryPreferred')
+        else:
+            # standalone from my laptop:
+            _client = MongoClient(host=_config['mongo_host'], port=_config['mongo_port'])
         _db = _client[_config['mongo_db']]
         if _logger is not None:
             _logger.debug('Connecting to the Robo-AO database at {:s}:{:d}'.
@@ -4318,7 +4326,11 @@ if __name__ == '__main__':
             except Exception as e:
                 traceback.print_exc()
                 logger.error(e)
-                sys.exit()
+                # sys.exit()
+                # sleep then retry
+                sleep_for = naptime(config)  # seconds
+                time.sleep(sleep_for)
+                continue
 
             '''
              ###############################
@@ -4372,58 +4384,76 @@ if __name__ == '__main__':
                         filt, date_utc, camera, marker = parse_obs_name(obs, program_pi)
 
                     # look up entry in the database:
-                    select = coll.find_one({'_id': obs})
-                    # if entry not in database, create empty one and populate it
-                    if select is None:
-                        print('{:s} not in database, adding...'.format(obs))
-                        logger.info('{:s} not in database, adding'.format(obs))
+                    # select = coll.find_one({'_id': obs})
+                    try:
+                        select = coll.find_one({'_id': obs}, max_time_ms=10000)
 
-                        # initialize db entry and populate it
-                        entry = init_db_entry(_config=config,
-                                              _path_obs=os.path.join(config['path_raw'], date),
-                                              _date_files=date_files,
-                                              _obs=obs, _sou_name=sou_name,
-                                              _prog_num=prog_num, _prog_pi=prog_pi,
-                                              _date_utc=date_utc, _camera=camera,
-                                              _filt=filt)
-                        # insert it into database
-                        result = coll.insert_one(entry)
-                        # and select it:
-                        select = coll.find_one({'_id': obs})
+                        # if entry not in database, create empty one and populate it
+                        if select is None:
+                            print('{:s} not in database, adding...'.format(obs))
+                            logger.info('{:s} not in database, adding'.format(obs))
 
-                    # entry found in database, check if pipelined, update entry if necessary
-                    else:
-                        print('{:s} in database, checking...'.format(obs))
+                            # initialize db entry and populate it
+                            entry = init_db_entry(_config=config,
+                                                  _path_obs=os.path.join(config['path_raw'], date),
+                                                  _date_files=date_files,
+                                                  _obs=obs, _sou_name=sou_name,
+                                                  _prog_num=prog_num, _prog_pi=prog_pi,
+                                                  _date_utc=date_utc, _camera=camera,
+                                                  _filt=filt)
+                            # insert it into database
+                            result = coll.insert_one(entry)
+                            # and select it:
+                            # select = coll.find_one({'_id': obs})
 
-                    ''' check raw data '''
-                    status_ok = check_raws(_config=config, _logger=logger, _coll=coll,
-                                           _select=select, _date=date, _obs=obs, _date_files=date_files)
-                    if not status_ok:
-                        logger.error('Checking failed for raw data: {:s}'.format(obs))
+                        # entry found in database, check if pipelined, update entry if necessary
+                        else:
+                            print('{:s} in database, checking...'.format(obs))
 
-                    ''' check lucky-pipelined data '''
-                    # Strehl and PCA are checked from within check_pipe_automated
-                    status_ok = check_pipe_automated(_config=config, _logger=logger, _coll=coll,
-                                                     _select=coll.find_one({'_id': obs}), _date=date, _obs=obs)
-                    if not status_ok:
-                        logger.error('Checking failed for lucky pipeline: {:s}'.format(obs))
+                        ''' check raw data '''
+                        status_ok = check_raws(_config=config, _logger=logger, _coll=coll,
+                                               _select=coll.find_one({'_id': obs}, max_time_ms=10000),
+                                               _date=date, _obs=obs, _date_files=date_files)
+                        if not status_ok:
+                            logger.error('Checking failed for raw data: {:s}'.format(obs))
+                        else:
+                            print('{:s} raws check ok'.format(obs))
 
-                    ''' check faint-pipelined data '''
-                    status_ok = check_pipe_faint(_config=config, _logger=logger, _coll=coll,
-                                                 _select=coll.find_one({'_id': obs}), _date=date, _obs=obs)
-                    if not status_ok:
-                        logger.error('Checking failed for faint pipeline: {:s}'.format(obs))
+                        ''' check lucky-pipelined data '''
+                        # Strehl and PCA are checked from within check_pipe_automated
+                        status_ok = check_pipe_automated(_config=config, _logger=logger, _coll=coll,
+                                                         _select=coll.find_one({'_id': obs}, max_time_ms=10000),
+                                                         _date=date, _obs=obs)
+                        if not status_ok:
+                            logger.error('Checking failed for lucky pipeline: {:s}'.format(obs))
+                        else:
+                            print('{:s} lucky pipe check ok'.format(obs))
 
-                    # TODO: if it is a planetary observation, run the planetary pipeline
-                    ''' check planetary-pipelined data '''
+                        ''' check faint-pipelined data '''
+                        status_ok = check_pipe_faint(_config=config, _logger=logger, _coll=coll,
+                                                     _select=coll.find_one({'_id': obs}, max_time_ms=10000),
+                                                     _date=date, _obs=obs)
+                        if not status_ok:
+                            logger.error('Checking failed for faint pipeline: {:s}'.format(obs))
+                        else:
+                            print('{:s} faint pipe check ok'.format(obs))
 
-                    # mark distributed when all pipelines done or n_retries>3
-                    # compress everything with bzip2, store and TODO: transfer over to Caltech
-                    status_ok = check_distributed(_config=config, _logger=logger, _coll=coll,
-                                                  _select=coll.find_one({'_id': obs}),
-                                                  _date=date, _obs=obs, _n_days=1.1)
-                    if not status_ok:
-                        logger.error('Checking failed if distributed: {:s}'.format(obs))
+                        # TODO: if it is a planetary observation, run the planetary pipeline
+                        ''' check planetary-pipelined data '''
+
+                        # mark distributed when all pipelines done or n_retries>3
+                        # compress everything with bzip2, store and TODO: transfer over to Caltech
+                        status_ok = check_distributed(_config=config, _logger=logger, _coll=coll,
+                                                      _select=coll.find_one({'_id': obs}, max_time_ms=10000),
+                                                      _date=date, _obs=obs, _n_days=1.1)
+                        if not status_ok:
+                            logger.error('Checking failed if distributed: {:s}'.format(obs))
+                        else:
+                            print('{:s} distributed check ok'.format(obs))
+
+                    except ExecutionTimeout:
+                        print('query took too long to execute, skipping {:s}'.format(obs))
+                        continue
 
                 ''' auxiliary (summary) data '''
                 # look up entry in the database:

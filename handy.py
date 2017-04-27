@@ -186,9 +186,10 @@ if __name__ == '__main__':
                                          frame[5] * scale_factors[frame[2]]]
                         data_aux.append([frame[1]] + scaled_seeing + [frame[6]])
                 # get obs ids that are in the PSF library:
-                for _id in ob['psf_lib']:
-                    if ob['psf_lib'][_id]['in_lib']:
-                        psflib_ids.append(_id)
+                if 'psf_lib' in ob:
+                    for _id in ob['psf_lib']:
+                        if ob['psf_lib'][_id]['in_lib']:
+                            psflib_ids.append(_id)
 
             data_aux = np.array(data_aux)
             psflib_ids = np.array(psflib_ids)
@@ -264,8 +265,8 @@ if __name__ == '__main__':
         query['science_program.program_id'] = {'$ne': '24'}
 
         # azimuth and elevation range:
-        query['coordinates.azel.0'] = {'$gte': 0 * np.pi / 180.0, '$lte': 360 * np.pi / 180.0}
-        query['coordinates.azel.1'] = {'$gte': 0 * np.pi / 180.0, '$lte': 90 * np.pi / 180.0}
+        # query['coordinates.azel.0'] = {'$gte': 0 * np.pi / 180.0, '$lte': 360 * np.pi / 180.0}
+        # query['coordinates.azel.1'] = {'$gte': 0 * np.pi / 180.0, '$lte': 90 * np.pi / 180.0}
 
         # consider reliable Strehls only:
         # query['pipelined.automated.strehl.flag'] = {'$eq': 'OK'}
@@ -290,22 +291,26 @@ if __name__ == '__main__':
             for ob in select:
                 # print('matching:', ob['_id'])
                 # FIXME: only get stuff that is in the PSF library:
-                if ob['_id'].replace('.', '_') not in psflib_ids:
-                    # continue
-                    pass
+                if False:
+                    if ob['_id'].replace('.', '_') not in psflib_ids:
+                        continue
+                        # pass
 
                 bar.update(iterations=1)
                 # correct seeing for Zenith distance and reference to 500 nm
-                data.append([ob['_id'], ob['date_utc'], ob['filter'],
-                             ob['seeing']['nearest'][0],
-                             ob['seeing']['nearest'][1]*scale_factors[ob['filter']] *
-                                (np.cos(np.pi/2 - ob['coordinates']['azel'][1])**0.6),
-                             ob['pipelined']['automated']['strehl']['ratio_percent'],
-                             ob['pipelined']['automated']['pca']['contrast_curve'],
-                             ob['coordinates']['azel'][1]*180/np.pi,
-                             ob['magnitude'],
-                             ob['pipelined']['automated']['strehl']['flag']
-                             ])
+                try:
+                    data.append([ob['_id'], ob['date_utc'], ob['filter'],
+                                 ob['seeing']['nearest'][0],
+                                 ob['seeing']['nearest'][1]*scale_factors[ob['filter']] *
+                                    (np.cos(np.pi/2 - ob['coordinates']['azel'][1])**0.6),
+                                 ob['pipelined']['automated']['strehl']['ratio_percent'],
+                                 ob['pipelined']['automated']['pca']['contrast_curve'],
+                                 ob['coordinates']['azel'][1]*180/np.pi,
+                                 ob['magnitude'],
+                                 ob['pipelined']['automated']['strehl']['flag']
+                                 ])
+                except:
+                    pass
 
             data = np.array(data)
 
@@ -509,6 +514,8 @@ if __name__ == '__main__':
 
             ax3.set_xlabel('Seeing [arc seconds]')
             ax3.set_ylabel('Strehl ratio, %')
+            ax3.set_xlim([0.5, 3])
+            ax3.set_ylim([-0.01, 20])
             ax3.legend(loc='best', numpoints=1, fancybox=True, prop={'size': 10})
 
             if plot_new_good_data:
