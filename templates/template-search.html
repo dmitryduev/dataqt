@@ -18,6 +18,8 @@
     <link rel="stylesheet" href="{{-script_root-}}/static/css/bootstrap-magnify.min.css">
     <link rel="stylesheet" href="{{-script_root-}}/static/css/daterangepicker.css">
     <link rel="stylesheet" href="{{-script_root-}}/static/css/bootstrap-slider.min.css">
+    <!-- Bootstrap table -->
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.11.1/bootstrap-table.min.css">
 
     <link rel="stylesheet" href="{{-script_root-}}/static/css/animate.css">
 
@@ -49,13 +51,20 @@
             border-bottom: 1px solid #ddd;
             padding: 5px 10px;
         }
+{#        .th-inner {#}
+{#            white-space: normal;#}
+{#        }#}
         td {
-            border-right: solid 1px #DDDDDD;
+            white-space: nowrap;
+{#            border-right: solid 1px #DDDDDD;#}
         }
         .borderless td, .borderless th {
             border: none;
         }
-        .table-condensed>thead>tr>th, .table-condensed>tbody>tr>th,
+        .table-condensed>thead>tr>th, .table-condensed>tbody>tr>th {
+            padding: 0;
+            font-size: 10px;
+        }
         .table-condensed>tfoot>tr>th, .table-condensed>thead>tr>td,
         .table-condensed>tbody>tr>td, .table-condensed>tfoot>tr>td {
             padding: 1px;
@@ -123,6 +132,14 @@
             bottom: 20px;
             right: 20px;
             display:none;
+        }
+        .table-fixed thead {
+            width: 100%;
+        }
+        .table-fixed tbody {
+            height: 100px;
+            overflow-y: auto;
+            width: 100%;
         }
     </style>
 
@@ -462,25 +479,337 @@
                     <div class="tab-content">
                         {% if form['output_table'] == 'on' %}
                             <div role="tabpanel" class="tab-pane" id="data-table">
-                                <table class="table table-hover table-condensed tablesorter" id="obs-table">
-                                    <thead style="border-bottom: none;">
+{#                                <table class="table table-hover table-condensed tablesorter table-fixed"#}
+{#                                       id="obs-table">#}
+{#                                    <thead style="border-bottom: none;">#}
+{#                                    <tr>#}
+{#                                        {% for key in ('program_id', 'name', 'date_UTC', 'RA, h:m:s', 'Dec, d:m:s',#}
+{#                                                       'azimuth, deg', 'elevation, deg', 'magnitude', 'exposure, s', 'filter',#}
+{#                                                       'median seeing, "', 'nearest seeing, "',#}
+{#                                                       'lucky_done', 'lucky_pca_done', 'lucky_strehl',#}
+{#                                                       'faint_done', 'faint_pca_done', 'faint_strehl',#}
+{#                                                       'download_link', 'preview')%}#}
+{#                                            <th class="rotate" style="cursor: pointer; cursor: hand;">#}
+{#                                                <div><span>{{ key }}</span></div>#}
+{#                                            </th>#}
+{#                                        {% endfor %}#}
+{#                                        <th></th>#}
+{#                                    </tr>#}
+{#                                    </thead>#}
+{#                                    <tbody>#}
+{#                                    {% for object in obs %}#}
+{#                                        <tr class="clickable-row">#}
+{#                                            <td>#}
+{#                                                {{ object['science_program']['program_id'] }}#}
+{#                                            </td>#}
+{#                                            {% for key in ('name', 'date_utc')%}#}
+{#                                                <td id="{{ key }}">#}
+{#                                                    {{ object[key] }}#}
+{#                                                </td>#}
+{#                                            {% endfor %}#}
+{#                                            <td>#}
+{#                                                {% if object['coordinates']['azel'] != None %}#}
+{#                                                    {{ object['coordinates']['radec_str'][0] }}#}
+{#                                                {% else %}#}
+{#                                                    <span class="label label-danger">None</span>#}
+{#                                                {% endif %}#}
+{#                                            </td>#}
+{#                                            <td>#}
+{#                                                {% if object['coordinates']['azel'] != None %}#}
+{#                                                    {{ object['coordinates']['radec_str'][1] }}#}
+{#                                                {% else %}#}
+{#                                                    <span class="label label-danger">None</span>#}
+{#                                                {% endif %}#}
+{#                                            </td>#}
+{#                                            <td>#}
+{#                                                {% if object['coordinates']['azel'] != None %}#}
+{#                                                    {{ '%.2f' | format(object['coordinates']['azel'][0]*180.0/3.1415926) }}#}
+{#                                                {% else %}#}
+{#                                                    <span class="label label-danger">None</span>#}
+{#                                                {% endif %}#}
+{#                                            </td>#}
+{#                                            <td>#}
+{#                                                {% if object['coordinates']['azel'] != None %}#}
+{#                                                    {{ '%.2f' | format(object['coordinates']['azel'][1]*180.0/3.1415926) }}#}
+{#                                                {% else %}#}
+{#                                                    <span class="label label-danger">None</span>#}
+{#                                                {% endif %}#}
+{#                                            </td>#}
+{#                                            {% for key in ('magnitude', 'exposure', 'filter')%}#}
+{#                                                <td>#}
+{#                                                    {% if object[key] != None %}#}
+{#                                                        {{ object[key] }}#}
+{#                                                    {% else %}#}
+{#                                                        <span class="label label-danger">None</span>#}
+{#                                                    {% endif %}#}
+{#                                                </td>#}
+{#                                            {% endfor %}#}
+{#                                            <td>#}
+{#                                                {% if object['seeing']['median'] != None %}#}
+{#                                                    {{ '%.2f' | format(object['seeing']['median']) }}#}
+{#                                                {% else %}#}
+{#                                                    <span class="label label-danger">None</span>#}
+{#                                                {% endif %}#}
+{#                                            </td>#}
+{#                                            <td>#}
+{#                                                {% if ('seeing' in object) and ('nearest' in object['seeing']) and#}
+{#                                                    (object['seeing']['nearest'] != None) %}#}
+{#                                                    {{ '%.2f' | format(object['seeing']['nearest'][1]) }}#}
+{#                                                {% else %}#}
+{#                                                    <span class="label label-danger">None</span>#}
+{#                                                {% endif %}#}
+{#                                            </td>#}
+{#                                            {% for key in ('automated', 'faint')%}#}
+                                                {# set up classes for color-coding the badges #}
+{#                                                {% set class_pipe = 'success' if#}
+{#                                                object['pipelined'][key]['status']['done'] else 'danger' %}#}
+                                                {# being recomputed? #}
+{#                                                {% if key == 'faint' and (object['pipelined'][key]['status']['force_redo']#}
+{#                                                or object['pipelined'][key]['status']['enqueued']) %}#}
+{#                                                    {% set class_pipe = 'warning' %}#}
+{#                                                {% endif %}#}
+{#                                                {% set class_pipe_pca = 'success' if#}
+{#                                                object['pipelined'][key]['pca']['status']['done'] else 'danger' %}#}
+                                                {# being recomputed? #}
+{#                                                {% if object['pipelined'][key]['pca']['status']['force_redo']#}
+{#                                                or object['pipelined'][key]['pca']['status']['enqueued'] %}#}
+{#                                                    {% set class_pipe_pca = 'warning' %}#}
+{#                                                {% endif %}#}
+{##}
+                                                {# pipelined? #}
+{#                                                <td>#}
+                                                    {# jedi master can use force to force redo! #}
+{#                                                    {% if user == 'admin' and key == 'faint' %}#}
+{#                                                        <span style="cursor: pointer;"#}
+{#                                                              onclick="forceRedo('{{ object['_id'] }}', '{{ key }}');">#}
+{#                                                    {% endif %}#}
+{#                                                    <span class="label label-{{ class_pipe }}" id="{{ object['_id'] }}_{{ key }}">#}
+{#                                                        {{ object['pipelined'][key]['status']['done'] }}#}
+{#                                                    </span>#}
+{#                                                    {% if user == 'admin' %}#}
+{#                                                        </span>#}
+{#                                                    {% endif %}#}
+{#                                                </td>#}
+                                                {# pca pipeline done? #}
+{#                                                <td>#}
+                                                    {# jedi master can use force to force redo! #}
+{#                                                    {% if user == 'admin' %}#}
+{#                                                        <span style="cursor: pointer;"#}
+{#                                                              onclick="forceRedo('{{ object['_id'] }}', '{{ key }}.pca');">#}
+{#                                                    {% endif %}#}
+{#                                                    <span class="label label-{{ class_pipe_pca }}" id="{{ object['_id'] }}_{{ key }}.pca">#}
+{#                                                        {{ object['pipelined'][key]['pca']['status']['done'] }}#}
+{#                                                    </span>#}
+{#                                                    {% if user == 'admin' %}#}
+{#                                                        </span>#}
+{#                                                    {% endif %}#}
+{#                                                </td>#}
+                                                {# Strehl computed? #}
+{#                                                <td>#}
+                                                    {# jedi master can use force to force redo! #}
+{#                                                    {% if user == 'admin' %}#}
+{#                                                        <span style="cursor: pointer;"#}
+{#                                                              onclick="forceRedo('{{ object['_id'] }}', '{{ key }}.strehl');">#}
+{#                                                    {% endif %}#}
+{#                                                    {% if object['pipelined'][key]['strehl']['ratio_percent'] != None %}#}
+                                                        {# being recomputed? #}
+{#                                                        {% if object['pipelined'][key]['strehl']['status']['force_redo'] or#}
+{#                                                            object['pipelined'][key]['strehl']['status']['enqueued'] %}#}
+{#                                                            <span class="label label-warning" id="{{ object['_id'] }}_{{ key }}.strehl">#}
+{#                                                                {{ '%.2f' | format(object['pipelined'][key]['strehl']['ratio_percent']) }}#}
+{#                                                            </span>#}
+{#                                                        {% else %}#}
+{#                                                            <span  id="{{ object['_id'] }}_{{ key }}.strehl">#}
+{#                                                                {{ '%.2f' | format(object['pipelined'][key]['strehl']['ratio_percent']) }}#}
+{#                                                            </span>#}
+{#                                                        {% endif %}#}
+{#                                                    {% elif object['pipelined'][key]['strehl']['status']['force_redo'] or#}
+{#                                                            object['pipelined'][key]['strehl']['status']['enqueued'] %}#}
+{#                                                        <span class="label label-warning" id="{{ object['_id'] }}_{{ key }}.strehl">#}
+{#                                                            None#}
+{#                                                        </span>#}
+{#                                                    {% else %}#}
+{#                                                        <span class="label label-danger" id="{{ object['_id'] }}_{{ key }}.strehl">#}
+{#                                                            None#}
+{#                                                        </span>#}
+{#                                                    {% endif %}#}
+{#                                                    {% if user == 'admin' %}#}
+{#                                                        </span>#}
+{#                                                    {% endif %}#}
+{#                                                </td>#}
+{#                                            {% endfor %}#}
+                                            {# obs distributed? #}
+{#                                            <td>#}
+{#                                                {% if object['distributed']['status'] %}#}
+{#                                                    <a href="{{-script_root-}}/data/{{object['date_utc'].strftime('%Y%m%d')}}/{{object['_id']}}/{{object['_id']}}.tar.bz2">#}
+{#                                                        <span class="glyphicon glyphicon-download"></span></a>#}
+{#                                                {% else %}#}
+{#                                                    <span class="label label-danger">None</span>#}
+{#                                                {% endif %}#}
+{#                                            </td>#}
+                                            {# display modal with preview stuff #}
+{#                                            <td>#}
+{#                                                {% if object['pipelined']['automated']['status']['done'] or#}
+{#                                                        object['pipelined']['faint']['status']['done'] %}#}
+{#                                                    <a href="#" data-toggle="modal" data-target="#sourceModal"#}
+{#                                                       data-date="{{object['date_utc'].strftime('%Y%m%d')}}"#}
+{#                                                       data-source="{{ object['_id'] }}"#}
+{#                                                       data-sou_name="{{ object['name'] }}"#}
+{#                                                       data-lucky="{{ object['pipelined']['automated']['preview']['done'] }}"#}
+{#                                                       data-lucky-strehl="{{ object['pipelined']['automated']['strehl']['status']['done'] }}"#}
+{#                                                       data-lucky-pca="{{ object['pipelined']['automated']['pca']['preview']['done'] }}"#}
+{#                                                       data-faint="{{ object['pipelined']['faint']['preview']['done'] }}"#}
+{#                                                       data-faint-strehl="{{ object['pipelined']['faint']['strehl']['status']['done'] }}"#}
+{#                                                       data-faint-pca="{{ object['pipelined']['faint']['pca']['preview']['done'] }}">#}
+{#                                                    <span class="glyphicon glyphicon-play-circle"></span></a>#}
+{#                                                {% else %}#}
+{#                                                    <span class="label label-danger">None</span>#}
+{#                                                {% endif %}#}
+{#                                            </td>#}
+{#                                        </tr>#}
+{#                                    {% endfor %}#}
+{#                                    </tbody>#}
+{#                                </table>#}
+{#                                Master wget-script to fetch all available data:#}
+{#                                <abbr title="Dont't forget to 'chmod u+x'">#}
+{#                                    <a href="get_data_by_id?ids={% for object in obs %}#}
+{#                                                {{ object['_id']|replace('+', '%2B') }},{% endfor %}">#}
+{#                                        wget.sh#}
+{#                                    </a><br>#}
+{#                                    <a href="#" id="fetch-all" onclick="fetch_all()">#}
+{#                                        wget.sh#}
+{#                                    </a><br>#}
+{#                                </abbr>#}
+{#                                <br>#}
+
+{#                                <div id="toolbar">#}
+{#                                    <select class="form-control">#}
+{#                                        <option value="">Export Basic</option>#}
+{#                                        <option value="all">Export All</option>#}
+{#                                        <option value="selected">Export Selected</option>#}
+{#                                    </select>#}
+{#                                </div>#}
+                                <br>
+                                <div id="toolbar">
+                                    <div data-toggle="tooltip" data-placement="top"
+                                         title="Dont't forget to 'chmod u+x'">
+                                        Master wget-script to fetch all available data:
+                                        <a href="#" id="fetch-all" onclick="fetch_all()">
+                                            wget.sh
+                                        </a>
+                                    </div>
+                                </div>
+                                <table id="table"
+                                       class="table table-hover table-condensed"
+                                       data-toggle="table"
+                                       data-toolbar="#toolbar"
+                                       data-pagination="true"
+                                       data-side-pagination="client"
+                                       data-minimum-count-columns="2"
+                                       data-page-size="20"
+                                       data-page-list="[20, 50, 100, 200, 500, 'All']"
+                                       data-search="true"
+                                       data-show-columns="true"
+                                       data-show-export="true"
+                                       data-export-types="['json', 'csv']"
+                                       data-export-options='{
+                                             "fileName": "table",
+                                             "worksheetName": "table1",
+                                           }'>
+                                    <thead>
                                     <tr>
-                                        {% for key in ('program_id', 'name', 'date_UTC', 'RA, h:m:s', 'Dec, d:m:s',
-                                                       'azimuth, deg', 'elevation, deg', 'magnitude', 'exposure, s', 'filter',
-                                                       'median seeing, "', 'nearest seeing, "',
-                                                       'lucky_done', 'lucky_pca_done', 'lucky_strehl',
-                                                       'faint_done', 'faint_pca_done', 'faint_strehl',
-                                                       'download_link', 'preview')%}
-                                            <th class="rotate" style="cursor: pointer; cursor: hand;">
-                                                <div><span>{{ key }}</span></div>
+{#                                        <th data-field="state" data-checkbox="true"></th>#}
+                                        <th data-sortable="true">pID</th>
+                                        <th data-sortable="true">
+                                            <div data-toggle="tooltip" data-placement="top"
+                                                 title="Source name">Name</div>
+                                        </th>
+                                        <th data-sortable="true">date_UTC</th>
+                                        <th data-sortable="true" style="max-width: 30px;">
+                                            <div data-toggle="tooltip" data-placement="top"
+                                                 title="h:m:s">RA</div>
+                                        </th>
+                                        <th data-sortable="true">
+                                            <div style="max-width: 30px;" data-toggle="tooltip" data-placement="top"
+                                                 title="d:m:s">Dec</div>
+                                        </th>
+                                        <th data-sortable="true" data-visible="false">
+                                            <div style="max-width: 30px;" data-toggle="tooltip" data-placement="top"
+                                                 title="Azimuth, degrees">Az, &deg;</div>
+                                        </th>
+                                        <th data-sortable="true" data-visible="false">
+                                            <div style="max-width: 30px;" data-toggle="tooltip" data-placement="top"
+                                                 title="Elevation, degrees">El, &deg;</div>
+                                        </th>
+                                        <th data-sortable="true">
+                                            <div data-toggle="tooltip" data-placement="top"
+                                                 title="Magnitude">mag</div>
                                             </th>
-                                        {% endfor %}
-                                        <th></th>
+                                        <th data-sortable="true">
+                                            <div data-toggle="tooltip" data-placement="top"
+                                                 title="Exposure, seconds">exp, s</div>
+                                        </th>
+                                        <th data-sortable="true">
+                                            <div style="max-width: 30px;" data-toggle="tooltip" data-placement="top"
+                                                 title="Filter name">filter</div>
+                                        </th>
+                                        <th data-sortable="true" data-visible="false">
+                                            <div data-toggle="tooltip" data-placement="top"
+                                                 title="Median seeing on the night">M_seeing, "</div></th>
+                                        <th data-sortable="true">
+                                            <div style="max-width: 30px;" data-toggle="tooltip" data-placement="top"
+                                                 title="Nearest seeing measurement">N_seeing, "</div>
+                                        </th>
+                                        <th data-sortable="true">
+                                            <div data-toggle="tooltip" data-placement="top"
+                                                 title="Bright source Pipeline done?">BP</div>
+                                        </th>
+                                        <th data-sortable="true">
+                                            <div style="max-width: 30px;" data-toggle="tooltip" data-placement="top"
+                                                 title="PCA for bright source pipeline done?">BP_PCA</div>
+                                        </th>
+                                        <th data-sortable="true">
+                                            <div style="max-width: 30px;" data-toggle="tooltip" data-placement="top"
+                                                 title="Strehl ration for BP">BP_Strehl</div>
+                                        </th>
+                                        <th data-sortable="true">
+                                            <div data-toggle="tooltip" data-placement="top"
+                                                 title="Faint source pipeline done?">FP</div>
+                                        </th>
+                                        <th data-sortable="true" data-visible="false">
+                                            <div style="max-width: 30px;" data-toggle="tooltip" data-placement="top"
+                                                 title="PCA for faint source pipeline done?">FP_PCA</div>
+                                        </th>
+                                        <th data-sortable="true" data-visible="false">
+                                            <div style="max-width: 30px;" data-toggle="tooltip" data-placement="top"
+                                                 title="Strehl ratio for FP">FP_Strehl</div>
+                                        </th>
+                                        <th data-sortable="true">
+                                            <div style="max-width: 30px;" data-toggle="tooltip" data-placement="top"
+                                                 title="Download">
+                                                <span class="glyphicon glyphicon-circle-arrow-down"></span>
+                                            </div>
+                                        </th>
+                                        <th data-sortable="true">
+                                            <div style="max-width: 30px;" data-toggle="tooltip" data-placement="top"
+                                                 title="Preview">
+                                                <span class="glyphicon glyphicon-play"></span>
+                                            </div>
+                                        </th>
+{#                                        {% for key in ('program_id', 'name', 'date_UTC', 'RA, h:m:s', 'Dec, d:m:s',#}
+{#                                                       'Az, deg', 'El, deg', 'mag', 'exposure, s', 'filter',#}
+{#                                                       'median seeing, "', 'nearest seeing, "',#}
+{#                                                       'lucky_done', 'lucky_pca_done', 'lucky_strehl',#}
+{#                                                       'faint_done', 'faint_pca_done', 'faint_strehl',#}
+{#                                                       'download_link', 'preview')%}#}
+{#                                            <th data-sortable="true">{{ key }}</th>#}
+{#                                        {% endfor %}#}
                                     </tr>
                                     </thead>
                                     <tbody>
                                     {% for object in obs %}
                                         <tr class="clickable-row">
+{#                                            <td></td>#}
                                             <td>
                                                 {{ object['science_program']['program_id'] }}
                                             </td>
@@ -624,7 +953,7 @@
                                             <td>
                                                 {% if object['distributed']['status'] %}
                                                     <a href="{{-script_root-}}/data/{{object['date_utc'].strftime('%Y%m%d')}}/{{object['_id']}}/{{object['_id']}}.tar.bz2">
-                                                        <span class="glyphicon glyphicon-download"></span></a>
+                                                        <span class="glyphicon glyphicon-download" style="font-size: 11px"></span></a>
                                                 {% else %}
                                                     <span class="label label-danger">None</span>
                                                 {% endif %}
@@ -643,7 +972,7 @@
                                                        data-faint="{{ object['pipelined']['faint']['preview']['done'] }}"
                                                        data-faint-strehl="{{ object['pipelined']['faint']['strehl']['status']['done'] }}"
                                                        data-faint-pca="{{ object['pipelined']['faint']['pca']['preview']['done'] }}">
-                                                    <span class="glyphicon glyphicon-play-circle"></span></a>
+                                                    <span class="glyphicon glyphicon-play-circle" style="font-size: 11px"></span></a>
                                                 {% else %}
                                                     <span class="label label-danger">None</span>
                                                 {% endif %}
@@ -652,16 +981,6 @@
                                     {% endfor %}
                                     </tbody>
                                 </table>
-                                Master wget-script to fetch all available data:
-                                <abbr title="Dont't forget to 'chmod u+x'">
-{#                                    <a href="get_data_by_id?ids={% for object in obs %}#}
-{#                                                {{ object['_id']|replace('+', '%2B') }},{% endfor %}">#}
-{#                                        wget.sh#}
-{#                                    </a><br>#}
-                                    <a href="#" id="fetch-all" onclick="fetch_all()">
-                                        wget.sh
-                                    </a><br>
-                                </abbr>
                             </div>
                         {% endif %}
                         {% if form['output_thumbnail'] == 'on' %}
@@ -895,7 +1214,7 @@
 </div>
 
 <!-- Scroll to top -->
-<a id="back-to-top" href="#" class="btn btn-primary btn-lg back-to-top"
+<a id="back-to-top" href="#" class="btn btn-primary btn-md back-to-top"
    role="button" title="Click to return on the top page"
    data-toggle="tooltip" data-placement="left">
     <span class="glyphicon glyphicon-chevron-up"></span>
@@ -913,6 +1232,49 @@
 <script src="{{-script_root-}}/static/js/daterangepicker.js"></script>
 <script src="{{-script_root-}}/static/js/bootstrap-slider.min.js"></script>
 <script src="{{-script_root-}}/static/js/bootbox.js"></script>
+<!-- Bootstrap table -->
+<!-- Latest compiled and minified JavaScript -->
+<script src="//cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.11.1/bootstrap-table.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.11.1/locale/bootstrap-table-en-US.min.js"></script>
+<script src="{{-script_root-}}/static/js/bootstrap-table-export.js"></script>
+<script src="{{-script_root-}}/static/js/tableExport.js"></script>
+<script src="{{-script_root-}}/static/js/FileSaver.min.js"></script>
+
+<script>
+
+    function getHeight() {
+        var top = document.getElementById('table').getBoundingClientRect().top;
+        return $(window).height() - top - 30;
+    }
+    // reset height of table with search results
+    function resetTableHeight() {
+        var $table = $('#table');
+        $table.bootstrapTable('resetView', {
+            height: getHeight()
+        });
+    }
+    $(document).ready(function() {
+        // on load
+        resetTableHeight();
+    });
+    $(window).resize(function () {
+        // on window resize
+        resetTableHeight();
+    });
+</script>
+
+{#<script>#}
+{#    $(document).ready(function(){#}
+{#        $(function () {#}
+{#            var $table = $('#table');#}
+{#            $('#toolbar').find('select').change(function () {#}
+{#            $table.bootstrapTable('refreshOptions', {#}
+{#              exportDataType: $(this).val()#}
+{#            });#}
+{#          });#}
+{#        });#}
+{#    });#}
+{#</script>#}
 
 <script>
 $(document).ready(function(){
@@ -929,7 +1291,7 @@ $(document).ready(function(){
         $('#back-to-top').tooltip('hide');
         $('body,html').animate({
             scrollTop: 0
-        }, 600);
+        }, 300);
         return false;
     });
 
@@ -1117,6 +1479,10 @@ $(function() {
     $('.filter-panel').on('shown.bs.collapse', function (e) {
         update_sliders();
         e.preventDefault();
+        resetTableHeight();
+    })
+    $('.filter-panel').on('hidden.bs.collapse', function (e) {
+        resetTableHeight();
     })
 </script>
 
@@ -1395,11 +1761,15 @@ $(function() {
             $("#query-box-dropdown").children("span").attr("class",
                 "glyphicon glyphicon-menu-down");
             document.getElementById("query-box").style.display = "none";
+            // reset height of table with search results
+            resetTableHeight();
         }
         else { if ($("#query-box-dropdown").children("span").attr("class") == "glyphicon glyphicon-menu-down") {
             $("#query-box-dropdown").children("span").attr("class",
                 "glyphicon glyphicon-menu-up");
             document.getElementById("query-box").style.display = "block";
+            // reset height of table with search results
+            resetTableHeight();
         } }
     }
 

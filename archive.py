@@ -489,10 +489,24 @@ def job_faint_pipeline(_config, _raws_zipped, _date, _obs, _path_out):
 
         # get lock position and (square) window size
         if tag in ('high_flux', 'faint'):
+            # unbzip source file(s):
+            lbunzip2(_path_in=_path_in, _files=_raws_zipped, _path_out=_path_tmp, _keep=True)
+
+            # unzipped file names:
+            raws = [os.path.splitext(_f)[0] for _f in _raws_zipped]
+
+            # get frame size
+            with fits.open(os.path.join(_path_tmp, raws[0])) as tmp_fits:
+                # print(hdulist[0].header)
+                tmp_header = tmp_fits[0].header
+                x_size = tmp_header.get('NAXIS1')
+                y_size = tmp_header.get('NAXIS2')
+
             x_lock, y_lock = \
                 get_xy_from_pipeline_settings_txt(os.path.join(_path_lucky, tag, _obs))
 
-            win = int(np.min([_config['faint']['win'], x_lock, y_lock]))
+            win = int(np.min([_config['faint']['win'], np.min([x_lock, x_size - x_lock]),
+                              np.min([y_lock, y_size - y_lock])]))
             # use highest-Strehl frame to align individual frames to:
             pivot = get_best_pipe_frame(os.path.join(_path_lucky, tag, _obs))
         else:
@@ -518,12 +532,12 @@ def job_faint_pipeline(_config, _raws_zipped, _date, _obs, _path_out):
         # raws_zipped = sorted([_f for _f in os.listdir(_path_in) if _obs in _f])[0:]
         # print(raws_zipped)
 
-        # unbzip source file(s):
-        lbunzip2(_path_in=_path_in, _files=_raws_zipped, _path_out=_path_tmp, _keep=True)
-
-        # unzipped file names:
-        raws = [os.path.splitext(_f)[0] for _f in _raws_zipped]
-        # print('\n', raws)
+        # # unbzip source file(s):
+        # lbunzip2(_path_in=_path_in, _files=_raws_zipped, _path_out=_path_tmp, _keep=True)
+        #
+        # # unzipped file names:
+        # raws = [os.path.splitext(_f)[0] for _f in _raws_zipped]
+        # # print('\n', raws)
 
         # parse observation name
         _, _, _, _filt, _, _, _ = parse_obs_name(_obs, {})

@@ -318,8 +318,8 @@ login_manager.init_app(app)
 
 ''' Create command line argument parser if run from command line in test environment '''
 # FIXME:
-env = 'production'
-# env = 'test'
+# env = 'production'
+env = 'test'
 
 if env != 'production':
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -332,8 +332,8 @@ if env != 'production':
     config_file = args.config_file
 else:
     # FIXME:
-    config_file = 'config.archive.ini'
-    # config_file = 'config.ini'
+    # config_file = 'config.archive.ini'
+    config_file = 'config.ini'
     # config_file = 'config.analysis.ini'
 
 
@@ -978,7 +978,7 @@ def wget_script_by_id():
     # print(response_text)
 
     # generate .sh file on the fly
-    print(response_text)
+    # print(response_text)
     response = flask.make_response(response_text)
     response.headers['Content-Disposition'] = 'attachment; filename=wget.sh'
     return response
@@ -1047,7 +1047,7 @@ def search():
 
     # got a request?
     if flask.request.method == 'POST':
-        print(flask.request.form)
+        # print(flask.request.form)
         # drop indices? no need to do that every time! MongoDB is clever enough to keep things updated
         # coll.drop_indexes()
         # create indices before searching:
@@ -1210,7 +1210,7 @@ def query_db(search_form, _coll, _program_ids, _user_id):
             val = search_form[key]
             if len(val) > 0:
                 rng = map(float, val.split(','))
-                print(key, rng)
+                # print(key, rng)
                 assert rng[0] <= rng[1], 'invalid range for {:s}'.format(key)
                 if key == 'azimuth':
                     # not to complicate things, just ignore and don't add to query if full range is requested:

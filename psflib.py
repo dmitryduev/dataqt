@@ -2,6 +2,8 @@ from __future__ import print_function
 
 import matplotlib
 # matplotlib.use('Qt5Agg')
+from pymongo.errors import ExecutionTimeout
+
 matplotlib.use('Agg')
 
 import os
@@ -553,7 +555,8 @@ if __name__ == '__main__':
 
             ''' get aux data '''
             print(config['archiving_start_date'])
-            select_aux = coll_aux.find({'_id': {'$gte': config['archiving_start_date'].strftime('%Y%m%d')}})
+            select_aux = coll_aux.find({'_id': {'$gte': config['archiving_start_date'].strftime('%Y%m%d')}},
+                                       max_time_ms=20000)
 
             if select_aux.count() > 0:
 
@@ -581,7 +584,7 @@ if __name__ == '__main__':
                             }
                         )
                         # reload:
-                        ob_aux = coll_aux.find_one({'_id': date_str})
+                        ob_aux = coll_aux.find_one({'_id': date_str}, max_time_ms=10000)
                         # frames: {'obs_name': {'in_library': False, 'outdated': False,
                         #                       'failed': False, 'last_modified': datetime}
 
@@ -614,7 +617,7 @@ if __name__ == '__main__':
                     # execute query:
                     if len(query) > 0:
                         # print('executing query:\n{:s}'.format(query))
-                        select = coll.find(query)
+                        select = coll.find(query, max_time_ms=20000)
 
                         if select.count() > 0:
 
@@ -941,6 +944,19 @@ if __name__ == '__main__':
                 else:
                     logger.error('Could not fall asleep, exiting.')
                     break
+
+        except ExecutionTimeout:
+            print('query took too long to execute, falling asleep, will retry later')
+            sleep_for = naptime(config)  # seconds
+            if sleep_for:
+                # disconnect from database not to keep the connection alive while sleeping
+                if 'client' in locals():
+                    client.close()
+                time.sleep(sleep_for)
+                continue
+            else:
+                logger.error('Could not fall asleep, exiting.')
+                break
 
         except KeyboardInterrupt:
             logger.error('User exited.')
