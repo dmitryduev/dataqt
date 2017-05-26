@@ -1244,7 +1244,7 @@
 
     function getHeight() {
         var top = document.getElementById('table').getBoundingClientRect().top;
-        return $(window).height() - top - 30;
+        return Math.max(400, $(window).height() - top - 30);
     }
     // reset height of table with search results
     function resetTableHeight() {
@@ -1255,11 +1255,15 @@
     }
     $(document).ready(function() {
         // on load
-        resetTableHeight();
+        if( $('#table').length ) {
+            resetTableHeight();
+        }
     });
     $(window).resize(function () {
         // on window resize
-        resetTableHeight();
+        if( $('#table').length ) {
+            resetTableHeight();
+        }
     });
 </script>
 
@@ -1479,10 +1483,14 @@ $(function() {
     $('.filter-panel').on('shown.bs.collapse', function (e) {
         update_sliders();
         e.preventDefault();
-        resetTableHeight();
+        if( $('#table').length ) {
+            resetTableHeight();
+        }
     })
     $('.filter-panel').on('hidden.bs.collapse', function (e) {
-        resetTableHeight();
+        if( $('#table').length ) {
+            resetTableHeight();
+        }
     })
 </script>
 
@@ -1769,7 +1777,9 @@ $(function() {
                 "glyphicon glyphicon-menu-up");
             document.getElementById("query-box").style.display = "block";
             // reset height of table with search results
-            resetTableHeight();
+            if( $('#table').length ) {
+                resetTableHeight();
+            }
         } }
     }
 
