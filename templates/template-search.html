@@ -20,6 +20,7 @@
     <link rel="stylesheet" href="{{-script_root-}}/static/css/bootstrap-slider.min.css">
     <!-- Bootstrap table -->
     <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.11.1/bootstrap-table.min.css">
+{#    <link rel="stylesheet" href="{{-script_root-}}/static/css/bootstrap-table-fixed-columns.css">#}
 
     <link rel="stylesheet" href="{{-script_root-}}/static/css/animate.css">
 
@@ -141,6 +142,13 @@
             overflow-y: auto;
             width: 100%;
         }
+{# fixed column for horizontal scroll #}
+{#        .table {#}
+{#            table-layout: fixed;#}
+{#        }#}
+{#        th {#}
+{#            width: 150px;#}
+{#        }#}
     </style>
 
 </head>
@@ -707,7 +715,7 @@
                                        data-side-pagination="client"
                                        data-minimum-count-columns="2"
                                        data-page-size="20"
-                                       data-page-list="[20, 50, 100, 200, 500, 'All']"
+                                       data-page-list="[20, 50, 100, 200, 500, All]"
                                        data-search="true"
                                        data-show-columns="true"
                                        data-show-export="true"
@@ -715,11 +723,16 @@
                                        data-export-options='{
                                              "fileName": "table",
                                              "worksheetName": "table1",
-                                           }'>
+                                           }'
+{#                                       data-fixed-columns="true"#}
+{#                                       data-fixed-number="3"#}
+                                >
                                     <thead>
                                     <tr>
 {#                                        <th data-field="state" data-checkbox="true"></th>#}
-                                        <th data-sortable="true">pID</th>
+                                        <th data-sortable="true"><div data-toggle="tooltip" data-placement="top"
+                                                 title="Program ID">pID</div>
+                                        </th>
                                         <th data-sortable="true">
                                             <div data-toggle="tooltip" data-placement="top"
                                                  title="Source name">Name</div>
@@ -1239,12 +1252,19 @@
 <script src="{{-script_root-}}/static/js/bootstrap-table-export.js"></script>
 <script src="{{-script_root-}}/static/js/tableExport.js"></script>
 <script src="{{-script_root-}}/static/js/FileSaver.min.js"></script>
+{#<script src="{{-script_root-}}/static/js/bootstrap-table-fixed-columns.js"></script>#}
 
 <script>
 
     function getHeight() {
-        var top = document.getElementById('table').getBoundingClientRect().top;
-        return Math.max(400, $(window).height() - top - 30);
+        var window_height = $(window).height();
+        if (window_height > 1200) {
+            var top = document.getElementById('table').getBoundingClientRect().top;
+            return Math.max(400, window_height - top - 30);
+        }
+        else {
+            return Math.max(400, window_height - 200);
+        }
     }
     // reset height of table with search results
     function resetTableHeight() {
