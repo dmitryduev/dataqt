@@ -318,8 +318,8 @@ login_manager.init_app(app)
 
 ''' Create command line argument parser if run from command line in test environment '''
 # FIXME:
-# env = 'production'
-env = 'test'
+env = 'production'
+# env = 'test'
 
 if env != 'production':
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -332,8 +332,8 @@ if env != 'production':
     config_file = args.config_file
 else:
     # FIXME:
-    # config_file = 'config.archive.ini'
-    config_file = 'config.ini'
+    config_file = 'config.archive.ini'
+    # config_file = 'config.ini'
     # config_file = 'config.analysis.ini'
 
 
