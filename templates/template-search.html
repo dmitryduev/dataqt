@@ -205,13 +205,7 @@
         <div class="col-md-12">
             <h2>
                 Search the archive
-                <button type="button" class="btn btn-info" data-toggle="collapse" data-target="#filter-panel"
-                        id="advanced_search">
-                    <span class="glyphicon glyphicon-cog"></span> Advanced Search
-                </button>
             </h2>
-
-
 
             <div class="panel panel-default">
                 <div class="panel-heading panel-heading-sm">
@@ -299,6 +293,16 @@
                         </div>
 
                         {# advanced search options #}
+                        <div class="form-group">
+                            <div class="col-md-offset-2 col-md-10">
+                                <button type="button" class="btn btn-info"
+                                        data-toggle="collapse" data-target="#filter-panel"
+                                        id="advanced_search" style="margin-top:10px; margin-bottom:10px;">
+                                    <span class="glyphicon glyphicon-cog"></span> Advanced search options
+                                </button>
+                            </div>
+                        </div>
+
                         <div id="filter-panel" class="collapse filter-panel">
                             <div class="form-group">
                                 <label for="source_id" class="col-md-2 control-label">Source ID</label>
@@ -332,72 +336,119 @@
                             </div>
 
                             <div class="form-group">
-                                <label for="seeing_median" class="col-md-2 control-label">Median seeing, "</label>
-                                <div class="col-md-2">
-                                    <input id="seeing_median" name="seeing_median" type="text"
+                                <div class="col-md-6">
+                                    <p>
+                                        <label for="seeing_median" class="control-label" style="width: 200px;">
+                                            Median seeing, "&nbsp;&nbsp;&nbsp;
+                                        </label>
+                                        <input id="seeing_median" name="seeing_median" type="text"
                                            data-provide="slider" data-slider-min="0.1" data-slider-max="3"
                                            data-slider-step="0.1" data-slider-value="[0.1,3]" data-slider-range="true"
                                            data-slider-tooltip="show"/>
+                                    </p>
                                 </div>
-                                <label for="seeing_nearest" class="col-md-2 control-label">Nearest seeing, "</label>
-                                <div class="col-md-2">
-                                    {# yellow if timedelta>10 min, red if timedelta>10min #}
-                                    <input id="seeing_nearest" name="seeing_nearest" type="text"
+
+                                <div class="col-md-6">
+                                    <p>
+                                        <label for="seeing_nearest" class="control-label" style="width: 200px;">
+                                            Nearest seeing, "&nbsp;&nbsp;&nbsp;
+                                        </label>
+                                        <input id="seeing_nearest" name="seeing_nearest" type="text"
                                            data-provide="slider" data-slider-min="0.1" data-slider-max="3"
                                            data-slider-step="0.1" data-slider-value="[0.1,3]" data-slider-range="true"
                                            data-slider-tooltip="show"/>
-                                </div>
-                            </div>
-
-                            <div class="form-group">
-                                <label for="exposure" class="col-md-2 control-label">Exposure, s</label>
-                                <div class="col-md-2">
-                                    <input id="exposure" name="exposure" type="text"
-                                           data-provide="slider" data-slider-min="0" data-slider-max="600"
-                                           data-slider-step="1" data-slider-value="[0,600]" data-slider-range="true"
-                                           data-slider-tooltip="show"/>
+                                    </p>
                                 </div>
 
-                                <label for="magnitude" class="col-md-2 control-label">Magnitude</label>
-                                <div class="col-md-2">
-                                    <input id="magnitude" name="magnitude" type="text"
-                                           data-provide="slider" data-slider-min="-6" data-slider-max="23"
-                                           data-slider-step="0.1" data-slider-value="[-6,23]" data-slider-range="true"
-                                           data-slider-tooltip="show"/>
+                                <div class="col-md-6">
+                                    <p>
+                                        <label for="exposure" class="control-label" style="width: 200px;">
+                                            Exposure, s&nbsp;&nbsp;&nbsp;
+                                        </label>
+                                        <input id="exposure" name="exposure" type="text"
+                                               data-provide="slider" data-slider-min="0" data-slider-max="600"
+                                               data-slider-step="1" data-slider-value="[0,600]" data-slider-range="true"
+                                               data-slider-tooltip="show"/>
+                                    </p>
                                 </div>
-                            </div>
 
-                            <div class="form-group">
-                                <label for="azimuth" class="col-md-2 control-label">Azimuth, &deg;</label>
-                                <div class="col-md-2">
-                                    <input id="azimuth" name="azimuth" type="text"
-                                           data-provide="slider" data-slider-min="0" data-slider-max="360"
-                                           data-slider-step="1" data-slider-value="[0,360]" data-slider-range="true"
-                                           data-slider-tooltip="show"/>
+                                <div class="col-md-6">
+                                    <p>
+                                        <label for="magnitude" class="control-label" style="width: 200px;">
+                                            Magnitude&nbsp;&nbsp;&nbsp;
+                                        </label>
+                                        <input id="magnitude" name="magnitude" type="text"
+                                               data-provide="slider" data-slider-min="-6" data-slider-max="23"
+                                               data-slider-step="0.1" data-slider-value="[-6,23]" data-slider-range="true"
+                                               data-slider-tooltip="show"/>
+                                    </p>
                                 </div>
-                                <label for="elevation" class="col-md-2 control-label">Elevation, &deg;</label>
-                                <div class="col-md-2">
-                                    <input id="elevation" name="elevation" type="text"
-                                           data-provide="slider" data-slider-min="0" data-slider-max="90"
-                                           data-slider-step="1" data-slider-value="[0,90]" data-slider-range="true"
-                                           data-slider-tooltip="show"/>
-                                </div>
-                            </div>
 
-                            <div class="form-group">
-                                <label for="lucky_strehl" class="col-md-2 control-label">Lucky Strehl, %</label>
-                                <div class="col-md-2">
-                                    <input id="lucky_strehl" name="lucky_strehl" type="text"
-                                           data-provide="slider" data-slider-min="0" data-slider-max="100"
-                                           data-slider-step="1" data-slider-value="[0,100]" data-slider-range="true"
-                                           data-slider-tooltip="show"/>
+                                <div class="col-md-6">
+                                    <p>
+                                        <label for="azimuth" class="control-label" style="width: 200px;">
+                                            Azimuth, &deg;&nbsp;&nbsp;&nbsp;
+                                        </label>
+                                        <input id="azimuth" name="azimuth" type="text"
+                                               data-provide="slider" data-slider-min="0" data-slider-max="360"
+                                               data-slider-step="1" data-slider-value="[0,360]" data-slider-range="true"
+                                               data-slider-tooltip="show"/>
+                                    </p>
                                 </div>
-                                <label for="faint_strehl" class="col-md-2 control-label">Faint Strehl, %</label>
-                                <div class="col-md-2">
-                                    <input id="faint_strehl" name="faint_strehl" type="text"
-                                           data-provide="slider" data-slider-min="0" data-slider-max="100"
-                                           data-slider-step="1" data-slider-value="[0,100]" data-slider-range="true"
-                                           data-slider-tooltip="show"/>
+                                <div class="col-md-6">
+                                    <p>
+                                        <label for="elevation" class="control-label" style="width: 200px;">
+                                            Elevation, &deg;&nbsp;&nbsp;&nbsp;
+                                        </label>
+                                        <input id="elevation" name="elevation" type="text"
+                                               data-provide="slider" data-slider-min="0" data-slider-max="90"
+                                               data-slider-step="1" data-slider-value="[0,90]" data-slider-range="true"
+                                               data-slider-tooltip="show"/>
+                                    </p>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <p>
+                                        <label for="lucky_strehl" class="control-label" style="width: 200px;">
+                                            Lucky Strehl, %&nbsp;&nbsp;&nbsp;
+                                        </label>
+                                        <input id="lucky_strehl" name="lucky_strehl" type="text"
+                                               data-provide="slider" data-slider-min="0" data-slider-max="100"
+                                               data-slider-step="1" data-slider-value="[0,100]" data-slider-range="true"
+                                               data-slider-tooltip="show"/>
+                                    </p>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <p>
+                                        <label for="faint_strehl" class="control-label" style="width: 200px;">
+                                            Faint Strehl, %&nbsp;&nbsp;&nbsp;
+                                        </label>
+                                        <input id="faint_strehl" name="faint_strehl" type="text"
+                                               data-provide="slider" data-slider-min="0" data-slider-max="100"
+                                               data-slider-step="1" data-slider-value="[0,100]" data-slider-range="true"
+                                               data-slider-tooltip="show"/>
+                                    </p>
+                                </div>
+
+                                <label for="lucky_strehl_label" class="col-md-2 control-label">Lucky Strehl label</label>
+                                <div class="col-md-4">
+                                    <select class="col-md-2 form-control" id="lucky_strehl_label"
+                                            name="lucky_strehl_label">
+                                        <option>any</option>
+                                        <option>OK</option>
+                                        <option>BAD?</option>
+                                    </select>
+                                </div>
+
+                                <label for="faint_strehl_label" class="col-md-2 control-label">Faint Strehl label</label>
+                                <div class="col-md-4">
+                                    <select class="col-md-2 form-control" id="faint_strehl_label"
+                                            name="faint_strehl_label">
+                                        <option>any</option>
+                                        <option>OK</option>
+                                        <option>BAD?</option>
+                                    </select>
                                 </div>
                             </div>
 
@@ -575,6 +626,10 @@
                                             <div style="max-width: 30px;" data-toggle="tooltip" data-placement="top"
                                                  title="Strehl ration for BP">BP_Strehl</div>
                                         </th>
+                                        <th data-sortable="true" data-visible="false" data-sorter="stringSorter">
+                                            <div style="max-width: 30px;" data-toggle="tooltip" data-placement="top"
+                                                 title="BP Strehl marked OK?">BP_S_OK</div>
+                                        </th>
                                         <th data-sortable="true" data-sorter="stringSorter">
                                             <div data-toggle="tooltip" data-placement="top"
                                                  title="Faint source pipeline done?">FP</div>
@@ -586,6 +641,10 @@
                                         <th data-sortable="true" data-visible="false" data-sorter="numberSorter">
                                             <div style="max-width: 30px;" data-toggle="tooltip" data-placement="top"
                                                  title="Strehl ratio for FP">FP_Strehl</div>
+                                        </th>
+                                        <th data-sortable="true" data-visible="false" data-sorter="stringSorter">
+                                            <div style="max-width: 30px;" data-toggle="tooltip" data-placement="top"
+                                                 title="FP Strehl marked OK?">FP_S_OK</div>
                                         </th>
                                         <th data-sortable="true">
                                             <div style="max-width: 30px;" data-toggle="tooltip" data-placement="top"
@@ -625,28 +684,28 @@
                                                 {% if object['coordinates']['azel'] != None %}
                                                     {{ object['coordinates']['radec_str'][0] }}
                                                 {% else %}
-                                                    <span class="label label-danger">None</span>
+                                                    <span class="label label-default">None</span>
                                                 {% endif %}
                                             </td>
                                             <td>
                                                 {% if object['coordinates']['azel'] != None %}
                                                     {{ object['coordinates']['radec_str'][1] }}
                                                 {% else %}
-                                                    <span class="label label-danger">None</span>
+                                                    <span class="label label-default">None</span>
                                                 {% endif %}
                                             </td>
                                             <td>
                                                 {% if object['coordinates']['azel'] != None %}
                                                     {{ '%.2f' | format(object['coordinates']['azel'][0]*180.0/3.1415926) }}
                                                 {% else %}
-                                                    <span class="label label-danger">None</span>
+                                                    <span class="label label-default">None</span>
                                                 {% endif %}
                                             </td>
                                             <td>
                                                 {% if object['coordinates']['azel'] != None %}
                                                     {{ '%.2f' | format(object['coordinates']['azel'][1]*180.0/3.1415926) }}
                                                 {% else %}
-                                                    <span class="label label-danger">None</span>
+                                                    <span class="label label-default">None</span>
                                                 {% endif %}
                                             </td>
                                             {% for key in ('magnitude', 'exposure', 'filter')%}
@@ -654,7 +713,7 @@
                                                     {% if object[key] != None %}
                                                         {{ object[key] }}
                                                     {% else %}
-                                                        <span class="label label-danger">None</span>
+                                                        <span class="label label-default">None</span>
                                                     {% endif %}
                                                 </td>
                                             {% endfor %}
@@ -662,7 +721,7 @@
                                                 {% if object['seeing']['median'] != None %}
                                                     {{ '%.2f' | format(object['seeing']['median']) }}
                                                 {% else %}
-                                                    <span class="label label-danger">None</span>
+                                                    <span class="label label-default">None</span>
                                                 {% endif %}
                                             </td>
                                             <td>
@@ -670,7 +729,7 @@
                                                     (object['seeing']['nearest'] != None) %}
                                                     {{ '%.2f' | format(object['seeing']['nearest'][1]) }}
                                                 {% else %}
-                                                    <span class="label label-danger">None</span>
+                                                    <span class="label label-default">None</span>
                                                 {% endif %}
                                             </td>
                                             {% for key in ('automated', 'faint')%}
@@ -743,11 +802,41 @@
                                                             None
                                                         </span>
                                                     {% else %}
-                                                        <span class="label label-danger" id="{{ object['_id'] }}_{{ key }}.strehl">
+                                                        <span class="label label-default" id="{{ object['_id'] }}_{{ key }}.strehl">
                                                             None
                                                         </span>
                                                     {% endif %}
                                                     {% if user == 'admin' %}
+                                                        </span>
+                                                    {% endif %}
+                                                </td>
+                                                {# Strehl labled? #}
+                                                <td>
+                                                    {% if object['pipelined'][key]['strehl']['flag'] != None %}
+                                                        {# being recomputed? #}
+                                                        {% if object['pipelined'][key]['strehl']['status']['force_redo'] or
+                                                            object['pipelined'][key]['strehl']['status']['enqueued'] %}
+                                                            <span class="label label-warning" id="{{ object['_id'] }}_{{ key }}.strehl.flag">
+                                                                {{ object['pipelined'][key]['strehl']['flag'] }}
+                                                            </span>
+                                                        {% else %}
+                                                            {% if object['pipelined'][key]['strehl']['flag'] == 'OK' %}
+                                                                <span class="label label-success" id="{{ object['_id'] }}_{{ key }}.strehl.flag">
+                                                                    {{ object['pipelined'][key]['strehl']['flag'] }}
+                                                            {% elif object['pipelined'][key]['strehl']['flag'] == 'BAD?' %}
+                                                                <span class="label label-danger" id="{{ object['_id'] }}_{{ key }}.strehl.flag">
+                                                                    {{ object['pipelined'][key]['strehl']['flag'] }}
+                                                            {% endif %}
+                                                                </span>
+                                                        {% endif %}
+                                                    {% elif object['pipelined'][key]['strehl']['status']['force_redo'] or
+                                                            object['pipelined'][key]['strehl']['status']['enqueued'] %}
+                                                        <span class="label label-warning" id="{{ object['_id'] }}_{{ key }}.strehl.flag">
+                                                            None
+                                                        </span>
+                                                    {% else %}
+                                                        <span class="label label-default" id="{{ object['_id'] }}_{{ key }}.strehl.flag">
+                                                            None
                                                         </span>
                                                     {% endif %}
                                                 </td>
@@ -758,7 +847,7 @@
                                                     <a href="{{-script_root-}}/data/{{object['date_utc'].strftime('%Y%m%d')}}/{{object['_id']}}/{{object['_id']}}.tar.bz2">
                                                         <span class="glyphicon glyphicon-download" style="font-size: 11px"></span></a>
                                                 {% else %}
-                                                    <span class="label label-danger">None</span>
+                                                    <span class="label label-default">None</span>
                                                 {% endif %}
                                             </td>
                                             {# display modal with preview stuff #}
@@ -777,7 +866,7 @@
                                                        data-faint-pca="{{ object['pipelined']['faint']['pca']['preview']['done'] }}">
                                                     <span class="glyphicon glyphicon-play-circle" style="font-size: 11px"></span></a>
                                                 {% else %}
-                                                    <span class="label label-danger">None</span>
+                                                    <span class="label label-default">None</span>
                                                 {% endif %}
                                             </td>
                                         </tr>

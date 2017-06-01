@@ -318,8 +318,8 @@ login_manager.init_app(app)
 
 ''' Create command line argument parser if run from command line in test environment '''
 # FIXME:
-env = 'production'
-# env = 'test'
+# env = 'production'
+env = 'test'
 
 if env != 'production':
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -332,8 +332,8 @@ if env != 'production':
     config_file = args.config_file
 else:
     # FIXME:
-    config_file = 'config.archive.ini'
-    # config_file = 'config.ini'
+    # config_file = 'config.archive.ini'
+    config_file = 'config.ini'
     # config_file = 'config.analysis.ini'
 
 
@@ -1257,6 +1257,20 @@ def query_db(search_form, _coll, _program_ids, _user_id):
         except Exception as e:
             print(e)
             continue
+
+    # Strehl labeles:
+    lucky_strehl_label = search_form['lucky_strehl_label']
+    if lucky_strehl_label != 'any':
+        try:
+            query['pipelined.automated.strehl.flag'] = lucky_strehl_label
+        except Exception as e:
+            print(e)
+    faint_strehl_label = search_form['faint_strehl_label']
+    if faint_strehl_label != 'any':
+        try:
+            query['pipelined.faint.strehl.flag'] = faint_strehl_label
+        except Exception as e:
+            print(e)
 
     # pipelines
     pipe_lucky = True if ('pipe_lucky' in search_form) and search_form['pipe_lucky'] == 'on' else False

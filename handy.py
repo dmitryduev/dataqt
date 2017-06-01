@@ -141,6 +141,8 @@ if __name__ == '__main__':
     except IOError:
         config = get_config(_config_file='config.ini')
 
+    config['mongo_host'] = '131.215.198.215'
+
     try:
         # connect to db, pull out collections:
         client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = connect_to_db(config)
