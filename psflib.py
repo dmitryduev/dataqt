@@ -555,8 +555,9 @@ if __name__ == '__main__':
 
             ''' get aux data '''
             print(config['archiving_start_date'])
-            select_aux = coll_aux.find({'_id': {'$gte': config['archiving_start_date'].strftime('%Y%m%d')}},
-                                       max_time_ms=20000)
+            # select_aux = coll_aux.find({'_id': {'$gte': config['archiving_start_date'].strftime('%Y%m%d')}},
+            #                            max_time_ms=20000)
+            select_aux = coll_aux.find({'_id': {'$gte': config['archiving_start_date'].strftime('%Y%m%d')}})
 
             if select_aux.count() > 0:
 
@@ -617,7 +618,8 @@ if __name__ == '__main__':
                     # execute query:
                     if len(query) > 0:
                         # print('executing query:\n{:s}'.format(query))
-                        select = coll.find(query, max_time_ms=20000)
+                        # select = coll.find(query, max_time_ms=20000)
+                        select = coll.find(query)
 
                         if select.count() > 0:
 
