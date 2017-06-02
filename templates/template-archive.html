@@ -565,6 +565,7 @@
                 <h4 class="modal-title" id="ModalLabel">Object name</h4>
             </div>
             <div class="modal-body">
+                <div style="display:none;" id="modalSourceName"></div>
                 <div id="sourceTabs">
                     <!-- Nav tabs -->
                     <ul class="nav nav-tabs" role="tablist">
@@ -647,6 +648,13 @@
                         <!--FITS header-->
                         <div role="tabpanel" class="tab-pane" id="headerTab">
                             <div class="row">
+                                <div class="col-md-12" id="headerTabLoading">
+                                    <p style="margin-top:10px;">
+                                        Loading...&nbsp;<i class="fa fa-gear fa-spin" style="font-size:24px"></i>
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="row">
                                 <div class="col-md-12">
                                     <h5>FITS header</h5>
                                     <table class="table table-striped table-hover table-condensed"
@@ -658,6 +666,13 @@
 
                         <!--External images-->
                         <div role="tabpanel" class="tab-pane" id="externalImagesTab">
+                            <div class="row">
+                                <div class="col-md-12" id="externalImagesTabLoading">
+                                    <p style="margin-top:10px;">
+                                        Loading...&nbsp;<i class="fa fa-gear fa-spin" style="font-size:24px"></i>
+                                    </p>
+                                </div>
+                            </div>
                             <div class="row">
                                 <div class="col-md-6" id="dss2_r" style="display: none">
                                     <h5>DSS2 (r filter) [1'x1']:</h5>
@@ -801,6 +816,7 @@ function pauseCarouselHide(date) {
             source: source
         }, function(data) {
             var header = data.result;
+            $('#headerTabLoading').hide();
             for (var key in header) {
                 if (key != 'COMMENT') {
                     var $formrow = '<tr><td>'+key+'</td>'+
@@ -825,6 +841,7 @@ function pauseCarouselHide(date) {
             source: source
         }, function(data) {
             var images = data.result;
+            $('#externalImagesTabLoading').hide();
             for (var key in images) {
                 $('#'+key).show();
                 $('#'+key+'_image').attr('src', 'data:image/png;base64,' + images[key])
@@ -940,18 +957,33 @@ function pauseCarouselHide(date) {
             $('#faintImagesTabEmpty').show();
         }
 
-        // generate table with header data
+        // prepare to generate table with header data
         clearTable();
-        getHeader(source);
+        $('#headerTabLoading').show();
+{#        getHeader(source);#}
 
-        // fetch external vo images of the field
+        // prepare to fetch external vo images of the field
         clearExternalImages();
-        getExternalImages(source);
+        $('#externalImagesTabLoading').show();
+{#        getExternalImages(source);#}
+
+        // set source name inside a hidden div in the modal to be picked by async loading functions
+        $('#modalSourceName').data('source', source);
     });
     // tabs in the modal
     $('#sourceTabs a').click(function (e) {
         e.preventDefault();
         $(this).tab('show')
+    });
+    // load FITS header on tab show only to minimize unwanted traffic:
+    $('a[href="#headerTab"]').on('shown.bs.tab', function (event) {
+        getHeader($('#modalSourceName').data('source'));
+    });
+    // load external stuff on tab show only to minimize unwanted traffic:
+    $('a[href="#externalImagesTab"]').on('shown.bs.tab', function (event) {
+{#        var target = $(event.target).attr("href"); // activated tab#}
+{#        alert($('#modalSourceName').data('source'));#}
+        getExternalImages($('#modalSourceName').data('source'));
     });
 
 </script>
