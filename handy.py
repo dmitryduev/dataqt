@@ -231,10 +231,10 @@ if __name__ == '__main__':
             ax.legend(loc='best', fancybox=True, prop={'size': 10})
 
         # # load PSF library:
-        # from astropy.io import fits
-        # with fits.open('/Users/dmitryduev/_caltech/roboao/_archive/psf_library.fits') as _lib:
-        #     _library = _lib[0].data
-        #     psflib_ids = _lib[-1].data['obs_names']
+        from astropy.io import fits
+        with fits.open('/Users/dmitryduev/_caltech/roboao/_archive/psf_library.fits') as _lib:
+            _library = _lib[0].data
+            psflib_ids = _lib[-1].data['obs_names']
 
         # get total open shutter time:
         if False:
@@ -271,13 +271,13 @@ if __name__ == '__main__':
         # query['coordinates.azel.1'] = {'$gte': 0 * np.pi / 180.0, '$lte': 90 * np.pi / 180.0}
 
         # consider reliable Strehls only:
-        # query['pipelined.automated.strehl.flag'] = {'$eq': 'OK'}
+        query['pipelined.automated.strehl.flag'] = {'$eq': 'OK'}
 
         # discard observations marked as "zero_flux" by the automated pipeline
         # query['pipelined.automated.classified_as'] = {'$ne': 'zero_flux'}
-        # query['pipelined.automated.classified_as'] = {'$nin': ['zero_flux', 'failed', 'faint']}
+        query['pipelined.automated.classified_as'] = {'$nin': ['zero_flux', 'failed', 'faint']}
         # query['pipelined.automated.classified_as'] = {'$nin': ['zero_flux', 'failed']}
-        query['pipelined.automated.classified_as'] = {'$nin': ['failed']}
+        # query['pipelined.automated.classified_as'] = {'$nin': ['failed']}
 
         # execute query:
         if len(query) > 0:
@@ -293,7 +293,7 @@ if __name__ == '__main__':
             for ob in select:
                 # print('matching:', ob['_id'])
                 # FIXME: only get stuff that is in the PSF library:
-                if False:
+                if True:
                     if ob['_id'].replace('.', '_') not in psflib_ids:
                         continue
                         # pass
@@ -301,7 +301,7 @@ if __name__ == '__main__':
                 bar.update(iterations=1)
                 # correct seeing for Zenith distance and reference to 500 nm
                 try:
-                    data.append([ob['_id'], ob['date_utc'], ob['filter'],
+                    data.append([ob['_id'], ob['date_utc'].replace(tzinfo=pytz.utc), ob['filter'],
                                  ob['seeing']['nearest'][0],
                                  ob['seeing']['nearest'][1]*scale_factors[ob['filter']] *
                                     (np.cos(np.pi/2 - ob['coordinates']['azel'][1])**0.6),

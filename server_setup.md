@@ -347,3 +347,36 @@ and you're production!
 ```
 supervisord -c /data/roboao/supervisord.conf
 ```
+
+#### Make sure to start everything on system boot
+
+First, enable starting nginx service 
+(assuming your OS is using systemd, like RHEL) upon system boot:
+```
+sudo systemctl enable nginx.service
+```
+
+Set up cronjobs to start MongoDB (if manually installed) and supervisord:
+```
+>>> crontab -e
+```
+
+This is what my current cron set-up looks like:
+```
+#MAILTO=""
+MAILTO=duev@caltech.edu
+# start mongodb in background mode at start-up
+#@reboot /data/roboao/mongodb/bin/mongod -f /data/roboao/mongodb/mongod.conf >/dev/null 2>&1
+@reboot /data/roboao/mongodb/bin/mongod -f /data/roboao/mongodb/mongod.conf
+# start public and data archive servers
+@reboot /data/roboao/anaconda2/bin/python /data/roboao/anaconda2/bin/supervisord -c /data/roboao/supervisord.master.conf
+```
+
+#### Notes
+
+If you had an apache server running on the machine, you'd want to 
+prevent starting it on reboot:
+```
+sudo systemctl disable httpd.service
+```
+

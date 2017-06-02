@@ -7,7 +7,7 @@ from pymongo.errors import ExecutionTimeout
 matplotlib.use('Agg')
 
 import os
-from pymongo import MongoClient
+from pymongo import MongoClient, DESCENDING
 import inspect
 import ConfigParser
 import datetime
@@ -561,8 +561,8 @@ if __name__ == '__main__':
 
             if select_aux.count() > 0:
 
-                # iterate over all dates from coll_aux:
-                for ob_aux in select_aux:
+                # iterate over all dates from coll_aux, from recent to older:
+                for ob_aux in select_aux.sort([('_id', DESCENDING)]):
 
                     date_str = ob_aux['_id']
                     date = datetime.datetime.strptime(ob_aux['_id'], '%Y%m%d')
