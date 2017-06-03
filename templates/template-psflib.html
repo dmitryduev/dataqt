@@ -18,6 +18,7 @@
     <link rel="stylesheet" href="{{-script_root-}}/static/css/bootstrap-magnify.min.css">
     <link rel="stylesheet" href="{{-script_root-}}/static/css/daterangepicker.css">
     <link rel="stylesheet" href="{{-script_root-}}/static/css/bootstrap-submenu.min.css">
+    <link rel="stylesheet" href="{{-script_root-}}/static/css/bootstrap-slider.min.css">
 
     <link rel="stylesheet" href="{{-script_root-}}/static/css/animate.css">
 
@@ -177,6 +178,22 @@
         </div>
     </div>
 
+    {% if num_dates > 0 %}
+        <div class="container">
+            <div class="row">
+                <div class="col-md-12">
+                    {# change preview size #}
+                    <div style="margin-top: 10px;">
+                        <span style="margin-right: 10px;">Thumbnail size:</span>
+                        <input id="preview_size" type="text" data-slider-min="50" data-slider-max="400"
+                           data-slider-step="1" data-slider-value="120"/>
+                        <span style="margin-left: 10px;"><span id="preview_size_val">120</span>&nbsp;px</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+
     {% for date, data in dates %}
 
         {# No science/aux data for the requested period at all #}
@@ -303,6 +320,19 @@
 <script src="{{-script_root-}}/static/js/moment.min.js"></script>
 <script src="{{-script_root-}}/static/js/daterangepicker.js"></script>
 <script src="{{-script_root-}}/static/js/bootbox.js"></script>
+<script src="{{-script_root-}}/static/js/bootstrap-slider.min.js"></script>
+
+<script>
+    // Change preview sizes with JQuery
+    $(document).ready(function() {
+        $("#preview_size").slider();
+        $("#preview_size").on("change", function (slideEvt) {
+            $("#preview_size_val").text(slideEvt.value.newValue);
+            // change preview sizes
+            $(".preview").css('height', slideEvt.value.newValue);
+        });
+    });
+</script>
 
 <script>
     // for AJAX requests [absolute website's uri]:

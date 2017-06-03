@@ -322,8 +322,8 @@ login_manager.init_app(app)
 
 ''' Create command line argument parser if run from command line in test environment '''
 # FIXME:
-env = 'production'
-# env = 'test'
+# env = 'production'
+env = 'test'
 
 if env != 'production':
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -336,8 +336,8 @@ if env != 'production':
     config_file = args.config_file
 else:
     # FIXME:
-    config_file = 'config.archive.ini'
-    # config_file = 'config.ini'
+    # config_file = 'config.archive.ini'
+    config_file = 'config.ini'
     # config_file = 'config.analysis.ini'
 
 
@@ -1391,6 +1391,7 @@ def manage_psflib():
         return flask.Response(stream_template('template-psflib.html', user=user_id,
                                               start=start, stop=stop,
                                               dates=iter_dates(dates),
+                                              num_dates=len(dates),
                                               current_year=datetime.datetime.now().year))
 
     else:
