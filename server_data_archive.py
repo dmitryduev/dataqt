@@ -1,7 +1,7 @@
 """
     Flask-based server for the Robo-AO Data Archive
 
-    Dr Dmitry A. Duev @ Caltech, 2016
+    Dr Dmitry A. Duev @ Caltech, 2016-2017
 """
 
 from __future__ import print_function
@@ -183,7 +183,7 @@ def parse_obs_name(_obs, _program_pi):
         _prog_pi = _program_pi[_prog_num]
     else:
         # play safe if pi's unknown:
-        _prog_pi = 'admin'
+        _prog_pi = ['admin']
     # stack name together if necessary (if contains underscores):
     _sou_name = '_'.join(_tmp[1:-5])
     # code of the filter used:
@@ -239,7 +239,7 @@ def connect_to_db(_config):
         print(_e)
         _coll_usr = None
     try:
-        # build dictionary program num -> pi username
+        # build dictionary program num -> pi username(s)
         cursor = _coll_usr.find()
         _program_pi = {}
         for doc in cursor:
@@ -248,7 +248,11 @@ def connect_to_db(_config):
                 continue
             _progs = doc['programs']
             for v in _progs:
-                _program_pi[str(v)] = doc['_id'].encode('ascii', 'ignore')
+                # multiple users could have access to the same program, that's totally fine!
+                if str(v) not in _program_pi:
+                    _program_pi[str(v)] = [doc['_id'].encode('ascii', 'ignore')]
+                else:
+                    _program_pi[str(v)].append(doc['_id'].encode('ascii', 'ignore'))
                 # print(program_pi)
     except Exception as _e:
         print(_e)
@@ -318,8 +322,8 @@ login_manager.init_app(app)
 
 ''' Create command line argument parser if run from command line in test environment '''
 # FIXME:
-env = 'production'
-# env = 'test'
+# env = 'production'
+env = 'test'
 
 if env != 'production':
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -332,8 +336,8 @@ if env != 'production':
     config_file = args.config_file
 else:
     # FIXME:
-    config_file = 'config.archive.ini'
-    # config_file = 'config.ini'
+    # config_file = 'config.archive.ini'
+    config_file = 'config.ini'
     # config_file = 'config.analysis.ini'
 
 
@@ -423,7 +427,7 @@ def login():
             return flask.redirect(flask.url_for('root'))
         # serve template if not:
         else:
-            return flask.render_template('template-login.html', fail=False)
+            return flask.render_template('template-login.html', fail=False, current_year=datetime.datetime.now().year)
     # print(flask.request.form['username'], flask.request.form['password'])
 
     username = flask.request.form['username']
@@ -439,7 +443,7 @@ def login():
         return flask.redirect(flask.url_for('root'))
     else:
         # serve template with flag fail=True to display fail message
-        return flask.render_template('template-login.html', fail=True)
+        return flask.render_template('template-login.html', fail=True, current_year=datetime.datetime.now().year)
 
 
 def stream_template(template_name, **context):
@@ -650,7 +654,7 @@ def get_fits_header():
 
     # trying to steal stuff?
     _program, _, _, _, _, _, _ = parse_obs_name(_obs, _program_pi)
-    if user_id != 'admin' and _program_pi[_program] != user_id:
+    if (user_id != 'admin') and (user_id not in _program_pi[_program]):
         # flask.abort(403)
         return flask.jsonify(result={})
 
@@ -681,7 +685,7 @@ def get_vo_image():
 
     # trying to steal stuff?
     _program, _, _, _, _, _, _ = parse_obs_name(_obs, _program_pi)
-    if user_id != 'admin' and _program_pi[_program] != user_id:
+    if (user_id != 'admin') and (user_id not in _program_pi[_program]):
         # flask.abort(403)
         return flask.jsonify(result={})
 
@@ -767,7 +771,7 @@ def force_redo():
 
     # trying to steal stuff? no toys for bad boys!
     _program, _, _, _, _, _, _ = parse_obs_name(_obs, _program_pi)
-    if user_id != 'admin' and _program_pi[_program] != user_id:
+    if (user_id != 'admin') and (user_id not in _program_pi[_program]):
         # flask.abort(403)
         return flask.jsonify(result={'success': False, 'status': 'not yours!'})
 
@@ -1022,7 +1026,8 @@ def root():
 
     return flask.Response(stream_template('template-archive.html',
                                           user=user_id, start=start, stop=stop,
-                                          dates=iter_dates(dates)))
+                                          dates=iter_dates(dates),
+                                          current_year=datetime.datetime.now().year))
 
 
 # serve root
@@ -1043,7 +1048,7 @@ def search():
     if user_id == 'admin':
         program_ids = program_pi.keys() if len(program_pi.keys()) > 0 else []
     else:
-        program_ids = [program_id for program_id in program_pi.keys() if program_pi[program_id] == user_id]
+        program_ids = [program_id for program_id in program_pi.keys() if user_id in program_pi[program_id]]
 
     # got a request?
     if flask.request.method == 'POST':
@@ -1066,7 +1071,9 @@ def search():
         # flask.flash('')
 
     return flask.Response(stream_template('template-search.html', form=flask.request.form,
-                                          user=user_id, program_ids=program_ids, obs=obs, errors=errors))
+                                          user=user_id, program_ids=program_ids,
+                                          obs=obs, errors=errors,
+                                          current_year=datetime.datetime.now().year))
 
 
 def query_db(search_form, _coll, _program_ids, _user_id):
@@ -1337,7 +1344,8 @@ def manage_users():
 
         return flask.render_template('template-users.html',
                                      user=flask_login.current_user.id,
-                                     users=_users)
+                                     users=_users,
+                                     current_year=datetime.datetime.now().year)
     else:
         flask.abort(403)
 
@@ -1382,7 +1390,8 @@ def manage_psflib():
 
         return flask.Response(stream_template('template-psflib.html', user=user_id,
                                               start=start, stop=stop,
-                                              dates=iter_dates(dates)))
+                                              dates=iter_dates(dates),
+                                              current_year=datetime.datetime.now().year))
 
     else:
         flask.abort(403)
@@ -1408,10 +1417,14 @@ def add_user():
              'programs': programs,
              'last_modified': datetime.datetime.now()}
         )
-        # change data ownership in the main database:
+        # change data ownership (append to program_PI) in the main database.
+        # if program_PI == ['admin'], pull admin out of it
         if user != 'admin':  # admin has it 'all'!
             coll.update({'science_program.program_id': {'$in': programs}},
-                        {'$set': {'science_program.program_PI': user}}, multi=True)
+                        {'$push': {'science_program.program_PI': user}}, multi=True)
+            # pull 'admin' out of list if program existed, but did not have an owner
+            coll.update({'science_program.program_id': {'$in': programs}},
+                        {'$pull': {'science_program.program_PI': 'admin'}}, multi=True)
 
         return 'success'
     except Exception as _e:
@@ -1465,7 +1478,7 @@ def edit_user():
 
         # change program ownership if necessary:
         # get all program numbers for this user:
-        programs_in_db = [k for k in program_pi.keys() if program_pi[k] == user]
+        programs_in_db = [k for k in program_pi.keys() if user in program_pi[k]]
         old_set = set(programs_in_db)
         new_set = set(programs)
         # change data ownership in the main database:
@@ -1474,12 +1487,19 @@ def edit_user():
             if len(new_set - old_set) > 0:
                 # reset ownership for the set difference new-old (program in new, but not in old)
                 coll.update({'science_program.program_id': {'$in': list(new_set - old_set)}},
-                            {'$set': {'science_program.program_PI': user}}, multi=True)
-            # removed programs? reset ownership to admin
+                            {'$push': {'science_program.program_PI': user}}, multi=True)
+                # pull 'admin' out of list if program did not have an owner
+                coll.update({'science_program.program_id': {'$in': list(new_set - old_set)}},
+                            {'$pull': {'science_program.program_PI': 'admin'}}, multi=True)
+            # removed programs? reset ownership
             if len(old_set - new_set) > 0:
                 # reset ownership for the set difference old-new (program in old, but not in new)
                 coll.update({'science_program.program_id': {'$in': list(old_set - new_set)}},
-                            {'$set': {'science_program.program_PI': 'admin'}}, multi=True)
+                            {'$pull': {'science_program.program_PI': user}}, multi=True)
+                # change to ['admin'] if ended up being empty
+                coll.update({'science_program.program_id': {'$in': list(old_set - new_set)},
+                             'science_program.program_PI': {'$eq': []}},
+                            {'$push': {'science_program.program_PI': 'admin'}}, multi=True)
         return 'success'
     except Exception as _e:
         print(_e)
@@ -1500,12 +1520,17 @@ def remove_user():
         # get db:
         client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
         # get all program numbers for this user:
-        user_programs = [k for k in program_pi.keys() if program_pi[k] == user]
+        user_programs = [k for k in program_pi.keys() if user in program_pi[k]]
         # try to remove the user:
         coll_usr.delete_one({'_id': user})
-        # change data ownership to 'admin'
+        # change data ownership to 'admin':
+        # pull user first
         coll.update({'science_program.program_id': {'$in': user_programs}},
-                    {'$set': {'science_program.program_PI': 'admin'}}, multi=True)
+                    {'$pull': {'science_program.program_PI': user}}, multi=True)
+        # change to ['admin'] if empty
+        coll.update({'science_program.program_id': {'$in': user_programs},
+                     'science_program.program_PI': {'$eq': []}},
+                    {'$push': {'science_program.program_PI': 'admin'}}, multi=True)
 
         return 'success'
     except Exception as _e:

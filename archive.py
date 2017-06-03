@@ -2342,7 +2342,11 @@ def connect_to_db(_config, _logger=None):
                 continue
             _progs = doc['programs']
             for v in _progs:
-                _program_pi[str(v)] = doc['_id'].encode('ascii', 'ignore')
+                # multiple users could have access to the same program, that's totally fine!
+                if str(v) not in _program_pi:
+                    _program_pi[str(v)] = [doc['_id'].encode('ascii', 'ignore')]
+                else:
+                    _program_pi[str(v)].append(doc['_id'].encode('ascii', 'ignore'))
                 # print(program_pi)
     except Exception as _e:
         _program_pi = None
@@ -4214,7 +4218,7 @@ def parse_obs_name(_obs, _program_pi):
         _prog_pi = _program_pi[_prog_num]
     else:
         # play safe if pi's unknown:
-        _prog_pi = 'admin'
+        _prog_pi = ['admin']
     # stack name together if necessary (if contains underscores):
     _sou_name = '_'.join(_tmp[1:-5])
     # code of the filter used:

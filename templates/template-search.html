@@ -955,7 +955,7 @@
 
 <footer class="footer">
     <div class="container">
-        <p class="text-muted" id="years">&copy; Robo-AO 2016</p>
+        <p class="text-muted" id="years">&copy; Robo-AO 2016-{{ current_year }}</p>
     </div>
 </footer>
 
@@ -1336,12 +1336,12 @@ $(document).ready(function(){
 </script>
 
 {# current year for solidnost' #}
-<script>
-    $(document).ready(function() {
-        var ynow = moment().format('YYYY');
-        $('#years').append('-'+ynow);
-    });
-</script>
+{#<script>#}
+{#    $(document).ready(function() {#}
+{#        var ynow = moment().format('YYYY');#}
+{#        $('#years').append('-'+ynow);#}
+{#    });#}
+{#</script>#}
 
 {# output formatting - at least one checkbox must be checked #}
 <script>
