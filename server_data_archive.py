@@ -322,8 +322,8 @@ login_manager.init_app(app)
 
 ''' Create command line argument parser if run from command line in test environment '''
 # FIXME:
-env = 'production'
-# env = 'test'
+# env = 'production'
+env = 'test'
 
 if env != 'production':
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -336,8 +336,8 @@ if env != 'production':
     config_file = args.config_file
 else:
     # FIXME:
-    config_file = 'config.archive.ini'
-    # config_file = 'config.ini'
+    # config_file = 'config.archive.ini'
+    config_file = 'config.ini'
     # config_file = 'config.analysis.ini'
 
 
@@ -916,7 +916,14 @@ def wget_script():
         Generate bash script to fetch all data for date/program with wget
     :return:
     """
-    url = urlparse(flask.request.url).netloc
+    # get url
+    url_parsed = urlparse(flask.request.url)
+    path_parsed = os.path.split(url_parsed.path)
+    if path_parsed[0] != '/':
+        url = url_parsed.netloc + path_parsed[0]
+    else:
+        url = url_parsed.netloc
+
     _date_str = flask.request.args['date']
     _date = datetime.datetime.strptime(_date_str, '%Y%m%d')
     _program = flask.request.args['program']
@@ -953,7 +960,14 @@ def wget_script_by_id():
         Generate bash script to fetch data by id with wget
     :return:
     """
-    url = urlparse(flask.request.url).netloc
+    # print(flask.request.url)
+    url_parsed = urlparse(flask.request.url)
+    path_parsed = os.path.split(url_parsed.path)
+    if path_parsed[0] != '/':
+        url = url_parsed.netloc + path_parsed[0]
+    else:
+        url = url_parsed.netloc
+    # print(url)
     # print(flask.request.data)
     # flask.request.form['ids'] contains 'stringified' list with obs names, must eval that:
     _ids = ast.literal_eval(flask.request.data)['ids']
