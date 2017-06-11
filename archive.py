@@ -50,6 +50,7 @@ from sklearn import linear_model
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import make_pipeline
 from itertools import chain
+import lacosmicx as lax
 
 from skimage import exposure, img_as_float
 from matplotlib.patches import Rectangle
@@ -396,6 +397,15 @@ def process_seeing(_path_in, _seeing_frames, _path_calib, _path_out,
 
         summed_seeing_limited_frame = calibrate_frame(summed_seeing_limited_frame / nf, dark, flat, _iter=2)
         summed_seeing_limited_frame = gaussian_filter(summed_seeing_limited_frame, sigma=1)
+
+        # remove cosmic rays:
+        # print('removing cosmic rays from the seeing limited image')
+        summed_seeing_limited_frame = lax.lacosmicx(np.ascontiguousarray(summed_seeing_limited_frame, dtype=np.float32),
+                                                    sigclip=20, sigfrac=0.3, objlim=5.0,
+                                                    gain=1.0, readnoise=6.5, satlevel=65536.0, pssl=0.0, niter=4,
+                                                    sepmed=True, cleantype='meanmask', fsmode='median',
+                                                    psfmodel='gauss', psffwhm=2.5, psfsize=7, psfk=None,
+                                                    psfbeta=4.765, verbose=False)[1]
 
         # dump fits for sextraction:
         _fits_stacked = '{:s}.summed.fits'.format(_seeing_frames[0])
@@ -1227,6 +1237,16 @@ def reduce_faint_object_noram(_path_in, _files, _path_calib, _path_out, _obs,
             if _v:
                 bar.update(iterations=files_sizes[jj])
 
+        # remove cosmic rays:
+        if _v:
+            print('removing cosmic rays from the seeing limited image')
+        summed_seeing_limited_frame = lax.lacosmicx(np.ascontiguousarray(summed_seeing_limited_frame, dtype=np.float32),
+                                                    sigclip=20, sigfrac=0.3, objlim=5.0,
+                                                    gain=1.0, readnoise=6.5, satlevel=65536.0, pssl=0.0, niter=4,
+                                                    sepmed=True, cleantype='meanmask', fsmode='median',
+                                                    psfmodel='gauss', psffwhm=2.5, psfsize=7, psfk=None,
+                                                    psfbeta=4.765, verbose=False)[1]
+
         # load darks and flats
         if _v:
             print('Loading darks and flats')
@@ -1342,6 +1362,16 @@ def reduce_faint_object_noram(_path_in, _files, _path_calib, _path_out, _obs,
             print('Largest move was {:.2f} pixels for frame {:d}'.
                   format(np.max(np.sqrt(shifts[:, 1] ** 2 + shifts[:, 2] ** 2)),
                     np.argmax(np.sqrt(shifts[:, 1] ** 2 + shifts[:, 2] ** 2))))
+
+        # remove cosmic rays:
+        if _v:
+            print('removing cosmic rays from the seeing limited image')
+        summed_frame = lax.lacosmicx(np.ascontiguousarray(summed_frame, dtype=np.float32),
+                                     sigclip=20, sigfrac=0.3, objlim=5.0,
+                                     gain=1.0, readnoise=6.5, satlevel=65536.0, pssl=0.0, niter=4,
+                                     sepmed=True, cleantype='meanmask', fsmode='median',
+                                     psfmodel='gauss', psffwhm=2.5, psfsize=7, psfk=None,
+                                     psfbeta=4.765, verbose=False)[1]
 
         # output
         if not os.path.exists(os.path.join(_path_out)):
