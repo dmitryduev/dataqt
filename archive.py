@@ -388,7 +388,7 @@ def process_seeing(_path_in, _seeing_frames, _path_calib, _path_out,
             # print(jj)
             with fits.open(os.path.join(_path_in, '{:s}.fits'.format(_file))) as _hdulist:
                 for ii, _ in enumerate(_hdulist):
-                    summed_seeing_limited_frame += _hdulist[ii].data
+                    summed_seeing_limited_frame += np.nan_to_num(_hdulist[ii].data)
 
         # load darks and flats
         dark, flat = load_darks_and_flats(_path_calib, _mode, _filt, image_size[0])
@@ -885,7 +885,7 @@ def mkdirs(_path):
 
 def load_fits(fin):
     with fits.open(fin) as _f:
-        scidata = _f[0].data
+        scidata = np.nan_to_num(_f[0].data)
     return scidata
 
 
@@ -1232,7 +1232,7 @@ def reduce_faint_object_noram(_path_in, _files, _path_calib, _path_out, _obs,
             with fits.open(os.path.join(_path_in, _file)) as _hdulist:
                 # frames_before = sum(n_frames_files[:jj])
                 for ii, _ in enumerate(_hdulist):
-                    summed_seeing_limited_frame += _hdulist[ii].data
+                    summed_seeing_limited_frame += np.nan_to_num(_hdulist[ii].data)
                     # print(ii + frames_before, '\n', _data[ii, :, :])
             if _v:
                 bar.update(iterations=files_sizes[jj])
@@ -1269,7 +1269,7 @@ def reduce_faint_object_noram(_path_in, _files, _path_calib, _path_out, _obs,
         else:
             try:
                 with fits.open(os.path.join(_path_in, _files_list[_pivot[0]])) as _hdulist:
-                    im1 = np.array(_hdulist[_pivot[1]].data, dtype=np.float)
+                    im1 = np.array(np.nan_to_num(_hdulist[_pivot[1]].data), dtype=np.float)
                 print('using frame {:d} from raw fits-file #{:d} as pivot frame'.format(*_pivot[::-1]))
             except Exception as _e:
                 print(_e)
@@ -1308,7 +1308,7 @@ def reduce_faint_object_noram(_path_in, _files, _path_calib, _path_out, _obs,
             with fits.open(os.path.join(_path_in, _file)) as _hdulist:
                 # frames_before = sum(n_frames_files[:jj])
                 for ii, _ in enumerate(_hdulist):
-                    img = np.array(_hdulist[ii].data, dtype=np.float)  # do proper casting
+                    img = np.array(np.nan_to_num(_hdulist[ii].data), dtype=np.float)  # do proper casting
 
                     # tic = _time()
                     img = calibrate_frame(img, dark, flat, _iter=3)
@@ -1365,7 +1365,7 @@ def reduce_faint_object_noram(_path_in, _files, _path_calib, _path_out, _obs,
 
         # remove cosmic rays:
         if _v:
-            print('removing cosmic rays from the seeing limited image')
+            print('removing cosmic rays from the stacked image')
         summed_frame = lax.lacosmicx(np.ascontiguousarray(summed_frame, dtype=np.float32),
                                      sigclip=20, sigfrac=0.3, objlim=5.0,
                                      gain=1.0, readnoise=6.5, satlevel=65536.0, pssl=0.0, niter=4,
@@ -1792,7 +1792,7 @@ def trim_frame(_path, _fits_name, _win=100, _method='sextractor', _x=None, _y=No
     :return: image, cropped around a lock position and the lock position itself
     """
     with fits.open(os.path.join(_path, _fits_name)) as _hdu:
-        scidata = _hdu[0].data
+        scidata = np.nan_to_num(_hdu[0].data)
 
     if _method == 'sextractor':
         # extract sources
@@ -3303,7 +3303,7 @@ def check_preview(_config, _logger, _coll, _select, _date, _obs, _pipe='automate
 
                 try:
                     # load first image frame from the fits file
-                    preview_img = load_fits(f_fits)
+                    preview_img = np.nan_to_num(load_fits(f_fits))
                     # scale with local contrast optimization for preview:
                     if _select['science_program']['program_id'] != _config['planets_prog_num']:
                         preview_img = scale_image(preview_img, correction='local')
