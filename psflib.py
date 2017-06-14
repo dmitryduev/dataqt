@@ -336,7 +336,7 @@ def add_to_lib(_psf_library_fits, _path, _obs, _obj_name='unknown'):
     try:
         # get frame:
         with fits.open(_path) as f:
-            frame = f[0].data
+            frame = np.nan_to_num(f[0].data)
 
         if not os.path.exists(_psf_library_fits):
             # library does not exist yet?
@@ -811,7 +811,7 @@ if __name__ == '__main__':
                                             print(os.path.join(_path, _fits_name))
 
                                             with fits.open(os.path.join(_path, _fits_name)) as _hdu:
-                                                scidata = _hdu[0].data
+                                                scidata = np.nan_to_num(_hdu[0].data)
 
                                             _win = config['pca']['win']
                                             y, x = get_xy_from_pipeline_settings_txt(_path)
