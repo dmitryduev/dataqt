@@ -322,8 +322,8 @@ login_manager.init_app(app)
 
 ''' Create command line argument parser if run from command line in test environment '''
 # FIXME:
-env = 'production'
-# env = 'test'
+# env = 'production'
+env = 'test'
 
 if env != 'production':
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -460,7 +460,7 @@ def stream_template(template_name, **context):
     return rv
 
 
-def get_dates(user_id, coll, coll_aux, start=None, stop=None):
+def get_dates(user_id, coll, coll_aux, start=None, stop=None, max_dates=100):
     """
         Get science and auxiliary data from start to stop
     :param user_id:
@@ -468,19 +468,25 @@ def get_dates(user_id, coll, coll_aux, start=None, stop=None):
     :param coll_aux:
     :param start:
     :param stop:
+    :param max_dates
     :return:
     """
     if start is None:
         # this is ~when we moved to KP:
-        # start = datetime.datetime(2015, 10, 1)
-        # by default -- last 30 days:
-        start = datetime.datetime.utcnow() - datetime.timedelta(days=10)
+        start = datetime.datetime(2015, 10, 1)
+        # get the last date with observations:
+        max_dates = 1
+        # or last N days:
+        # start = datetime.datetime.utcnow() - datetime.timedelta(days=10)
     else:
         try:
             start = datetime.datetime.strptime(start, '%Y%m%d')
         except Exception as _e:
             print(_e)
-            start = datetime.datetime.utcnow() - datetime.timedelta(days=10)
+            # get the last date with observations:
+            max_dates = 1
+            start = datetime.datetime(2015, 10, 1)
+            # start = datetime.datetime.utcnow() - datetime.timedelta(days=1)
 
     if stop is None:
         stop = datetime.datetime.utcnow()
@@ -493,12 +499,17 @@ def get_dates(user_id, coll, coll_aux, start=None, stop=None):
             print(_e)
             stop = datetime.datetime.utcnow()
 
+    # provide some feedback!
+    messages = []
+
     # create indices not to perform in-memory sorting:
     try:
         coll.create_index([('date_utc', -1)])
         coll_aux.create_index([('_id', 1)])
     except Exception as _e:
         print(_e)
+        message = (_e, 'error')
+        messages.append(message)
 
     # dictionary: {date: {data: {program_N: [observations]}, aux: {}}}
     dates = dict()
@@ -515,6 +526,13 @@ def get_dates(user_id, coll, coll_aux, start=None, stop=None):
     # iterate over query result for science data:
     try:
         for obs in cursor.sort([('date_utc', -1)]):
+            if len(dates) + 1 > max_dates:
+                # this is to prevent trying to load everything stored on the server
+                # and reduce traffic in general. Do not show that if max_dates == 1, i.e. on start page:
+                if max_dates != 1:
+                    message = ('Too much data requested, showing last {:d} dates only'.format(max_dates), 'warning')
+                    messages.append(message)
+                break
             date = obs['date_utc'].strftime('%Y%m%d')
             # add key to dict if it is not there already:
             if date not in dates:
@@ -526,9 +544,13 @@ def get_dates(user_id, coll, coll_aux, start=None, stop=None):
             dates[date]['data'][program_id].append(obs)
     except Exception as _e:
         print(_e)
+        message = (_e, 'error')
+        messages.append(message)
 
     # get aux data
-    cursor_aux = coll_aux.find({'_id': {'$gte': start.strftime('%Y%m%d'), '$lt': stop.strftime('%Y%m%d')}})
+    # cursor_aux = coll_aux.find({'_id': {'$gte': start.strftime('%Y%m%d'), '$lt': stop.strftime('%Y%m%d')}})
+    start_aux = sorted(dates.keys())[0] if len(dates) > 0 else start.strftime('%Y%m%d')
+    cursor_aux = coll_aux.find({'_id': {'$gte': start_aux, '$lt': stop.strftime('%Y%m%d')}})
 
     # iterate over query result for aux data:
     try:
@@ -567,12 +589,14 @@ def get_dates(user_id, coll, coll_aux, start=None, stop=None):
                         dates[date]['aux'] = aux
     except Exception as _e:
         print(_e)
+        message = (_e, 'error')
+        messages.append(message)
 
     # print(dates)
     # latest obs - first
     # dates = sorted(list(set(dates)), reverse=True)
 
-    return dates
+    return dates, messages
 
 
 def get_dates_psflib(coll_aux, start=None, stop=None):
@@ -1035,13 +1059,35 @@ def root():
     # get db connection
     client, db, coll, coll_usr, coll_aux, coll_weather, program_pi = get_db(config)
 
+    messages = []
+
     # get science and aux data for all dates:
-    dates = get_dates(user_id, coll, coll_aux, start=start, stop=stop)
+    dates, msg = get_dates(user_id, coll, coll_aux, start=start, stop=stop, max_dates=30)
+
+    if len(msg) > 0:
+        messages += msg
+
+    # provide some feedback:
+    if start is not None and stop is not None:
+        message = (u'Displaying data from {:s} to {:s}.'.format(start, stop), 'info')
+        messages.append(message)
+    elif start is None and stop is None:
+        message = (u'Displaying last date with observational data.', 'info')
+        messages.append(message)
+    elif start is None:
+        message = (u'Displaying data from now to {:s}.'.format(stop), 'info')
+        messages.append(message)
+    elif stop is None:
+        message = (u'Displaying data from {:s} to now.'.format(start), 'info')
+        messages.append(message)
+
+    # note: somehow flashing messages do not work with streaming
 
     return flask.Response(stream_template('template-archive.html',
                                           user=user_id, start=start, stop=stop,
                                           dates=iter_dates(dates),
-                                          current_year=datetime.datetime.now().year))
+                                          current_year=datetime.datetime.now().year,
+                                          messages=messages))
 
 
 # serve root

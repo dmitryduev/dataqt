@@ -1,5 +1,7 @@
+{# set root path in case if run from sub-url #}
+{#{% set script_root = '' if request.script_root == '/' else request.script_root %}#}
 <!DOCTYPE html>
-<html lang="en">
+{#<html lang="en">#}
 <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
@@ -7,100 +9,120 @@
     <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
     <meta name="description" content="">
     <meta name="author" content="Dmitry A. Duev">
-    <!--<link rel="icon" href="favicon.ico">-->
+    <link rel="icon" type="image/png" href="{{-script_root-}}/static/robot-favicon.png">
 
-    <title>Robo-AO data quality: {{ date }}</title>
+    <title>Robo-AO data archive</title>
 
     <!-- Bootstrap core CSS -->
-    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
-    <link rel="stylesheet" href="/static/css/bootstrap-magnify.min.css">
-    <!--<link rel="stylesheet" href="/static/css/bootstrap.css">-->
-    <!--<link rel="stylesheet" href="/static/css/animate.min.css">-->
+    <link rel="stylesheet" href="{{-script_root-}}/static/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{-script_root-}}/static/css/bootstrap-magnify.min.css">
+    <link rel="stylesheet" href="{{-script_root-}}/static/css/daterangepicker.css">
+    <link rel="stylesheet" href="{{-script_root-}}/static/css/bootstrap-submenu.min.css">
+
+    <!-- Font awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+
+    <link rel="stylesheet" href="{{-script_root-}}/static/css/animate.css">
 
     <style>
+        html {
+            position: relative;
+            min-height: 100%;
+{#            -webkit-backface-visibility: hidden;#}
+        }
         body {
             padding-top: 70px;
+            /* Margin bottom by footer height */
+            margin-bottom: 60px;
+        }
+        .table-condensed>thead>tr>th, .table-condensed>tbody>tr>th,
+        .table-condensed>tfoot>tr>th, .table-condensed>thead>tr>td,
+        .table-condensed>tbody>tr>td, .table-condensed>tfoot>tr>td {
+            padding: 1px;
+            font-size: 9px;
+        }
+        .footer {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            /* Set the fixed height of the footer here */
+            height: 60px;
+            background-color: #f5f5f5;
+        }
+        .footer > .container {
+            padding-top: 20px;
+            padding-right: 15px;
+            padding-left: 15px;
+            text-align: center;
         }
         .main-container {
-          padding: 40px 15px;
-          text-align: center;
+            padding: 40px 15px;
+            text-align: center;
         }
         .carousel-fade .carousel-inner .item {
-          opacity: 0;
-          -webkit-transition: opacity 0.5s;
-          -moz-transition: opacity 0.5s;
-          -o-transition: opacity 0.5s;
-          transition: opacity 0.5s;
+            opacity: 0;
+            -webkit-transition: opacity 0.5s;
+            -moz-transition: opacity 0.5s;
+            -o-transition: opacity 0.5s;
+            transition: opacity 0.5s;
         }
         .carousel-control {
             background-image: none !important; /* remove background gradients on controls */
         }
         .carousel-fade .carousel-inner .active {
-          opacity: 1;
+            opacity: 1;
         }
         .carousel-fade .carousel-inner .active.left,
         .carousel-fade .carousel-inner .active.right {
-          left: 0;
-          opacity: 0;
-          z-index: 1;
+            left: 0;
+            opacity: 0;
+            z-index: 1;
         }
         .carousel-fade .carousel-inner .next.left,
         .carousel-fade .carousel-inner .prev.right {
-          opacity: 1;
+            opacity: 1;
         }
         .carousel-fade .carousel-control {
-          z-index: 2;
+            z-index: 2;
         }
         @media all and (transform-3d), (-webkit-transform-3d) {
             .carousel-fade .carousel-inner > .item.next,
             .carousel-fade .carousel-inner > .item.active.right {
-              opacity: 0;
-              -webkit-transform: translate3d(0, 0, 0);
-                      transform: translate3d(0, 0, 0);
+                opacity: 0;
+                -webkit-transform: translate3d(0, 0, 0);
+                transform: translate3d(0, 0, 0);
             }
             .carousel-fade .carousel-inner > .item.prev,
             .carousel-fade .carousel-inner > .item.active.left {
-              opacity: 0;
-              -webkit-transform: translate3d(0, 0, 0);
-                      transform: translate3d(0, 0, 0);
+                opacity: 0;
+                -webkit-transform: translate3d(0, 0, 0);
+                transform: translate3d(0, 0, 0);
             }
             .carousel-fade .carousel-inner > .item.next.left,
             .carousel-fade .carousel-inner > .item.prev.right,
             .carousel-fade .carousel-inner > .item.active {
-              opacity: 1;
-              -webkit-transform: translate3d(0, 0, 0);
-                      transform: translate3d(0, 0, 0);
+                opacity: 1;
+                -webkit-transform: translate3d(0, 0, 0);
+                transform: translate3d(0, 0, 0);
             }
         }
-        #carouselButtons {
+        .carouselButtons {
+            position: absolute;
+            top: 45%;
+            z-index: 5;
+{#            display: inline-block;#}
+            margin-top: -10px;
+            left: 42%;
+            right: auto;
             text-align: center;
             cursor: pointer;
         }
-        #carousel-play {
-            width: 70%;
-            margin-top: 75px;
-            margin-left: 15%;
-            margin-right: auto;
-            display: block;
-        }
-        #carousel-pause {
-            width: 100%;
-            margin: 75px auto;
-            display: none;
-        }
-        /*
-        .div-with-centered-content {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        */
         .img-wrapper {
             position: relative;
             display:inline-block;
         }
         .overlay {
-            transition: opacity 0.3s ease-out;
+            transition: opacity 0.3s;
             opacity: 0;
             position:absolute;
             top:0;
@@ -110,416 +132,46 @@
             display:inline-block;
             padding:12px;
             font-size:10px;
-            text-align:left;
-        }
-
-        .img-wrapper:hover .overlay {
-            position:absolute;
-            top:0;
-            left:0;
-            opacity: 0.7;
-            width: 100%;
-            height: 100%;
-            display:inline-block;
             background:#ffffff;
             text-align:left;
             color:#111111;
+            {# prevent flicker on transition #}
+            -webkit-backface-visibility: hidden;
+        }
+
+        .overlay-show {
+            transition: opacity 0.3s ease-out;
+            opacity: 0.7;
+            position:absolute;
+            top:0;
+            left:0;
+            width: 100%;
+            height: 100%;
+            display:inline-block;
             padding:12px;
             font-size:10px;
+            background:#ffffff;
+            text-align:left;
+            color:#111111;
+            {# prevent flicker on transition #}
+            -webkit-backface-visibility: hidden;
+        }
+
+        .back-to-top {
+            cursor: pointer;
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display:none;
+        }
+        .img-flip {
+            -moz-transform: scaleY(-1);
+            -o-transform: scaleY(-1);
+            -webkit-transform: scaleY(-1);
+            transform: scaleY(-1);
         }
     </style>
+
 </head>
 
-<body>
-
-<!-- Fixed navbar -->
-<nav class="navbar navbar-default navbar-fixed-top">
-    <div class="container">
-        <div class="navbar-header">
-            <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
-                <span class="sr-only">Toggle navigation</span>
-                <span class="icon-bar"></span>
-                <span class="icon-bar"></span>
-                <span class="icon-bar"></span>
-            </button>
-            <a class="navbar-brand" href="/">Robo-AO</a>
-        </div>
-        <div id="navbar" class="navbar-collapse collapse">
-            <ul class="nav navbar-nav">
-                <!--<li class="active"><a href="#">Calendar</a></li>-->
-                <li><a href=".">Calendar</a></li>
-                <li><a href="{{date_m1}}"><span class="glyphicon glyphicon-chevron-left"></span>Previous night</a></li>
-                <li><a href="{{date_p1}}">Next night<span class="glyphicon glyphicon-chevron-right"></span></a></li>
-            </ul>
-        </div><!--/.nav-collapse -->
-    </div>
-</nav>
-
-<!-- Main section -->
-<div class="container">
-
-    <!--
-    <div class="main-container">
-        <h1>data quality</h1>
-        <p class="lead">data quality stuff will appear here.<br>
-            Tak-to!</p>
-    </div>
-    -->
-    <h1>Robo-AO data quality summary: {{ date }}</h1><br>
-
-</div>
-
-{% if data and (data['contrast_curve'] or data['strehls']) %}
-    <div class="container">
-        <div class="row">
-            {% if data['contrast_curve'] %}
-                <div class="col-md-6">
-                    <h3>Contrast Curves</h3>
-                    <img src="/static/data/{{date}}/contrast_curve.{{date}}.png"
-                         alt="contrast curve" style="height:250px;">
-                </div>
-            {% endif %}
-            {% if data['strehls'] %}
-                <div class="col-md-2">
-                    <h3>Strehl Ratios</h3>
-                    <img src="/static/data/{{date}}/strehl/SR_{{date}}_all.png"
-                         alt="strehls" style="height:250px;">
-                </div>
-            {% endif %}
-        </div>
-    </div>
-{% endif %}
-
-{% if seeing %}
-<div class="container">
-    <h3>Seeing</h3>
-    <!-- Seeing data -->
-        Mean: {{ seeing['mean'] }} arcsec<br>
-        Median: {{ seeing['median'] }} arcsec<br><br>
-
-        <div class="row">
-            <div class="col-md-6">
-                <img src="/static/data/{{date}}/seeing/seeing.{{date}}.png" alt="seeing plot" style="height:200px;">
-            </div>
-
-            <div class="col-md-6">
-                <!-- data-ride="carousel"   class="slide"-->
-                <div id="seeingCarousel" class="carousel carousel-fade col-lg-8 col-offset-2"
-                     data-interval="300" data-pause="false" style="width:600px;"
-                     onmouseover="pauseCarouselShow();" onmouseleave="pauseCarouselHide();">
-                    <div class="carousel-inner">
-                        <div class="item active">
-                            {% set fi0 = seeing['fimages'][0] %}
-                            {% set datestr = fi0[:fi0.index('.')].split('_') %}
-                            {% set dat  = datestr[0][0:4]+'/'+datestr[0][4:6]+'/'+datestr[0][6:] %}
-                            {% set time = datestr[1][0:2]+':'+datestr[1][2:4]+':'+datestr[1][4:] %}
-                            <img src="/static/data/{{date}}/seeing/{{fi0}}" alt="" class="img-responsive">
-                            <div class="carousel-caption" style="padding-bottom:0px !important;">
-                                {{dat}}&nbsp;{{time}}</div>
-                        </div>
-                        {% for fi in seeing['fimages'][1:] %}
-                            <div class="item">
-                                {% set datestr = fi[:fi.index('.')].split('_') %}
-                                {% set dat  = datestr[0][0:4]+'/'+datestr[0][4:6]+'/'+datestr[0][6:] %}
-                                {% set time = datestr[1][0:2]+':'+datestr[1][2:4]+':'+datestr[1][4:] %}
-                                <img src="/static/data/{{date}}/seeing/{{fi}}" alt="" class="img-responsive">
-                                <div class="carousel-caption" style="padding-bottom:0px !important;">
-                                    {{dat}}&nbsp;{{time}}</div>
-                            </div>
-                        {% endfor %}
-                    </div>
-
-                    <a class="left carousel-control" href="#seeingCarousel" data-slide="prev">
-                        <span class="glyphicon glyphicon-chevron-left"></span>
-                    </a>
-                    <a class="right carousel-control" href="#seeingCarousel" data-slide="next">
-                        <span class="glyphicon glyphicon-chevron-right"></span>
-                    </a>
-
-                    <div id="carouselButtons">
-                        <a id="carousel-play" class="carousel-control" onclick="playCarousel()">
-                            <span class="glyphicon glyphicon-play" style="font-size: 40px !important;"></span>
-                        </a>
-                        <a id="carousel-pause" class="carousel-control" onclick="pauseCarousel()">
-                            <span class="glyphicon glyphicon-pause" style="font-size: 40px !important;"></span>
-                        </a>
-                    </div>
-                </div>
-            </div>
-
-        </div>
-</div><!-- /.container -->
-{% endif %}
-
-
-{% if data and ('dead_times' in data.keys() and data['dead_times']|length > 0) %}
-<div class="container">
-    <h3>Dead times</h3>
-    <!-- Dead times -->
-
-        <div class="row">
-            {% for fdt in data['dead_times'] %}
-            <div class="col-md-4">
-                <img src="/static/data/{{date}}/dead_times/{{ fdt }}" alt="deadtime plot {{ fdt }}"
-                     style="height:200px;">
-            </div>
-            {% endfor %}
-
-        </div>
-</div><!-- /.container -->
-{% endif %}
-
-<div class="container">
-    {% if data %}
-    <!-- Scientific data -->
-        {% for key in ('high_flux', 'faint')%}
-            {% if key in data.keys() and data[key]|length > 0 %}
-                <h3> {{ key | replace('_', ' ') | title()}}</h3>
-                <div id="{{key}}_images">
-                    {% for source in data[key] %}
-                        {% set basename = '{:d}_{:s}_{:s}_{:s}_{:s}_{:s}'.format(source.prog_num, source.sou_name,
-                                            source.camera, source.filter, source.marker, source.time) %}
-                        <div class="img-wrapper">
-                            <img src="/static/data/{{date}}/{{key}}/{{basename}}_cropped.png"
-                                 alt="{{ basename }}"
-                                 style="height:120px; cursor: pointer;">
-                            <div class="overlay" data-toggle="modal" data-target="#sourceModal"
-                                 data-date="{{date}}" data-key="{{key}}" data-source="{{ basename }}"
-                                 data-sou_name="{{ source.sou_name }}"
-                                 data-core="{{ source.core }}"
-                                 data-halo="{{ source.halo }}"
-                                 data-fwhm="{{ source.fwhm }}"
-                                 data-sr_flag="{{ source.sr_flag }}"
-                                 data-cc="{{ source.contrast_curve }}" style="cursor: pointer;">
-                                 Program {{source.prog_num}}<br>{{source.sou_name}}<br>
-                                 Camera: {{source.camera}}<br>Filter: {{source.filter}}<br>{{source.time[:-7]}}
-                            </div>
-                        </div>
-                    {% endfor %}
-                </div>
-            {% endif %}
-        {% endfor %}
-
-        {% for key2 in ('zero_flux', 'failed')%}
-            {% if key2 in data.keys() and data[key2]|length > 0 %}
-                <h3> {{ key2 | replace('_', ' ') | title()}}</h3>
-                <div id="{{key2}}_images">
-                    {% for source in data[key2] | sort() %}
-                        {% set basename = '{:d}_{:s}_{:s}_{:s}_{:s}_{:s}'.format(source.prog_num, source.sou_name,
-                                            source.camera, source.filter, source.marker, source.time[:-7]) %}
-                        {{ basename }}<br>
-                    {% endfor %}
-                </div>
-            {% endif %}
-        {% endfor %}
-
-    {% endif %}
-
-
-</div><!-- /.container -->
-
-<div class="container">
-    <p>&nbsp;</p>
-</div><!-- /.container -->
-
-
-<!-- Modal -->
-<div class="modal fade" id="sourceModal" tabindex="-1" role="dialog" aria-labelledby="ModalLabel">
-    <div class="modal-dialog modal-lg" role="document">
-        <div class="modal-content">
-            <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal"
-                        aria-label="Close"><span aria-hidden="true">&times;</span></button>
-                <h4 class="modal-title" id="ModalLabel">Object name</h4>
-            </div>
-            <div class="modal-body">
-                <div id="sourceTabs">
-                    <!-- Nav tabs -->
-                    <ul class="nav nav-tabs" role="tablist">
-                        <li role="presentation" class="active">
-                            <a href="#imagesTab" aria-controls="imagesTab" role="tab" data-toggle="tab">Images</a>
-                        </li>
-                        <li role="presentation">
-                            <a href="#headerTab" aria-controls="headerTab" role="tab" data-toggle="tab">Header</a>
-                        </li>
-                    </ul>
-
-                    <!-- Tab panes -->
-                    <div class="tab-content">
-                        <!--Image data-->
-                        <div role="tabpanel" class="tab-pane active" id="imagesTab">
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <h5>Full-size</h5>
-                                    <img id="sou_full" src="" style="width: 100%;" data-toggle="magnify">
-                                    <br><br>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="col-xs-6">
-                                        <h5 id="sou_cropped_label">Cropped</h5>
-                                        <img id="sou_cropped" src="" style="width:100%;" data-toggle="magnify">
-                                    </div>
-                                    <div class="col-xs-6">
-                                        <h5 id="sou_pca_label" style="display:none;">PSF subtracted</h5>
-                                        <img id="sou_pca" src="" style="display:none; width:100%;" data-toggle="magnify">
-                                    </div>
-                                    <img id="sou_cc" src="" style="display:none; width:100%;">
-                                </div>
-                            </div>
-                        </div>
-                        <!--FITS header-->
-                        <div role="tabpanel" class="tab-pane" id="headerTab">
-                            <div class="row">
-                                <div class="col-md-12">
-                                    <h5>FITS header</h5>
-                                    <table class="table table-striped table-hover table-condensed"
-                                           id="headerTable">
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                </div>
-
-
-
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-success" data-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
-<!-- End Modal -->
-
-<!-- Bootstrap core JavaScript
-================================================== -->
-<!-- Placed at the end of the document so the pages load faster -->
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
-<script src="/static/js/bootstrap.min.js"></script>
-<script src="/static/js/bootstrap-magnify.js"></script>
-<script>
-    // for AJAX requests [absolute website's uri]:
-    $SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
-</script>
-<script>
-//        function parseDate(string){
-//            var dateString    = string.match(/\d{4}\d{2}\d{2}\s\b\d{2}\d{2}\d{2}/);
-//            var dt            = new Date(dateString);
-//            return dt;
-//        }
-    function playCarousel() {
-        $('.carousel').carousel('cycle');
-        $('#carousel-play').hide();
-    }
-    function pauseCarousel() {
-        $('.carousel').carousel('pause');
-        $('#carousel-pause').hide();
-        $('#carousel-play').show();
-    }
-    function pauseCarouselShow() {
-        if ($('#carousel-play').css('display') == 'none') {
-            $('#carousel-pause').show();
-        }
-    }
-    function pauseCarouselHide() {
-        $('#carousel-pause').hide();
-    }
-//        $( document ).ready(function () {
-//            $('.carousel').carousel({
-//                interval: 100,
-//                pause: "false"
-//            });
-//            $('#playButton').click(function () {
-//                $('.carousel').carousel('cycle');
-//            });
-//            $('#pauseButton').click(function () {
-//                $('.carousel').carousel('pause');
-//            });
-//        });
-
-    // clear table with FITS header (in case it's not empty) before displaying current table
-    function clearTable() {
-        $('#headerTable').html('');
-    }
-
-    // send AJAX GET request to server to get source FITS header
-    function getHeader(date, source) {
-        $.getJSON($SCRIPT_ROOT + '/_get_fits_header', {
-            date: date,
-            source: source
-        }, function(data) {
-            var header = data.result;
-            for (var key in header) {
-                if (key != 'COMMENT') {
-                    var $formrow = '<tr><td>'+key+'</td>'+
-                            '<td>'+header[key][0]+'</td>'+
-                            '<td>'+header[key][1]+'</td>'+'</tr>';
-                    $('#headerTable').append($formrow);
-                }
-            }
-        });
-        return false;
-    }
-</script>
-<script>
-    // Build modal with source data on-the-fly
-    $('#sourceModal').on('show.bs.modal', function (event) {
-        // show images tab by default:
-        $('#sourceTabs a[href="#imagesTab"]').tab('show'); // Select tab by name
-
-        var trigger = $(event.relatedTarget); // Who triggered the modal? [to extract source info]
-        // Extract info from data-* attributes
-        var date = trigger.data('date'); // date of observation
-        var key = trigger.data('key'); // high-flux or faint
-        var source = trigger.data('source'); // full source name (including prog_num, filt etc)
-        // var sou_name = trigger.data('sou_name'); // source actual name only
-        var cc = trigger.data('cc'); // type of contrast curve
-        // Strehl
-        var core = trigger.data('core'); // type of contrast curve
-        var halo = trigger.data('halo'); // type of contrast curve
-        var fwhm = trigger.data('fwhm'); // type of contrast curve
-        var sr_flag = trigger.data('sr_flag'); // type of contrast curve
-        // If necessary, you could initiate an AJAX request here (and then do the updating in a callback).
-        // Update the modal's content. We'll use jQuery here,
-        // but one could use a data binding library or other methods instead.
-        var modal = $(this);
-        modal.find('.modal-title').text(source);
-        modal.find('#sou_full').attr('src', '/static/data/'+date+'/'+key+'/'+source+'_full.png');
-        modal.find('#sou_cropped').attr('src', '/static/data/'+date+'/'+key+'/'+source+'_cropped.png');
-        if (cc=='pca') {
-            $('#sou_pca_label').show();
-            $('#sou_pca').show();
-            modal.find('#sou_pca').attr('src', '/static/data/'+date+'/'+key+'/'+source+'_pca.png');
-            $('#sou_cc').show();
-            modal.find('#sou_cc').attr('src', '/static/data/'+date+'/'+key+'/'+source+'_contrast_curve.png');
-        }
-        if (cc=='nopca' || cc=='none') {
-            modal.find('#sou_pca').attr('src', '');
-            $('#sou_pca').hide();
-            $('#sou_pca_label').hide();
-            $('#sou_cc').show();
-            modal.find('#sou_cc').attr('src', '/static/data/'+date+'/'+key+'/'+source+'_NOPCA_contrast_curve.png');
-        }
-        if (cc=='none') {
-            modal.find('#sou_pca').attr('src', '');
-            $('#sou_pca').hide();
-            $('#sou_pca_label').hide();
-            modal.find('#sou_cc').attr('src', '');
-            $('#sou_cc').hide();
-        }
-
-        // generate table with header data
-        clearTable();
-        getHeader(date, source);
-    });
-    // tabs in the modal
-    $('#sourceTabs a').click(function (e) {
-        e.preventDefault();
-        $(this).tab('show')
-    });
-
-</script>
-</body>
-</html>
+{% block body %}{% endblock %}
