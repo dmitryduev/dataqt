@@ -526,16 +526,16 @@ def get_dates(user_id, coll, coll_aux, start=None, stop=None, max_dates=100):
     # iterate over query result for science data:
     try:
         for obs in cursor.sort([('date_utc', -1)]):
-            if len(dates) + 1 > max_dates:
-                # this is to prevent trying to load everything stored on the server
-                # and reduce traffic in general. Do not show that if max_dates == 1, i.e. on start page:
-                if max_dates != 1:
-                    message = ('Too much data requested, showing last {:d} dates only'.format(max_dates), 'warning')
-                    messages.append(message)
-                break
             date = obs['date_utc'].strftime('%Y%m%d')
             # add key to dict if it is not there already:
             if date not in dates:
+                if len(dates) + 1 > max_dates:
+                    # this is to prevent trying to load everything stored on the server
+                    # and reduce traffic in general. Do not show that if max_dates == 1, i.e. on start page:
+                    if max_dates != 1:
+                        message = ('Too much data requested, showing last {:d} dates only'.format(max_dates), 'warning')
+                        messages.append(message)
+                    break
                 dates[date] = {'data': {}, 'aux': {}}
             # add key for program if it is not there yet
             program_id = obs['science_program']['program_id']
