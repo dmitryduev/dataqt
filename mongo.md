@@ -85,7 +85,7 @@ db.authenticate('roboao', 'roboaokicksass')
 coll = db['users']
 result = coll.insert_one(
         {'_id': 'admin',
-         'password': generate_password_hash('robo@0'),
+         'password': generate_password_hash('robopassword'),
          'programs': 'all',
          'last_modified': datetime.datetime.now()}
 )
