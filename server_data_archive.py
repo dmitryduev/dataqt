@@ -348,33 +348,21 @@ except IOError:
     config = get_config(config_file='config.ini')
 # print(config)
 
-''' serve additional static data (preview images, compressed source data)
+''' serve additional static data (preview images, compressed source data) '''
+# this is done with flask's send_from_directory() function due to security concerns
+# in case if static files are served with
 
-When deploying, make sure WSGIScriptAlias is overridden by Apache's directive:
 
-Alias "/data/" "/path/to/archive/data"
-<Directory "/path/to/app/static/">
-  Order allow,deny
-  Allow from all
-</Directory>
-
-Check details at:
-http://stackoverflow.com/questions/31298755/how-to-get-apache-to-serve-static-files-on-flask-webapp
-
-Once deployed, comment the following definition:
-'''
-
-# FIXME:
-if config['environment'] != 'production':
-    @app.route('/data/<path:filename>')
-    def data_static(filename):
-        """
-            Get files from the archive
-        :param filename:
-        :return:
-        """
-        _p, _f = os.path.split(filename)
-        return flask.send_from_directory(os.path.join(config['path_archive'], _p), _f)
+@app.route('/data/<path:filename>')
+@flask_login.login_required
+def data_static(filename):
+    """
+        Get files from the archive
+    :param filename:
+    :return:
+    """
+    _p, _f = os.path.split(filename)
+    return flask.send_from_directory(os.path.join(config['path_archive'], _p), _f)
 
 
 ''' handle user login'''
